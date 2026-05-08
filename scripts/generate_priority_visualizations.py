@@ -137,14 +137,30 @@ def generate_transmission_network():
         graph = nx.DiGraph()
         cluster_order = sorted(grouped.keys())
 
+        def _short_id(full_id: str) -> str:
+            return str(full_id)[:8]
+
+        # Resolve 8-char collisions so labels stay human-readable but unique.
+        short_counts = {}
+        for cluster_id in cluster_order:
+            for row in grouped[cluster_id]:
+                sid = _short_id(row["case_id"])
+                short_counts[sid] = short_counts.get(sid, 0) + 1
+
         for cluster_id in cluster_order:
             rows = grouped[cluster_id]
             rows_sorted = sorted(rows, key=lambda r: _to_iso_date(r.get("specimen_date")))
             for row in rows_sorted:
-                case_id = str(row["case_id"])[:8]
+                full_case_id = str(row["case_id"])
+                short_case_id = _short_id(full_case_id)
+                display_case_id = short_case_id
+                if short_counts.get(short_case_id, 0) > 1:
+                    display_case_id = f"{short_case_id}-{full_case_id[8:12]}"
                 graph.add_node(
-                    case_id,
-                    full_case_id=str(row["case_id"]),
+                    full_case_id,
+                    short_case_id=short_case_id,
+                    display_case_id=display_case_id,
+                    full_case_id=full_case_id,
                     cluster_id=cluster_id,
                     specimen_date=_to_iso_date(row.get("specimen_date")),
                     region=row.get("geographic_region") or "Unknown",
@@ -155,8 +171,8 @@ def generate_transmission_network():
             for idx in range(len(rows_sorted) - 1):
                 src_row = rows_sorted[idx]
                 dst_row = rows_sorted[idx + 1]
-                src_id = str(src_row["case_id"])[:8]
-                dst_id = str(dst_row["case_id"])[:8]
+                src_id = str(src_row["case_id"])
+                dst_id = str(dst_row["case_id"])
                 source = graph.nodes[src_id]
                 target = graph.nodes[dst_id]
                 prob = _estimate_transmission_probability(source, target)
@@ -165,7 +181,7 @@ def generate_transmission_network():
                 # Add short-range alternative path when cases are tightly linked in time.
                 if idx + 2 < len(rows_sorted):
                     alt_dst_row = rows_sorted[idx + 2]
-                    alt_dst_id = str(alt_dst_row["case_id"])[:8]
+                    alt_dst_id = str(alt_dst_row["case_id"])
                     alt_target = {
                         "region": alt_dst_row.get("geographic_region") or "Unknown",
                         "lineage": alt_dst_row.get("lineage") or "Unknown",
@@ -197,7 +213,31 @@ def generate_transmission_network():
 
         # Render network figure.
         fig, ax = plt.subplots(figsize=(16, 10))
-        positions = nx.spring_layout(graph, seed=42, k=1.8, iterations=100)
+
+        # Cluster-centered layout: place each cluster in its own neighborhood,
+        # then run local spring layout per cluster for readability.
+        positions = {}
+        n_clusters = max(1, len(cluster_order))
+        ring_radius = max(3.0, 2.2 * n_clusters)
+
+        for idx, cluster_id in enumerate(cluster_order):
+            cluster_nodes = [n for n in graph.nodes() if graph.nodes[n].get("cluster_id") == cluster_id]
+            if not cluster_nodes:
+                continue
+
+            angle = (2 * np.pi * idx) / n_clusters
+            center = np.array([ring_radius * np.cos(angle), ring_radius * np.sin(angle)])
+
+            subgraph = graph.subgraph(cluster_nodes).to_undirected()
+            if subgraph.number_of_nodes() == 1:
+                positions[cluster_nodes[0]] = center
+            else:
+                local_pos = nx.spring_layout(subgraph, seed=42 + idx, k=1.6, iterations=120)
+                local_pos_arr = np.array(list(local_pos.values()))
+                max_abs = max(1.0, float(np.max(np.abs(local_pos_arr))))
+                scale = 1.45
+                for node, xy in local_pos.items():
+                    positions[node] = center + (np.array(xy) / max_abs) * scale
 
         cmap = plt.get_cmap("tab20", max(1, len(cluster_order)))
         cluster_color = {cluster: cmap(i) for i, cluster in enumerate(cluster_order)}
@@ -218,8 +258,10 @@ def generate_transmission_network():
                 edge_colors.append("#64748b")
 
         nx.draw_networkx_nodes(graph, positions, node_color=node_colors, node_size=node_sizes, ax=ax, alpha=0.9, edgecolors="#0f172a", linewidths=1.0)
-        nx.draw_networkx_edges(graph, positions, ax=ax, arrows=True, arrowsize=16, arrowstyle="-|>", edge_color=edge_colors, width=edge_widths, alpha=0.82, connectionstyle="arc3,rad=0.08")
-        nx.draw_networkx_labels(graph, positions, ax=ax, font_size=8, font_weight="bold")
+        nx.draw_networkx_edges(graph, positions, ax=ax, arrows=True, arrowsize=14, arrowstyle="-|>", edge_color=edge_colors, width=edge_widths, alpha=0.8, connectionstyle="arc3,rad=0.08")
+
+        labels = {n: graph.nodes[n].get("display_case_id", str(n)[:8]) for n in graph.nodes()}
+        nx.draw_networkx_labels(graph, positions, labels=labels, ax=ax, font_size=7, font_weight="bold")
 
         edge_labels = {(s, t): f"{graph.edges[s, t].get('probability', 0):.2f}" for s, t in graph.edges() if graph.edges[s, t].get("probability", 0) >= 0.7}
         if edge_labels:
@@ -227,7 +269,7 @@ def generate_transmission_network():
 
         ax.set_title(
             "Enhanced Transmission Network\n"
-            "Node size = inferred spread risk | Edge label = transmission probability",
+            "Node size = inferred spread risk | Edge label = transmission probability | Color = cluster",
             fontsize=14,
             fontweight="bold",
             pad=16,
@@ -245,10 +287,12 @@ def generate_transmission_network():
             "node_count": graph.number_of_nodes(),
             "edge_count": graph.number_of_edges(),
             "cluster_count": len(cluster_order),
+            "layout": "cluster_centered",
             "high_confidence_edges": high_conf_edges,
             "key_nodes": [
                 {
-                    "case_id": node,
+                    "case_id": graph.nodes[node].get("display_case_id", node[:8]),
+                    "full_case_id": graph.nodes[node].get("full_case_id", node),
                     "cluster_id": graph.nodes[node].get("cluster_id"),
                     "region": graph.nodes[node].get("region"),
                     "risk_score": graph.nodes[node].get("risk_score"),

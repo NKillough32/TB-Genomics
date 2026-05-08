@@ -149,11 +149,15 @@ input[type="file"] {
 
 .seed-controls {
 	display: grid;
-	grid-template-columns: auto minmax(0, 130px) auto minmax(0, 130px);
+	grid-template-columns: max-content minmax(0, 170px);
 	gap: 0.55rem;
 	align-items: center;
 	max-width: 560px;
 	margin: 0.85rem 0;
+}
+
+.seed-controls label {
+	white-space: nowrap;
 }
 
 .seed-controls input[type="number"],
@@ -162,12 +166,17 @@ input[type="file"] {
 .search-controls select,
 #caseHistoryId {
 	width: 100%;
+	min-width: 0;
 	padding: 0.5rem 0.58rem;
 	border: 1px solid #c3d2e3;
 	border-radius: 8px;
 	background: #ffffff;
 	font-family: inherit;
 	font-size: 0.9rem;
+}
+
+.seed-controls input[type="number"] {
+	padding-right: 1.6rem;
 }
 
 .inline-checkbox {
@@ -422,6 +431,10 @@ footer {
 	.seed-controls,
 	.search-controls {
 		grid-template-columns: 1fr;
+	}
+
+	.seed-controls label {
+		white-space: normal;
 	}
 
 	.search-controls button {

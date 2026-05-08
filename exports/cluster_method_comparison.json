@@ -1,18 +1,18 @@
 {
-  "generated_at": "2026-05-08T15:00:11.289058+00:00",
+  "generated_at": "2026-05-08T16:04:53.489241+00:00",
   "inputs": {
     "sequence_assignments": "exports/sequence_cluster_assignments.csv",
     "outbreaker_network": "exports/transmission_network.json"
   },
   "coverage": {
-    "sequence_assigned_cases": 45,
-    "outbreaker_assigned_cases": 45,
-    "overlap_cases": 45
+    "sequence_assigned_cases": 131,
+    "outbreaker_assigned_cases": 131,
+    "overlap_cases": 131
   },
   "agreement": {
-    "sequence_same_cluster_pairs": 262,
-    "outbreaker_same_cluster_pairs": 262,
-    "overlap_same_cluster_pairs": 262,
+    "sequence_same_cluster_pairs": 1418,
+    "outbreaker_same_cluster_pairs": 1418,
+    "overlap_same_cluster_pairs": 1418,
     "pairwise_precision_outbreaker_vs_sequence": 1.0,
     "pairwise_recall_outbreaker_vs_sequence": 1.0,
     "pairwise_jaccard": 1.0

@@ -512,6 +512,9 @@ def generate_resistance_heatmap():
 
 if __name__ == "__main__":
     print("Generating enhanced outbreak visualizations...")
-    generate_transmission_network()
+    if os.getenv("TB_SKIP_PRIORITY_NETWORK", "0") != "1":
+        generate_transmission_network()
+    else:
+        print("Skipping transmission network generation due to TB_SKIP_PRIORITY_NETWORK=1")
     generate_phylogenetic_tree()
     generate_resistance_heatmap()

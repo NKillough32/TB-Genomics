@@ -255,10 +255,22 @@ def list_regions(db: Session = Depends(get_db)):
 
 @router.get("/outbreaker-status")
 def outbreaker_status():
+    summary_path = "exports/outbreaker_summary.json"
+    provenance = None
+    if os.path.exists(summary_path):
+        try:
+            with open(summary_path, "r", encoding="utf-8") as f:
+                summary = json.load(f)
+                provenance = (summary or {}).get("data_provenance")
+        except Exception:
+            provenance = None
+
     return {
         "cases_export": os.path.exists("exports/cases.csv"),
         "dna_export": os.path.exists("exports/dna.fasta"),
         "results_rds": os.path.exists("outbreaker2_results.rds"),
+        "provenance": provenance,
+        "is_mock": provenance == "mock",
     }
 
 
@@ -301,6 +313,8 @@ def outbreaker_analysis():
         "graphics": [],
         "summary": None,
         "transmission_network": None,
+        "provenance": None,
+        "is_mock": None,
     }
     
     # Check for analysis summary
@@ -310,6 +324,10 @@ def outbreaker_analysis():
             with open(summary_path, "r") as f:
                 result["summary"] = json.load(f)
                 result["status"] = "completed"
+                summary_provenance = result["summary"].get("data_provenance") if isinstance(result["summary"], dict) else None
+                if summary_provenance in {"real", "mock"}:
+                    result["provenance"] = summary_provenance
+                    result["is_mock"] = summary_provenance == "mock"
         except Exception as e:
             result["status"] = "error"
             result["message"] = str(e)
@@ -319,8 +337,17 @@ def outbreaker_analysis():
         try:
             with open(network_path, "r", encoding="utf-8") as f:
                 result["transmission_network"] = json.load(f)
+                if result["provenance"] is None and isinstance(result["transmission_network"], dict):
+                    network_provenance = result["transmission_network"].get("provenance")
+                    if network_provenance in {"real", "mock"}:
+                        result["provenance"] = network_provenance
+                        result["is_mock"] = network_provenance == "mock"
         except Exception:
             result["transmission_network"] = None
+
+    if result["provenance"] is None:
+        result["provenance"] = "unknown"
+        result["is_mock"] = None
     
     # List available graphics
     graphics_dir = "exports"

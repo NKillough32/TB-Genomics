@@ -62,6 +62,9 @@ def run_job(job_name):
                 if job_name == "run_outbreaker2":
                     rscript_path = shutil.which("Rscript")
                     use_mock_fallback = False
+                    allow_mock_fallback = os.getenv("TB_ALLOW_MOCK_OUTBREAKER", "0") == "1"
+                    child_env = os.environ.copy()
+                    child_env["PYTHONIOENCODING"] = "utf-8"
 
                     if rscript_path:
                         result = subprocess.run(
@@ -72,15 +75,19 @@ def run_job(job_name):
                             timeout=300,
                         )
                         if result.returncode != 0:
-                            use_mock_fallback = True
-                            lf.write("\n--- R execution failed, using mock report generator ---\n")
+                            if allow_mock_fallback:
+                                use_mock_fallback = True
+                                lf.write("\n--- R execution failed, using mock report generator ---\n")
+                            else:
+                                raise Exception("R outbreaker2 execution failed and mock fallback is disabled")
                     else:
-                        use_mock_fallback = True
-                        lf.write("\n--- Rscript not found, using mock report generator ---\n")
+                        if allow_mock_fallback:
+                            use_mock_fallback = True
+                            lf.write("\n--- Rscript not found, using mock report generator ---\n")
+                        else:
+                            raise Exception("Rscript not found and mock fallback is disabled")
 
                     if use_mock_fallback:
-                        child_env = os.environ.copy()
-                        child_env["PYTHONIOENCODING"] = "utf-8"
                         mock_result = subprocess.run(
                             [python_exe, "scripts/generate_mock_outbreaker.py"],
                             stdout=lf,
@@ -92,8 +99,12 @@ def run_job(job_name):
                         if mock_result.returncode != 0:
                             raise Exception("Both R and mock generator failed")
                     
-                    # Generate priority 1 visualizations
-                    lf.write("\n--- Generating priority visualizations ---\n")
+                    # Generate supplementary visualizations without overwriting outbreaker network output.
+                    lf.write("\n--- Generating supplementary visualizations ---\n")
+                    if use_mock_fallback:
+                        child_env["TB_SKIP_PRIORITY_NETWORK"] = "0"
+                    else:
+                        child_env["TB_SKIP_PRIORITY_NETWORK"] = "1"
                     priority_result = subprocess.run(
                         [python_exe, "scripts/generate_priority_visualizations.py"],
                         stdout=lf,
@@ -103,7 +114,7 @@ def run_job(job_name):
                         env=child_env,
                     )
                     if priority_result.returncode != 0:
-                        lf.write("Warning: Priority visualizations generation had issues\n")
+                        lf.write("Warning: Supplementary visualizations generation had issues\n")
                 else:
                     subprocess.run(
                         ALLOWED_JOBS[job_name],

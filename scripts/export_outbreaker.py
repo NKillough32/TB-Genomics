@@ -57,11 +57,18 @@ def main() -> None:
                     sample_date_str = "2025-01-01"
                 writer.writerow({"case_id": row["case_id"], "sample_date": sample_date_str})
 
+        raw_sequences = []
+        for row in rows:
+            sequence = (row["existing_sequence"] or generate_consensus_sequence(row["case_id"])).strip().upper()
+            raw_sequences.append((row["case_id"], sequence))
+
+        # outbreaker2 assumes all sequences are aligned to the same length.
+        min_len = min((len(seq) for _, seq in raw_sequences), default=0)
         with open("exports/dna.fasta", "w", encoding="utf-8") as fasta_file:
-            for row in rows:
-                sequence = row["existing_sequence"] or generate_consensus_sequence(row["case_id"])
-                fasta_file.write(f">{row['case_id']}\n")
-                fasta_file.write(f"{sequence}\n")
+            for case_id, sequence in raw_sequences:
+                normalized = sequence[:min_len] if min_len else sequence
+                fasta_file.write(f">{case_id}\n")
+                fasta_file.write(f"{normalized}\n")
 
         print(
             f"Exported {len(rows)} records to exports/cases.csv and exports/dna.fasta"

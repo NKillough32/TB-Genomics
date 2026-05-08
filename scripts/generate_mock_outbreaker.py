@@ -238,6 +238,8 @@ def generate_mock_summary():
         "generation_time_sd": 3.2,
         "sampling_probability": 0.65,
         "convergence_diagnostic": "Rhat < 1.1 (good convergence)",
+        "data_provenance": "mock",
+        "analysis_engine": "mock_generator",
         "generated_at": datetime.now().isoformat(),
     }
     

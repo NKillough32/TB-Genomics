@@ -32,6 +32,56 @@ def _load_network_assignments(path: str):
         cluster_id = (node.get("cluster_id") or "").strip()
         if full_case_id and cluster_id:
             assignments[full_case_id] = cluster_id
+
+    # If explicit cluster IDs are absent, infer components from edge connectivity.
+    if assignments:
+        return assignments
+
+    edges = payload.get("edges") or []
+    if not edges:
+        return assignments
+
+    graph = defaultdict(set)
+    node_ids = set()
+
+    for node in nodes:
+        node_id = (node.get("full_case_id") or node.get("case_id") or "").strip()
+        if node_id:
+            node_ids.add(node_id)
+
+    for edge in edges:
+        src = (edge.get("source") or "").strip()
+        dst = (edge.get("target") or "").strip()
+        if not src or not dst:
+            continue
+        node_ids.add(src)
+        node_ids.add(dst)
+        graph[src].add(dst)
+        graph[dst].add(src)
+
+    seen = set()
+    component_index = 1
+    for node_id in sorted(node_ids):
+        if node_id in seen:
+            continue
+        stack = [node_id]
+        component_members = []
+        while stack:
+            current = stack.pop()
+            if current in seen:
+                continue
+            seen.add(current)
+            component_members.append(current)
+            for neighbor in graph.get(current, set()):
+                if neighbor not in seen:
+                    stack.append(neighbor)
+
+        if len(component_members) >= 2:
+            component_id = f"outbreaker_component_{component_index:03d}"
+            for member in component_members:
+                assignments[member] = component_id
+            component_index += 1
+
     return assignments
 
 

@@ -42,3 +42,33 @@ def outbreaker_status():
         "dna_export": os.path.exists("exports/dna.fasta"),
         "results_rds": os.path.exists("outbreaker2_results.rds"),
     }
+
+
+@router.get("/audit-trail")
+def audit_trail(limit: int = 50, db: Session = Depends(get_db)):
+    """Return recent audit log entries for governance and compliance."""
+    rows = db.execute(
+        text(
+            """
+            SELECT audit_id, action, user_id, details, timestamp
+            FROM audit_log
+            ORDER BY timestamp DESC
+            LIMIT :limit
+            """
+        ),
+        {"limit": limit},
+    ).mappings().all()
+    
+    return {
+        "total_entries": len(rows),
+        "entries": [
+            {
+                "id": row["audit_id"],
+                "action": row["action"],
+                "user": row["user_id"],
+                "timestamp": str(row["timestamp"]),
+                "details": row["details"],
+            }
+            for row in rows
+        ],
+    }

@@ -1,0 +1,40 @@
+{
+  "timestamp": "2026-05-08T10:46:59.647807",
+  "tests": [
+    {
+      "name": "Backend is running",
+      "status": "PASS",
+      "elapsed_ms": 2033
+    },
+    {
+      "name": "Generate 100 synthetic cases",
+      "status": "PASS",
+      "elapsed_ms": 2366
+    },
+    {
+      "name": "List cases via API",
+      "status": "PASS",
+      "elapsed_ms": 2056
+    },
+    {
+      "name": "Get case summary",
+      "status": "PASS",
+      "elapsed_ms": 2049
+    },
+    {
+      "name": "Start clustering job",
+      "status": "PASS",
+      "elapsed_ms": 2050
+    },
+    {
+      "name": "Retrieve audit trail",
+      "status": "PASS",
+      "elapsed_ms": 2050
+    }
+  ],
+  "summary": {
+    "passed": 6,
+    "failed": 0,
+    "total": 6
+  }
+}

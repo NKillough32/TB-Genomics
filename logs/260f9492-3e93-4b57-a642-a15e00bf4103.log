@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "C:\Users\Nicho\Desktop\TB-Genomics-main\scripts\run_clustering.py", line 8, in <module>
+    from backend.database import SessionLocal
+ModuleNotFoundError: No module named 'backend'
+Command '['C:\\Users\\Nicho\\Desktop\\TB-Genomics-main\\.venv\\Scripts\\python.exe', 'scripts/run_clustering.py']' returned non-zero exit status 1.

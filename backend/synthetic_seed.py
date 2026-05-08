@@ -174,6 +174,7 @@ def seed_synthetic_dataset(case_count: int = 250, reset: bool = False, seed: int
                 created_at=datetime.utcnow(),
             )
             db.add(case)
+            db.flush()
 
             db.execute(
                 text(

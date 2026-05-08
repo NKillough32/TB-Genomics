@@ -34,4 +34,21 @@ async function loadOutbreakerResults(){
 		box.textContent=`Failed to load outbreaker summary: ${e}`;
 	}
 }
+async function loadAuditTrail(){
+	const box=document.getElementById('auditTrail');
+	box.textContent='Loading audit trail...';
+	try{
+		const r=await fetch(`${API}/cases/audit-trail?limit=20`);
+		const data=await r.json();
+		const formatted=data.entries.map(e=>({
+			timestamp:e.timestamp,
+			action:e.action,
+			user:e.user,
+			details:e.details,
+		}));
+		box.textContent=JSON.stringify(formatted,null,2);
+	}catch(e){
+		box.textContent=`Failed to load audit trail: ${e}`;
+	}
+}
 (async()=>{try{await fetch(`${API}/`);document.getElementById('status').innerHTML='<li>✅ Backend running</li>';}catch{document.getElementById('status').innerHTML='<li>❌ Backend unavailable</li>';}})();

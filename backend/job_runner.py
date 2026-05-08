@@ -1,14 +1,39 @@
 
 import subprocess, uuid, threading, os
+import sys
+import json
+from datetime import datetime
+from sqlalchemy import text
+from backend.database import SessionLocal
 
 os.makedirs("logs", exist_ok=True)
 
+# Use the current Python interpreter (venv)
+python_exe = sys.executable
+
 JOBS = {}
 ALLOWED_JOBS = {
-    "run_clustering": ["python", "scripts/run_clustering.py"],
-    "export_outbreaker": ["python", "scripts/export_outbreaker.py"],
+    "run_clustering": [python_exe, "scripts/run_clustering.py"],
+    "export_outbreaker": [python_exe, "scripts/export_outbreaker.py"],
     "run_outbreaker2": ["Rscript", "outbreaker2/run_outbreaker2.R"],
 }
+
+def _log_to_audit(action: str, user_id: str, details: dict):
+    """Log an action to the audit trail."""
+    try:
+        db = SessionLocal()
+        db.execute(
+            text(
+                "INSERT INTO audit_log (action, user_id, details, timestamp) "
+                "VALUES (:action, :user_id, CAST(:details AS jsonb), NOW())"
+            ),
+            {"action": action, "user_id": user_id, "details": json.dumps(details)},
+        )
+        db.commit()
+        db.close()
+    except Exception as e:
+        print(f"Audit logging failed: {e}")
+
 
 def run_job(job_name):
     if job_name not in ALLOWED_JOBS:
@@ -20,15 +45,27 @@ def run_job(job_name):
     def task():
         JOBS[job_id]["status"] = "running"
         JOBS[job_id]["progress"] = 10
+        
+        # Log job start
+        _log_to_audit("job_started", "system", {"job_id": job_id, "job_name": job_name})
+        
         with open(log, "w") as lf:
             try:
                 JOBS[job_id]["progress"] = 40
-                subprocess.run(ALLOWED_JOBS[job_name], stdout=lf, stderr=lf, check=True)
+                # Get the project root (parent of backend dir)
+                project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                subprocess.run(ALLOWED_JOBS[job_name], stdout=lf, stderr=lf, check=True, cwd=project_root)
                 JOBS[job_id]["progress"] = 100
                 JOBS[job_id]["status"] = "completed"
+                
+                # Log job completion
+                _log_to_audit("job_completed", "system", {"job_id": job_id, "job_name": job_name})
             except Exception as e:
                 JOBS[job_id]["status"] = "failed"
                 lf.write(str(e))
+                
+                # Log job failure
+                _log_to_audit("job_failed", "system", {"job_id": job_id, "job_name": job_name, "error": str(e)})
 
     threading.Thread(target=task).start()
     return job_id

@@ -1,0 +1,255 @@
+import argparse
+import json
+import random
+import uuid
+from datetime import date, datetime, timedelta
+from typing import Dict, List, Tuple
+from urllib.request import urlopen
+
+from sqlalchemy import text
+
+from backend.database import SessionLocal
+from backend.models import Case
+
+WORLD_BANK_SOURCE_URL = (
+    "https://api.worldbank.org/v2/country/"
+    "GBR,IRL,IND,ZAF,NGA,PAK,BGD,PHL,IDN,CHN,PER,UKR/"
+    "indicator/SH.TBS.INCD?format=json&per_page=20000"
+)
+
+# Fallback values (incidence per 100k) used only if online fetch fails.
+FALLBACK_INCIDENCE = {
+    "GBR": {"country": "United Kingdom", "incidence": 7.0},
+    "IRL": {"country": "Ireland", "incidence": 8.0},
+    "IND": {"country": "India", "incidence": 199.0},
+    "ZAF": {"country": "South Africa", "incidence": 468.0},
+    "NGA": {"country": "Nigeria", "incidence": 219.0},
+    "PAK": {"country": "Pakistan", "incidence": 263.0},
+    "BGD": {"country": "Bangladesh", "incidence": 221.0},
+    "PHL": {"country": "Philippines", "incidence": 554.0},
+    "IDN": {"country": "Indonesia", "incidence": 354.0},
+    "CHN": {"country": "China", "incidence": 55.0},
+    "PER": {"country": "Peru", "incidence": 116.0},
+    "UKR": {"country": "Ukraine", "incidence": 71.0},
+}
+
+DRUGS = ["isoniazid", "rifampicin", "ethambutol", "pyrazinamide", "fluoroquinolones"]
+LINEAGES = ["L1", "L2", "L3", "L4"]
+
+
+def _fetch_latest_incidence() -> Tuple[Dict[str, Dict[str, float]], bool]:
+    try:
+        with urlopen(WORLD_BANK_SOURCE_URL, timeout=20) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+
+        by_country: Dict[str, Dict[str, float]] = {}
+        for row in payload[1]:
+            iso3 = row.get("countryiso3code")
+            value = row.get("value")
+            country_info = row.get("country") or {}
+            country_name = country_info.get("value", iso3)
+            year_raw = row.get("date")
+            if not iso3 or value is None or not year_raw:
+                continue
+
+            year = int(year_raw)
+            previous = by_country.get(iso3)
+            if previous is None or year > previous["year"]:
+                by_country[iso3] = {
+                    "country": country_name,
+                    "incidence": float(value),
+                    "year": year,
+                }
+
+        cleaned = {
+            iso3: {"country": item["country"], "incidence": item["incidence"]}
+            for iso3, item in by_country.items()
+        }
+        if not cleaned:
+            return FALLBACK_INCIDENCE, True
+        return cleaned, False
+    except Exception:
+        return FALLBACK_INCIDENCE, True
+
+
+def _weighted_country_sampler(incidence_data: Dict[str, Dict[str, float]]) -> List[Tuple[str, float]]:
+    weighted = []
+    total = sum(max(0.1, row["incidence"]) for row in incidence_data.values())
+    running = 0.0
+    for iso3, row in incidence_data.items():
+        running += max(0.1, row["incidence"]) / total
+        weighted.append((iso3, running))
+    weighted[-1] = (weighted[-1][0], 1.0)
+    return weighted
+
+
+def _pick_country(weighted_sampler: List[Tuple[str, float]]) -> str:
+    roll = random.random()
+    for iso3, cumulative in weighted_sampler:
+        if roll <= cumulative:
+            return iso3
+    return weighted_sampler[-1][0]
+
+
+def _lineage_for_incidence(incidence: float) -> str:
+    if incidence >= 300:
+        return random.choices(LINEAGES, weights=[0.3, 0.35, 0.2, 0.15], k=1)[0]
+    if incidence >= 100:
+        return random.choices(LINEAGES, weights=[0.2, 0.3, 0.2, 0.3], k=1)[0]
+    return random.choices(LINEAGES, weights=[0.1, 0.15, 0.15, 0.6], k=1)[0]
+
+
+def _build_resistance_profile(incidence: float) -> Tuple[Dict[str, str], List[Dict[str, str]]]:
+    # Higher-incidence settings get a slightly elevated chance of resistance signals.
+    resistant_chance = min(0.45, 0.08 + (incidence / 1200.0))
+    predicted = {}
+    mutations = []
+    for drug in DRUGS:
+        is_resistant = random.random() < resistant_chance
+        predicted[drug] = "resistant" if is_resistant else "susceptible"
+        if is_resistant:
+            mutation = {
+                "gene": random.choice(["rpoB", "katG", "inhA", "embB", "pncA", "gyrA"]),
+                "variant": random.choice(["S315T", "D516V", "H526Y", "S531L", "C15T", "Q431K"]),
+                "drug": drug,
+            }
+            mutations.append(mutation)
+    return predicted, mutations
+
+
+def seed_synthetic_dataset(case_count: int = 250, reset: bool = False, seed: int = 42) -> Dict[str, object]:
+    random.seed(seed)
+    incidence_data, used_fallback = _fetch_latest_incidence()
+    sampler = _weighted_country_sampler(incidence_data)
+
+    db = SessionLocal()
+    created_cluster_ids = [uuid.uuid4() for _ in range(max(4, case_count // 40))]
+
+    try:
+        if reset:
+            db.execute(
+                text(
+                    "TRUNCATE TABLE case_clusters, tb_interpretation, clusters, cases "
+                    "RESTART IDENTITY CASCADE"
+                )
+            )
+
+        for cluster_id in created_cluster_ids:
+            db.execute(
+                text(
+                    "INSERT INTO clusters (cluster_id, snp_distance, investigation_status, alert_flag) "
+                    "VALUES (:cluster_id, :snp_distance, :investigation_status, :alert_flag)"
+                ),
+                {
+                    "cluster_id": cluster_id,
+                    "snp_distance": random.randint(0, 25),
+                    "investigation_status": random.choice(["monitoring", "open", "closed"]),
+                    "alert_flag": random.random() < 0.2,
+                },
+            )
+
+        today = date.today()
+        status_weights = [0.78, 0.17, 0.05]
+
+        for i in range(1, case_count + 1):
+            iso3 = _pick_country(sampler)
+            country = incidence_data[iso3]["country"]
+            incidence = incidence_data[iso3]["incidence"]
+
+            case_id = uuid.uuid4()
+            specimen_date = today - timedelta(days=random.randint(0, 540))
+            case_status = random.choices(
+                ["confirmed", "probable", "under_review"], weights=status_weights, k=1
+            )[0]
+            lineage = _lineage_for_incidence(incidence)
+            predicted_resistance, resistance_mutations = _build_resistance_profile(incidence)
+            confidence = round(random.uniform(0.76, 0.99), 3)
+
+            case = Case(
+                pseudonymised_case_id=case_id,
+                local_lab_sample_id=f"LAB-{today.year}-{i:05d}",
+                specimen_date=specimen_date,
+                geographic_region=country,
+                case_status=case_status,
+                created_at=datetime.utcnow(),
+            )
+            db.add(case)
+
+            db.execute(
+                text(
+                    "INSERT INTO tb_interpretation (sample_id, species_confirmation, lineage, sublineage, "
+                    "resistance_mutations, predicted_drug_resistance, confidence_score, interpretation_summary) "
+                    "VALUES (:sample_id, :species_confirmation, :lineage, :sublineage, "
+                    "CAST(:resistance_mutations AS jsonb), CAST(:predicted_drug_resistance AS jsonb), "
+                    ":confidence_score, :interpretation_summary)"
+                ),
+                {
+                    "sample_id": case_id,
+                    "species_confirmation": "M. tuberculosis complex",
+                    "lineage": lineage,
+                    "sublineage": f"{lineage}.{random.randint(1, 9)}",
+                    "resistance_mutations": json.dumps(resistance_mutations),
+                    "predicted_drug_resistance": json.dumps(predicted_resistance),
+                    "confidence_score": confidence,
+                    "interpretation_summary": (
+                        f"Synthetic interpretation grounded in public incidence trends for {country}."
+                    ),
+                },
+            )
+
+            if random.random() < 0.7:
+                cluster_id = random.choice(created_cluster_ids)
+                db.execute(
+                    text(
+                        "INSERT INTO case_clusters (sample_id, cluster_id) VALUES (:sample_id, :cluster_id)"
+                    ),
+                    {"sample_id": case_id, "cluster_id": cluster_id},
+                )
+
+        db.execute(
+            text(
+                "INSERT INTO audit_log (action, user_id, details, timestamp) "
+                "VALUES (:action, :user_id, CAST(:details AS jsonb), NOW())"
+            ),
+            {
+                "action": "seed_synthetic_dataset",
+                "user_id": "system",
+                "details": json.dumps(
+                    {
+                        "case_count": case_count,
+                        "source": WORLD_BANK_SOURCE_URL,
+                        "used_fallback": used_fallback,
+                    }
+                ),
+            },
+        )
+
+        db.commit()
+        return {
+            "status": "ok",
+            "cases_inserted": case_count,
+            "clusters_inserted": len(created_cluster_ids),
+            "source": WORLD_BANK_SOURCE_URL,
+            "used_fallback": used_fallback,
+            "countries": sorted([row["country"] for row in incidence_data.values()]),
+        }
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Seed synthetic TB data based on public online incidence")
+    parser.add_argument("--cases", type=int, default=250, help="Number of synthetic cases to generate")
+    parser.add_argument("--reset", action="store_true", help="Truncate related tables before seeding")
+    parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
+    args = parser.parse_args()
+
+    result = seed_synthetic_dataset(case_count=args.cases, reset=args.reset, seed=args.seed)
+    print(json.dumps(result, indent=2))
+
+
+if __name__ == "__main__":
+    main()

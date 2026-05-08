@@ -1,0 +1,61 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>NI TB Genomic Surveillance</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<header>
+  <h1>NI TB Genomic Surveillance</h1>
+  <p class="subtitle">Whole‑genome sequencing analysis for outbreak support (prototype)</p>
+</header>
+<main>
+  <section class="card">
+    <h2>Step 1 — System status</h2>
+    <ul id="status" class="status-list"><li>Checking…</li></ul>
+  </section>
+  <section class="card">
+    <h2>Step 2 — Upload data</h2>
+    <p class="hint">Upload CSV / JSON / FASTA files to enable analysis.</p>
+    <input type="file" id="fileInput" />
+    <button onclick="uploadFile()">Upload file</button>
+    <div id="uploadResult" class="message"></div>
+    <hr />
+    <p class="hint">Or generate a realistic synthetic dataset from online public TB incidence data.</p>
+    <div class="seed-controls">
+      <label for="seedCaseCount">Cases</label>
+      <input id="seedCaseCount" type="number" min="10" max="5000" value="250" />
+      <label for="seedValue">Seed</label>
+      <input id="seedValue" type="number" value="42" />
+      <label class="inline-checkbox" for="seedReset">
+        <input id="seedReset" type="checkbox" checked />
+        Reset existing synthetic data first
+      </label>
+    </div>
+    <button onclick="seedSyntheticData()">Generate synthetic dataset</button>
+    <pre id="seedResult" class="log-box"></pre>
+  </section>
+  <section class="card">
+    <h2>Step 3 — Run analysis</h2>
+    <button id="clusterBtn" onclick="runJob('run_clustering')">Run clustering</button>
+    <button id="exportBtn" onclick="runJob('export_outbreaker')">Generate outbreaker2 inputs</button>
+    <button id="outbreakerBtn" onclick="runJob('run_outbreaker2')">Run outbreaker2</button>
+    <div class="progress-container"><div id="progressBar" class="progress-bar">0%</div></div>
+    <pre id="jobStatus" class="log-box">Idle</pre>
+  </section>
+  <section class="card">
+    <h2>Step 4 — Results</h2>
+    <button onclick="loadCases()">View cases</button>
+    <pre id="cases" class="log-box"></pre>
+    <button onclick="loadOutbreakerResults()">View outbreaker2 summary</button>
+    <pre id="outbreakerResults" class="log-box"></pre>
+  </section>
+</main>
+<footer>
+  <p>Decision‑support tool only. No automated decisions are made.</p>
+</footer>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+
+body{font-family:system-ui,Arial;margin:0;background:#f7f9fc;color:#1f2937}
+header{padding:2rem;background:#0f172a;color:#fff}
+.subtitle{opacity:.85}
+main{padding:2rem;max-width:900px;margin:auto}
+.card{background:#fff;padding:1.5rem;margin-bottom:1.5rem;border-radius:6px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+button{margin:.5rem .5rem .5rem 0;padding:.5rem 1rem;border:0;border-radius:4px;background:#2563eb;color:#fff}
+.seed-controls{display:grid;grid-template-columns:auto 120px auto 120px;gap:.5rem;align-items:center;max-width:520px;margin:.75rem 0}
+.seed-controls input[type="number"]{padding:.4rem .5rem;border:1px solid #cbd5e1;border-radius:4px}
+.inline-checkbox{grid-column:1 / -1;display:flex;gap:.5rem;align-items:center}
+.progress-container{background:#e5e7eb;border-radius:4px}
+.progress-bar{width:0%;height:22px;background:#16a34a;color:#fff;text-align:center;font-size:.8rem;line-height:22px;border-radius:4px}
+.log-box{background:#f1f5f9;padding:.75rem;border-radius:4px;max-height:240px;overflow:auto;font-size:.85rem}
+footer{padding:1.5rem;font-size:.8rem;color:#374151;text-align:center}

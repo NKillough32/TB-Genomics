@@ -76,4 +76,59 @@ async function loadAuditTrail(){
 		box.textContent=`Failed to load audit trail: ${e}`;
 	}
 }
+async function advancedSearch(){
+	const region=document.getElementById('searchRegion').value||null;
+	const lineage=document.getElementById('searchLineage').value||null;
+	const dateFrom=document.getElementById('searchDateFrom').value||null;
+	const dateTo=document.getElementById('searchDateTo').value||null;
+	const box=document.getElementById('searchResults');
+	box.textContent='Searching cases...';
+	try{
+		let url=`${API}/cases/search?`;
+		const params=[];
+		if(region) params.push(`region=${encodeURIComponent(region)}`);
+		if(lineage) params.push(`lineage=${encodeURIComponent(lineage)}`);
+		if(dateFrom) params.push(`date_from=${encodeURIComponent(dateFrom)}`);
+		if(dateTo) params.push(`date_to=${encodeURIComponent(dateTo)}`);
+		url+=params.join('&');
+		const r=await fetch(url);
+		const data=await r.json();
+		let html=`<h4>Search Results: ${data.total_results} cases found</h4>`;
+		if(data.total_results>0){
+			html+='<table style="width:100%;font-size:0.85rem;border-collapse:collapse;">';
+			html+='<tr style="border-bottom:1px solid #ccc;"><th>Case ID</th><th>Date</th><th>Region</th><th>Lineage</th><th>Cluster</th></tr>';
+			for(const c of data.cases){
+				html+=`<tr style="border-bottom:1px solid #eee;"><td>${c.case_id}</td><td>${c.specimen_date}</td><td>${c.region}</td><td>${c.lineage}</td><td>${c.cluster_id||'—'}</td></tr>`;
+			}
+			html+='</table>';
+		}
+		box.innerHTML=html;
+	}catch(e){
+		box.textContent=`Search failed: ${e}`;
+	}
+}
+async function loadCaseHistory(){
+	const caseId=document.getElementById('caseHistoryId').value;
+	const box=document.getElementById('caseHistory');
+	if(!caseId){box.textContent='Please enter a case ID';return;}
+	box.textContent='Loading case history...';
+	try{
+		const r=await fetch(`${API}/cases/case-history/${encodeURIComponent(caseId)}`);
+		const data=await r.json();
+		if(data.error){box.textContent=`Case not found: ${data.error}`;return;}
+		let html=`<h4>Case ${data.case_id}</h4>`;
+		html+=`<p>Related Cases: ${data.related_cases} | Observation Span: ${data.observation_span_days} days</p>`;
+		if(data.history.length>0){
+			html+='<table style="width:100%;font-size:0.85rem;border-collapse:collapse;">';
+			html+='<tr style="border-bottom:1px solid #ccc;"><th>Specimen Date</th><th>Region</th><th>Lineage</th><th>Status</th><th>Index?</th></tr>';
+			for(const h of data.history){
+				html+=`<tr style="border-bottom:1px solid #eee;"><td>${h.specimen_date}</td><td>${h.region}</td><td>${h.lineage||'—'}</td><td>${h.status}</td><td>${h.is_index_case?'✓':''}</td></tr>`;
+			}
+			html+='</table>';
+		}
+		box.innerHTML=html;
+	}catch(e){
+		box.textContent=`Failed to load case history: ${e}`;
+	}
+}
 (async()=>{try{await fetch(`${API}/`);document.getElementById('status').innerHTML='<li>✅ Backend running</li>';}catch{document.getElementById('status').innerHTML='<li>❌ Backend unavailable</li>';}})();

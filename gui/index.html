@@ -53,6 +53,29 @@
     <pre id="outbreakerResults" class="log-box"></pre>
   </section>
   <section class="card">
+    <h2>Step 4A — Advanced Search & Case History</h2>
+    <p class="hint">Search cases by region, lineage, date range, and resistance profile.</p>
+    <div class="search-controls">
+      <label>Region: <input type="text" id="searchRegion" placeholder="e.g., Northern Ireland" /></label>
+      <label>Lineage: <select id="searchLineage">
+        <option value="">All</option>
+        <option value="L1">L1 (Ancient)</option>
+        <option value="L2">L2 (Beijing)</option>
+        <option value="L3">L3 (East-African-Indian)</option>
+        <option value="L4">L4 (Euro-American)</option>
+      </select></label>
+      <label>Date From: <input type="date" id="searchDateFrom" /></label>
+      <label>Date To: <input type="date" id="searchDateTo" /></label>
+      <button onclick="advancedSearch()">Search</button>
+    </div>
+    <pre id="searchResults" class="log-box"></pre>
+    <hr />
+    <p class="hint">View case history and related samples.</p>
+    <label>Case ID: <input type="text" id="caseHistoryId" placeholder="Enter case ID" /></label>
+    <button onclick="loadCaseHistory()">View history</button>
+    <pre id="caseHistory" class="log-box"></pre>
+  </section>
+  <section class="card">
     <h2>Step 5 — Governance & Compliance</h2>
     <p class="hint">Audit trail showing all system actions for accountability.</p>
     <button onclick="loadAuditTrail()">View audit trail</button>

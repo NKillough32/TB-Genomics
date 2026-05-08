@@ -76,6 +76,18 @@ def run_job(job_name):
                         )
                         if mock_result.returncode != 0:
                             raise Exception("Both R and mock generator failed")
+                    
+                    # Generate priority 1 visualizations
+                    lf.write("\n--- Generating priority visualizations ---\n")
+                    priority_result = subprocess.run(
+                        [python_exe, "scripts/generate_priority_visualizations.py"],
+                        stdout=lf,
+                        stderr=subprocess.STDOUT,
+                        cwd=project_root,
+                        timeout=60,
+                    )
+                    if priority_result.returncode != 0:
+                        lf.write("Warning: Priority visualizations generation had issues\n")
                 else:
                     subprocess.run(
                         ALLOWED_JOBS[job_name],

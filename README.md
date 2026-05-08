@@ -30,11 +30,33 @@ External dependencies (not bundled):
 - R >= 4.1 with outbreaker2
 
 Quick start:
-1) psql < db/schema.sql
-2) pip install -r backend/requirements.txt
-3) uvicorn backend.app:app --reload
-4) cd gui && python -m http.server 8081
-5) Open http://localhost:8081
+1) Create and activate a virtual environment:
+	python -m venv .venv
+	.\.venv\Scripts\Activate.ps1
+2) Install Python dependencies:
+	pip install -r backend/requirements.txt
+3) Create the PostgreSQL user and database if they do not already exist:
+	& "C:\Program Files\PostgreSQL\18\bin\psql.exe" -U postgres -h localhost -d postgres
+	Then run inside the `psql` prompt:
+	CREATE USER tb WITH PASSWORD 'tb';
+	CREATE DATABASE tb_surveillance OWNER tb;
+	GRANT ALL PRIVILEGES ON DATABASE tb_surveillance TO tb;
+	\q
+4) Load the schema from PowerShell (not from inside the `psql` prompt):
+	& "C:\Program Files\PostgreSQL\18\bin\psql.exe" -U tb -h localhost -d tb_surveillance -f ".\db\schema.sql"
+5) Set the database connection string for the current PowerShell session:
+	$env:DATABASE_URL="postgresql://tb:tb@localhost/tb_surveillance"
+6) Start the backend:
+	c:/Users/Nicho/Desktop/TB-Genomics-main/.venv/Scripts/python.exe -m uvicorn backend.app:app --reload
+7) Start the GUI from a second PowerShell window:
+	cd gui
+	python -m http.server 8081
+8) Open http://localhost:8081
+
+Windows notes:
+- If `CREATE USER tb` reports `role "tb" already exists`, that means the user is already present and you can continue.
+- If `CREATE DATABASE tb_surveillance` reports `database "tb_surveillance" already exists`, that means the database is already present and you can continue.
+- If you see a `postgres=#` prompt, you are inside the PostgreSQL shell. Exit with `\q` before running PowerShell commands such as `psql ... -f ".\db\schema.sql"`.
 
 Synthetic dataset setup (real public baseline data)
 ---------------------------------------------------

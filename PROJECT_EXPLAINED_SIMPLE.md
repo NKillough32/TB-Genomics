@@ -60,3 +60,20 @@ This means you can automate data flow from sequencing infrastructure into report
 ## Short summary in one sentence
 
 This project is a TB genomic surveillance platform that ingests sequencing-linked data, analyses cluster and transmission patterns, tracks programme performance, and produces actionable reports for public health teams.
+
+## Running it locally on Windows
+
+If you are setting this up on Windows, there is one easy mistake to avoid when loading the database schema.
+
+1. Create and activate a Python virtual environment.
+2. Install the Python requirements from `backend/requirements.txt`.
+3. Connect to PostgreSQL and create the `tb` user and `tb_surveillance` database if they do not already exist.
+4. Exit the PostgreSQL prompt with `\q`.
+5. Back in PowerShell, run the schema file using `psql -f .\db\schema.sql`.
+
+The important point is this:
+
+- Commands such as `CREATE USER` and `CREATE DATABASE` run inside the PostgreSQL `psql` prompt.
+- Commands such as `psql -f .\db\schema.sql` must be run from PowerShell, not from inside `psql`.
+
+If you see `role "tb" already exists` or `database "tb_surveillance" already exists`, that usually just means setup was already done earlier.

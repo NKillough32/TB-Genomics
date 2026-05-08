@@ -16,8 +16,22 @@ async function seedSyntheticData(){
 		resultBox.textContent=`Failed to generate synthetic data: ${e}`;
 	}
 }
-async function runJob(job){document.getElementById('jobStatus').textContent='Starting '+job;const r=await fetch(`${API}/jobs/run/${job}`,{method:'POST'});const d=await r.json();activeJob=d.job_id;poll();}
+async function runJob(job){document.getElementById('jobStatus').textContent='Starting '+job;const r=await fetch(`${API}/jobs/run/${job}`,{method:'POST'});const d=await r.json();if(!d.job_id){document.getElementById('jobStatus').textContent=JSON.stringify(d,null,2);return;}activeJob=d.job_id;poll();}
 async function poll(){if(!activeJob)return;const r=await fetch(`${API}/jobs/status/${activeJob}`);const d=await r.json();document.getElementById('jobStatus').textContent=JSON.stringify(d,null,2);const bar=document.getElementById('progressBar');bar.style.width=(d.progress||0)+'%';bar.textContent=(d.progress||0)+'%';if(d.status!=='completed'&&d.status!=='failed'){setTimeout(poll,1500);} }
 async function loadCases(){const r=await fetch(`${API}/cases`);document.getElementById('cases').textContent=JSON.stringify(await r.json(),null,2);} 
-async function loadOutbreakerResults(){document.getElementById('outbreakerResults').textContent='Results available after outbreaker2 completes.';}
+async function loadOutbreakerResults(){
+	const box=document.getElementById('outbreakerResults');
+	box.textContent='Loading summary...';
+	try{
+		const [summaryResp,statusResp]=await Promise.all([
+			fetch(`${API}/cases/summary`),
+			fetch(`${API}/cases/outbreaker-status`),
+		]);
+		const summary=await summaryResp.json();
+		const status=await statusResp.json();
+		box.textContent=JSON.stringify({summary,artifacts:status},null,2);
+	}catch(e){
+		box.textContent=`Failed to load outbreaker summary: ${e}`;
+	}
+}
 (async()=>{try{await fetch(`${API}/`);document.getElementById('status').innerHTML='<li>✅ Backend running</li>';}catch{document.getElementById('status').innerHTML='<li>❌ Backend unavailable</li>';}})();

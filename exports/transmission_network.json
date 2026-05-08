@@ -1,580 +1,1848 @@
 {
-  "generated_at": "2026-05-08T14:59:21",
-  "node_count": 45,
-  "edge_count": 63,
-  "cluster_count": 4,
+  "generated_at": "2026-05-08T15:04:44",
+  "node_count": 171,
+  "edge_count": 324,
+  "cluster_count": 6,
   "layout": "cluster_centered",
-  "high_confidence_edges": 14,
+  "high_confidence_edges": 136,
   "all_nodes": [
     {
-      "case_id": "0fa5b0ae",
-      "full_case_id": "0fa5b0ae-a3cd-4d4c-8071-7f5c034e9764",
-      "cluster_id": "c45b45af-ff64-5cf7-bb0a-aa8c50afeb57",
+      "case_id": "0182c7b0",
+      "full_case_id": "0182c7b0-9d1d-4b81-8d3f-cf3c69e94c22",
+      "cluster_id": "987a5dc2-6003-4621-af5b-310ffde49e93",
       "region": "United Kingdom",
-      "risk_score": 1.382,
-      "risk_band": "medium",
-      "outgoing_links": 2,
-      "incoming_links": 2
-    },
-    {
-      "case_id": "122d8a94",
-      "full_case_id": "122d8a94-30ec-424e-b995-e1d4c1d6a5db",
-      "cluster_id": "b751a8b9-d713-5c47-b9c1-efd5f8081033",
-      "region": "Ireland",
-      "risk_score": 0.773,
-      "risk_band": "low",
-      "outgoing_links": 1,
-      "incoming_links": 2
-    },
-    {
-      "case_id": "179562e6",
-      "full_case_id": "179562e6-2598-4364-b1f1-f768f0eaa482",
-      "cluster_id": "5f07e57f-c789-5702-91c8-d625cf91853a",
-      "region": "Ireland",
-      "risk_score": 1.259,
+      "risk_score": 1.255,
       "risk_band": "medium",
       "outgoing_links": 2,
       "incoming_links": 1
     },
     {
-      "case_id": "18ea25b4",
-      "full_case_id": "18ea25b4-f974-47e4-ad94-93981ee655eb",
-      "cluster_id": "5f07e57f-c789-5702-91c8-d625cf91853a",
-      "region": "Ireland",
-      "risk_score": 1.006,
-      "risk_band": "low",
-      "outgoing_links": 1,
+      "case_id": "02de7a9a",
+      "full_case_id": "02de7a9a-dc85-476a-a169-72a916743fb1",
+      "cluster_id": "077623b2-74b4-40dc-8ee8-e2deb3a4e2f9",
+      "region": "United Kingdom",
+      "risk_score": 1.455,
+      "risk_band": "medium",
+      "outgoing_links": 2,
       "incoming_links": 2
     },
     {
-      "case_id": "1b4f38b6",
-      "full_case_id": "1b4f38b6-cfa4-47f0-abfa-dd4a8b56374f",
-      "cluster_id": "5f07e57f-c789-5702-91c8-d625cf91853a",
-      "region": "Ireland",
+      "case_id": "0300f948",
+      "full_case_id": "0300f948-68f3-46d1-8ce9-21b9244de4e4",
+      "cluster_id": "8a80bac0-47b5-4b47-89da-a26c13bd5759",
+      "region": "United Kingdom",
+      "risk_score": 1.622,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "04b34ca5",
+      "full_case_id": "04b34ca5-10ae-4cfe-84ea-a7e35a57977c",
+      "cluster_id": "077623b2-74b4-40dc-8ee8-e2deb3a4e2f9",
+      "region": "United Kingdom",
+      "risk_score": 1.508,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "054b1704",
+      "full_case_id": "054b1704-ac10-4cfb-bdb5-6a56df7fbb94",
+      "cluster_id": "077623b2-74b4-40dc-8ee8-e2deb3a4e2f9",
+      "region": "United Kingdom",
+      "risk_score": 1.496,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "061749d3",
+      "full_case_id": "061749d3-ed33-43a6-83e1-dd83d826a972",
+      "cluster_id": "077623b2-74b4-40dc-8ee8-e2deb3a4e2f9",
+      "region": "United Kingdom",
+      "risk_score": 1.504,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "067a6922",
+      "full_case_id": "067a6922-ce70-4ed1-9950-f11a2fa824b2",
+      "cluster_id": "3435e495-5237-4ae4-b514-e9c2cbb23757",
+      "region": "United Kingdom",
+      "risk_score": 1.516,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "0a9c45c5",
+      "full_case_id": "0a9c45c5-6729-4251-ab97-18f0869dd8df",
+      "cluster_id": "d9c032fd-bf9a-42b4-8f42-7f7a2d6ad832",
+      "region": "United Kingdom",
+      "risk_score": 1.487,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "0aed27ef",
+      "full_case_id": "0aed27ef-19de-42bf-acdb-f401cbdc901a",
+      "cluster_id": "3435e495-5237-4ae4-b514-e9c2cbb23757",
+      "region": "United Kingdom",
+      "risk_score": 1.476,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "0e4d643c",
+      "full_case_id": "0e4d643c-7e9f-4136-9773-78ff6c55aacd",
+      "cluster_id": "79a048df-f3c7-4fcc-9128-f756ff765558",
+      "region": "United Kingdom",
+      "risk_score": 1.59,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "0e959390",
+      "full_case_id": "0e959390-00fb-492a-9283-c78397548530",
+      "cluster_id": "3435e495-5237-4ae4-b514-e9c2cbb23757",
+      "region": "United Kingdom",
+      "risk_score": 1.531,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "13ae98ba",
+      "full_case_id": "13ae98ba-8ac6-478c-9612-77a07b3afa3a",
+      "cluster_id": "d9c032fd-bf9a-42b4-8f42-7f7a2d6ad832",
+      "region": "United Kingdom",
+      "risk_score": 1.405,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "14803ce6",
+      "full_case_id": "14803ce6-9ba2-4b97-8e60-10a21d4567d4",
+      "cluster_id": "79a048df-f3c7-4fcc-9128-f756ff765558",
+      "region": "United Kingdom",
+      "risk_score": 0.462,
+      "risk_band": "low",
+      "outgoing_links": 0,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "14882f98",
+      "full_case_id": "14882f98-0542-4868-a3f6-81c437b12d6f",
+      "cluster_id": "d9c032fd-bf9a-42b4-8f42-7f7a2d6ad832",
+      "region": "United Kingdom",
+      "risk_score": 1.456,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "14b494cd",
+      "full_case_id": "14b494cd-aa1e-4802-8e78-821cd24ed81a",
+      "cluster_id": "987a5dc2-6003-4621-af5b-310ffde49e93",
+      "region": "United Kingdom",
+      "risk_score": 1.558,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "161653f1",
+      "full_case_id": "161653f1-b8d3-47fd-ac6b-b0e8c8929972",
+      "cluster_id": "3435e495-5237-4ae4-b514-e9c2cbb23757",
+      "region": "United Kingdom",
+      "risk_score": 1.324,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 1
+    },
+    {
+      "case_id": "16c7ca61",
+      "full_case_id": "16c7ca61-a7b7-46f5-8674-3366bdace9cb",
+      "cluster_id": "3435e495-5237-4ae4-b514-e9c2cbb23757",
+      "region": "United Kingdom",
+      "risk_score": 1.432,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "180a8454",
+      "full_case_id": "180a8454-2269-4a15-bf71-c07ab0ce6ee4",
+      "cluster_id": "79a048df-f3c7-4fcc-9128-f756ff765558",
+      "region": "United Kingdom",
+      "risk_score": 1.561,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "1835a6f8",
+      "full_case_id": "1835a6f8-909a-4ebd-bc2d-047b8907054f",
+      "cluster_id": "8a80bac0-47b5-4b47-89da-a26c13bd5759",
+      "region": "United Kingdom",
+      "risk_score": 1.476,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "18682b28",
+      "full_case_id": "18682b28-87e3-4e3a-ad2f-bbac397b32da",
+      "cluster_id": "3435e495-5237-4ae4-b514-e9c2cbb23757",
+      "region": "United Kingdom",
+      "risk_score": 1.576,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "1a7d9eaf",
+      "full_case_id": "1a7d9eaf-069c-491b-8b3e-46830b716ffd",
+      "cluster_id": "8a80bac0-47b5-4b47-89da-a26c13bd5759",
+      "region": "United Kingdom",
+      "risk_score": 1.527,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "1b3a4230",
+      "full_case_id": "1b3a4230-ac1b-4233-9906-18f55b31600b",
+      "cluster_id": "077623b2-74b4-40dc-8ee8-e2deb3a4e2f9",
+      "region": "United Kingdom",
+      "risk_score": 1.459,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "1b694f1b",
+      "full_case_id": "1b694f1b-0c5d-4453-89ca-ee9b134f671e",
+      "cluster_id": "987a5dc2-6003-4621-af5b-310ffde49e93",
+      "region": "United Kingdom",
+      "risk_score": 1.594,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "1bfa18b8",
+      "full_case_id": "1bfa18b8-195b-431e-af0d-fbc3e34bbc4e",
+      "cluster_id": "8a80bac0-47b5-4b47-89da-a26c13bd5759",
+      "region": "United Kingdom",
+      "risk_score": 1.53,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "1c9d29eb",
+      "full_case_id": "1c9d29eb-e6f9-4170-b492-c01c7cbdac67",
+      "cluster_id": "077623b2-74b4-40dc-8ee8-e2deb3a4e2f9",
+      "region": "United Kingdom",
+      "risk_score": 1.402,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "1ca2e56b",
+      "full_case_id": "1ca2e56b-2a8b-4b51-8ebf-7bece7e04bc9",
+      "cluster_id": "3435e495-5237-4ae4-b514-e9c2cbb23757",
+      "region": "United Kingdom",
+      "risk_score": 1.539,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "1cc27179",
+      "full_case_id": "1cc27179-87a7-471b-b14d-950322d5bccd",
+      "cluster_id": "d9c032fd-bf9a-42b4-8f42-7f7a2d6ad832",
+      "region": "United Kingdom",
+      "risk_score": 1.543,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "207e1c31",
+      "full_case_id": "207e1c31-4c16-4bb3-a172-c1bc93dac035",
+      "cluster_id": "3435e495-5237-4ae4-b514-e9c2cbb23757",
+      "region": "United Kingdom",
+      "risk_score": 1.596,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "22fc9093",
+      "full_case_id": "22fc9093-c2f0-4ff8-be04-a1f609d7fbf9",
+      "cluster_id": "79a048df-f3c7-4fcc-9128-f756ff765558",
+      "region": "United Kingdom",
+      "risk_score": 1.49,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "23e2140a",
+      "full_case_id": "23e2140a-ea95-4daa-afb3-f5b63bbb30f8",
+      "cluster_id": "d9c032fd-bf9a-42b4-8f42-7f7a2d6ad832",
+      "region": "United Kingdom",
+      "risk_score": 1.512,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "263c33d2",
+      "full_case_id": "263c33d2-923c-40ef-8a3d-3acce85cb00b",
+      "cluster_id": "d9c032fd-bf9a-42b4-8f42-7f7a2d6ad832",
+      "region": "United Kingdom",
+      "risk_score": 1.476,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "26742d5c",
+      "full_case_id": "26742d5c-5b84-4abb-aeb7-9743f43f6e76",
+      "cluster_id": "077623b2-74b4-40dc-8ee8-e2deb3a4e2f9",
+      "region": "United Kingdom",
+      "risk_score": 1.466,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "268b41c7",
+      "full_case_id": "268b41c7-b443-43b6-9037-94c5c28c9d4b",
+      "cluster_id": "987a5dc2-6003-4621-af5b-310ffde49e93",
+      "region": "United Kingdom",
+      "risk_score": 1.58,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "26a023a8",
+      "full_case_id": "26a023a8-0746-4241-b982-bedd00b4f805",
+      "cluster_id": "d9c032fd-bf9a-42b4-8f42-7f7a2d6ad832",
+      "region": "United Kingdom",
+      "risk_score": 1.405,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "26d39ce7",
+      "full_case_id": "26d39ce7-ea53-4e94-9ba5-3ec9f32092d3",
+      "cluster_id": "8a80bac0-47b5-4b47-89da-a26c13bd5759",
+      "region": "United Kingdom",
       "risk_score": 1.564,
       "risk_band": "medium",
       "outgoing_links": 2,
       "incoming_links": 2
     },
     {
-      "case_id": "1edbbf1e",
-      "full_case_id": "1edbbf1e-b4da-4c99-8bfd-8aa69d75e476",
-      "cluster_id": "5f07e57f-c789-5702-91c8-d625cf91853a",
+      "case_id": "287565a3",
+      "full_case_id": "287565a3-d597-421f-adc6-79871b7765af",
+      "cluster_id": "3435e495-5237-4ae4-b514-e9c2cbb23757",
       "region": "United Kingdom",
-      "risk_score": 0.67,
-      "risk_band": "low",
-      "outgoing_links": 1,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "20db9dc4",
-      "full_case_id": "20db9dc4-938c-48d3-9241-8c65f5d37536",
-      "cluster_id": "b695d152-a5e9-5112-94b5-c7d5b963d0dd",
-      "region": "Ireland",
-      "risk_score": 0.964,
+      "risk_score": 0.994,
       "risk_band": "low",
       "outgoing_links": 1,
       "incoming_links": 2
     },
     {
-      "case_id": "2ebe441e",
-      "full_case_id": "2ebe441e-37bd-440b-ac32-0b484b3214cb",
-      "cluster_id": "c45b45af-ff64-5cf7-bb0a-aa8c50afeb57",
+      "case_id": "2944f65b",
+      "full_case_id": "2944f65b-1351-4dcf-a8bc-3a3e4affcc05",
+      "cluster_id": "8a80bac0-47b5-4b47-89da-a26c13bd5759",
       "region": "United Kingdom",
-      "risk_score": 1.347,
-      "risk_band": "medium",
-      "outgoing_links": 2,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "307b5b3c",
-      "full_case_id": "307b5b3c-f4fc-4060-8239-d57aeda07598",
-      "cluster_id": "c45b45af-ff64-5cf7-bb0a-aa8c50afeb57",
-      "region": "United Kingdom",
-      "risk_score": 0.417,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 2
-    },
-    {
-      "case_id": "32d1153b",
-      "full_case_id": "32d1153b-68e0-46f4-827c-52b6b0a68e32",
-      "cluster_id": "c45b45af-ff64-5cf7-bb0a-aa8c50afeb57",
-      "region": "Ireland",
-      "risk_score": 1.195,
-      "risk_band": "medium",
-      "outgoing_links": 2,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "37a10d73",
-      "full_case_id": "37a10d73-6321-44e0-b03f-a76515847c7e",
-      "cluster_id": "b695d152-a5e9-5112-94b5-c7d5b963d0dd",
-      "region": "Ireland",
-      "risk_score": 0.938,
-      "risk_band": "low",
-      "outgoing_links": 1,
-      "incoming_links": 2
-    },
-    {
-      "case_id": "3cda9ef7",
-      "full_case_id": "3cda9ef7-b8c8-478d-9c87-7a72e7048208",
-      "cluster_id": "5f07e57f-c789-5702-91c8-d625cf91853a",
-      "region": "United Kingdom",
-      "risk_score": 1.05,
-      "risk_band": "low",
-      "outgoing_links": 2,
-      "incoming_links": 0
-    },
-    {
-      "case_id": "3e131dc8",
-      "full_case_id": "3e131dc8-b8aa-47e4-b3d2-cdb31f432513",
-      "cluster_id": "5f07e57f-c789-5702-91c8-d625cf91853a",
-      "region": "Ireland",
-      "risk_score": 0.968,
-      "risk_band": "low",
-      "outgoing_links": 1,
-      "incoming_links": 2
-    },
-    {
-      "case_id": "483f380b",
-      "full_case_id": "483f380b-c2a6-4060-b329-8d88d26f0990",
-      "cluster_id": "5f07e57f-c789-5702-91c8-d625cf91853a",
-      "region": "United Kingdom",
-      "risk_score": 0.201,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "4d8d61a5",
-      "full_case_id": "4d8d61a5-6f06-49e4-808b-6ef166c0fe47",
-      "cluster_id": "5f07e57f-c789-5702-91c8-d625cf91853a",
-      "region": "Ireland",
-      "risk_score": 0.984,
-      "risk_band": "low",
-      "outgoing_links": 1,
-      "incoming_links": 2
-    },
-    {
-      "case_id": "4fb91451",
-      "full_case_id": "4fb91451-18eb-4ccb-82ac-d702f0b32ea8",
-      "cluster_id": "c45b45af-ff64-5cf7-bb0a-aa8c50afeb57",
-      "region": "Ireland",
-      "risk_score": 0.722,
-      "risk_band": "low",
-      "outgoing_links": 1,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "52d2dddf",
-      "full_case_id": "52d2dddf-cf02-4944-a47d-5ebe84faed70",
-      "cluster_id": "c45b45af-ff64-5cf7-bb0a-aa8c50afeb57",
-      "region": "United Kingdom",
-      "risk_score": 0.865,
-      "risk_band": "low",
-      "outgoing_links": 1,
-      "incoming_links": 2
-    },
-    {
-      "case_id": "59afc50a",
-      "full_case_id": "59afc50a-fe74-44f4-ad39-09db56ad7ae6",
-      "cluster_id": "b695d152-a5e9-5112-94b5-c7d5b963d0dd",
-      "region": "United Kingdom",
-      "risk_score": 1.064,
-      "risk_band": "low",
-      "outgoing_links": 2,
-      "incoming_links": 0
-    },
-    {
-      "case_id": "685df01c",
-      "full_case_id": "685df01c-f9f6-4453-b139-66a7add633fd",
-      "cluster_id": "5f07e57f-c789-5702-91c8-d625cf91853a",
-      "region": "United Kingdom",
-      "risk_score": 0.635,
-      "risk_band": "low",
-      "outgoing_links": 1,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "741dec02",
-      "full_case_id": "741dec02-f222-4e29-b3d8-74063ac795d3",
-      "cluster_id": "b695d152-a5e9-5112-94b5-c7d5b963d0dd",
-      "region": "Ireland",
-      "risk_score": 1.134,
-      "risk_band": "medium",
-      "outgoing_links": 2,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "744cc7f0",
-      "full_case_id": "744cc7f0-1890-4f1c-9cfe-48e16c4feedf",
-      "cluster_id": "b695d152-a5e9-5112-94b5-c7d5b963d0dd",
-      "region": "United Kingdom",
-      "risk_score": 0.599,
-      "risk_band": "low",
-      "outgoing_links": 1,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "841794fc",
-      "full_case_id": "841794fc-f9b8-4564-b311-7e7e89118c9a",
-      "cluster_id": "b751a8b9-d713-5c47-b9c1-efd5f8081033",
-      "region": "United Kingdom",
-      "risk_score": 1.152,
-      "risk_band": "medium",
-      "outgoing_links": 2,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "869d5cae",
-      "full_case_id": "869d5cae-2d76-440e-9b1e-4b6bc40d5aaa",
-      "cluster_id": "5f07e57f-c789-5702-91c8-d625cf91853a",
-      "region": "Ireland",
-      "risk_score": 1.221,
-      "risk_band": "medium",
-      "outgoing_links": 2,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "885e4a0d",
-      "full_case_id": "885e4a0d-76aa-4330-a6f4-d1172a59a875",
-      "cluster_id": "5f07e57f-c789-5702-91c8-d625cf91853a",
-      "region": "Ireland",
-      "risk_score": 1.575,
+      "risk_score": 1.586,
       "risk_band": "medium",
       "outgoing_links": 2,
       "incoming_links": 2
     },
     {
-      "case_id": "887ee922",
-      "full_case_id": "887ee922-f607-4cff-b481-360181c2f018",
-      "cluster_id": "b751a8b9-d713-5c47-b9c1-efd5f8081033",
+      "case_id": "2d8c61ff",
+      "full_case_id": "2d8c61ff-ab39-49a0-ae49-3796bfe23083",
+      "cluster_id": "3435e495-5237-4ae4-b514-e9c2cbb23757",
       "region": "United Kingdom",
-      "risk_score": 0.973,
-      "risk_band": "low",
-      "outgoing_links": 2,
-      "incoming_links": 0
-    },
-    {
-      "case_id": "893ca9f3",
-      "full_case_id": "893ca9f3-a82b-4998-9a2e-52facfe47a48",
-      "cluster_id": "b695d152-a5e9-5112-94b5-c7d5b963d0dd",
-      "region": "United Kingdom",
-      "risk_score": 0.9,
-      "risk_band": "low",
-      "outgoing_links": 1,
-      "incoming_links": 2
-    },
-    {
-      "case_id": "8ff939b4",
-      "full_case_id": "8ff939b4-18ef-4210-8a03-fd761715f08d",
-      "cluster_id": "c45b45af-ff64-5cf7-bb0a-aa8c50afeb57",
-      "region": "Ireland",
-      "risk_score": 1.371,
+      "risk_score": 1.553,
       "risk_band": "medium",
       "outgoing_links": 2,
       "incoming_links": 2
     },
     {
-      "case_id": "952645aa",
-      "full_case_id": "952645aa-6af0-4b0d-a0e7-9683f9a19f85",
-      "cluster_id": "5f07e57f-c789-5702-91c8-d625cf91853a",
+      "case_id": "300a6af4",
+      "full_case_id": "300a6af4-5312-4318-99d0-f7e29b80e6c0",
+      "cluster_id": "79a048df-f3c7-4fcc-9128-f756ff765558",
       "region": "United Kingdom",
-      "risk_score": 0.886,
-      "risk_band": "low",
-      "outgoing_links": 1,
-      "incoming_links": 2
-    },
-    {
-      "case_id": "adf75539",
-      "full_case_id": "adf75539-6ba2-490a-ad49-f8ad4be31248",
-      "cluster_id": "b695d152-a5e9-5112-94b5-c7d5b963d0dd",
-      "region": "United Kingdom",
-      "risk_score": 1.441,
+      "risk_score": 1.49,
       "risk_band": "medium",
       "outgoing_links": 2,
       "incoming_links": 2
     },
     {
-      "case_id": "c0432f79",
-      "full_case_id": "c0432f79-a952-4c1e-a16b-329b0c7ef621",
-      "cluster_id": "b751a8b9-d713-5c47-b9c1-efd5f8081033",
+      "case_id": "319dd212",
+      "full_case_id": "319dd212-9392-4b85-bfd5-e516e8f99451",
+      "cluster_id": "077623b2-74b4-40dc-8ee8-e2deb3a4e2f9",
       "region": "United Kingdom",
-      "risk_score": 0.39,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 2
-    },
-    {
-      "case_id": "c32fd069",
-      "full_case_id": "c32fd069-65aa-4ac1-bae0-b6a1108d3b94",
-      "cluster_id": "c45b45af-ff64-5cf7-bb0a-aa8c50afeb57",
-      "region": "United Kingdom",
-      "risk_score": 1.039,
-      "risk_band": "low",
-      "outgoing_links": 1,
-      "incoming_links": 2
-    },
-    {
-      "case_id": "c331f5e4",
-      "full_case_id": "c331f5e4-1a6d-475e-bc33-aba9e3f568e0",
-      "cluster_id": "5f07e57f-c789-5702-91c8-d625cf91853a",
-      "region": "Ireland",
-      "risk_score": 1.465,
+      "risk_score": 1.469,
       "risk_band": "medium",
       "outgoing_links": 2,
       "incoming_links": 2
     },
     {
-      "case_id": "ca116d74",
-      "full_case_id": "ca116d74-132b-4821-a35e-8cc02fd772c3",
-      "cluster_id": "b751a8b9-d713-5c47-b9c1-efd5f8081033",
+      "case_id": "3261c5f4",
+      "full_case_id": "3261c5f4-bd1e-476e-a7e0-3563d70991b8",
+      "cluster_id": "8a80bac0-47b5-4b47-89da-a26c13bd5759",
       "region": "United Kingdom",
-      "risk_score": 1.382,
+      "risk_score": 1.455,
       "risk_band": "medium",
       "outgoing_links": 2,
       "incoming_links": 2
     },
     {
-      "case_id": "d690093c",
-      "full_case_id": "d690093c-b5f6-42bd-9c9a-8aa5ea80b437",
-      "cluster_id": "5f07e57f-c789-5702-91c8-d625cf91853a",
-      "region": "Ireland",
-      "risk_score": 1.243,
-      "risk_band": "medium",
-      "outgoing_links": 2,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "dabbace9",
-      "full_case_id": "dabbace9-b8e8-43e9-9e02-768ea965fcae",
-      "cluster_id": "c45b45af-ff64-5cf7-bb0a-aa8c50afeb57",
-      "region": "Ireland",
-      "risk_score": 0.469,
-      "risk_band": "low",
-      "outgoing_links": 1,
-      "incoming_links": 0
-    },
-    {
-      "case_id": "de64cf2a",
-      "full_case_id": "de64cf2a-7526-4855-91fd-4bb1e83bd12f",
-      "cluster_id": "b695d152-a5e9-5112-94b5-c7d5b963d0dd",
+      "case_id": "3604f5ae",
+      "full_case_id": "3604f5ae-2740-4344-b0c0-3cacb2e5074d",
+      "cluster_id": "d9c032fd-bf9a-42b4-8f42-7f7a2d6ad832",
       "region": "United Kingdom",
-      "risk_score": 1.257,
-      "risk_band": "medium",
-      "outgoing_links": 2,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "e3e6abd4",
-      "full_case_id": "e3e6abd4-be06-4435-991a-573424da4a37",
-      "cluster_id": "b695d152-a5e9-5112-94b5-c7d5b963d0dd",
-      "region": "Ireland",
-      "risk_score": 0.24,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "e703da65",
-      "full_case_id": "e703da65-719a-424d-8639-4a87879db081",
-      "cluster_id": "c45b45af-ff64-5cf7-bb0a-aa8c50afeb57",
-      "region": "Ireland",
-      "risk_score": 0.854,
-      "risk_band": "low",
-      "outgoing_links": 1,
-      "incoming_links": 2
-    },
-    {
-      "case_id": "e99a2c5d",
-      "full_case_id": "e99a2c5d-7fd0-4c09-96a4-58ebfb1b53d0",
-      "cluster_id": "b695d152-a5e9-5112-94b5-c7d5b963d0dd",
-      "region": "United Kingdom",
-      "risk_score": 1.525,
+      "risk_score": 1.563,
       "risk_band": "medium",
       "outgoing_links": 2,
       "incoming_links": 2
     },
     {
-      "case_id": "ee138916",
-      "full_case_id": "ee138916-8293-462d-a754-26f346a29a39",
-      "cluster_id": "5f07e57f-c789-5702-91c8-d625cf91853a",
-      "region": "Ireland",
+      "case_id": "36848c0b",
+      "full_case_id": "36848c0b-1775-4d33-9ef2-109e2ab02e55",
+      "cluster_id": "79a048df-f3c7-4fcc-9128-f756ff765558",
+      "region": "United Kingdom",
+      "risk_score": 1.496,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "3854cb14",
+      "full_case_id": "3854cb14-2f7e-4fb3-ad4c-3dcbd5140d05",
+      "cluster_id": "79a048df-f3c7-4fcc-9128-f756ff765558",
+      "region": "United Kingdom",
+      "risk_score": 1.596,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "3ba566a3",
+      "full_case_id": "3ba566a3-e878-4bb4-a0aa-1d466b6be925",
+      "cluster_id": "3435e495-5237-4ae4-b514-e9c2cbb23757",
+      "region": "United Kingdom",
+      "risk_score": 1.494,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "3f6865e3",
+      "full_case_id": "3f6865e3-032e-418a-9b15-048caff439e8",
+      "cluster_id": "d9c032fd-bf9a-42b4-8f42-7f7a2d6ad832",
+      "region": "United Kingdom",
+      "risk_score": 1.406,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "40c9b4bd",
+      "full_case_id": "40c9b4bd-26cc-4032-9bc2-863053ac2624",
+      "cluster_id": "077623b2-74b4-40dc-8ee8-e2deb3a4e2f9",
+      "region": "United Kingdom",
       "risk_score": 1.491,
       "risk_band": "medium",
       "outgoing_links": 2,
       "incoming_links": 2
     },
     {
-      "case_id": "ee68af88",
-      "full_case_id": "ee68af88-8f7d-49a2-b329-84033a25f448",
-      "cluster_id": "5f07e57f-c789-5702-91c8-d625cf91853a",
+      "case_id": "4144b10b",
+      "full_case_id": "4144b10b-7072-4bf4-aea7-809b6a15b9a5",
+      "cluster_id": "8a80bac0-47b5-4b47-89da-a26c13bd5759",
       "region": "United Kingdom",
-      "risk_score": 0.849,
-      "risk_band": "low",
-      "outgoing_links": 1,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "f4933618",
-      "full_case_id": "f4933618-48d6-45e6-8c90-29dba24e0fe5",
-      "cluster_id": "5f07e57f-c789-5702-91c8-d625cf91853a",
-      "region": "Ireland",
-      "risk_score": 0.731,
-      "risk_band": "low",
-      "outgoing_links": 1,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "f595cb98",
-      "full_case_id": "f595cb98-421a-48a7-a825-3a6c19d882be",
-      "cluster_id": "b751a8b9-d713-5c47-b9c1-efd5f8081033",
-      "region": "Ireland",
-      "risk_score": 0.62,
-      "risk_band": "low",
-      "outgoing_links": 1,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "fdd91111",
-      "full_case_id": "fdd91111-060b-47b2-922b-6900738f0cce",
-      "cluster_id": "c45b45af-ff64-5cf7-bb0a-aa8c50afeb57",
-      "region": "United Kingdom",
-      "risk_score": 1.081,
-      "risk_band": "low",
+      "risk_score": 1.553,
+      "risk_band": "medium",
       "outgoing_links": 2,
-      "incoming_links": 1
+      "incoming_links": 2
     },
     {
-      "case_id": "fff9ee37",
-      "full_case_id": "fff9ee37-d168-43b1-b7a7-1b0ece9e3c35",
-      "cluster_id": "c45b45af-ff64-5cf7-bb0a-aa8c50afeb57",
+      "case_id": "416717b6",
+      "full_case_id": "416717b6-9b37-4006-a12f-5816cc62ebab",
+      "cluster_id": "d9c032fd-bf9a-42b4-8f42-7f7a2d6ad832",
       "region": "United Kingdom",
-      "risk_score": 1.262,
+      "risk_score": 1.113,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 0
+    },
+    {
+      "case_id": "42d4e02f",
+      "full_case_id": "42d4e02f-8675-4c2d-8b7a-aaae427618f5",
+      "cluster_id": "3435e495-5237-4ae4-b514-e9c2cbb23757",
+      "region": "United Kingdom",
+      "risk_score": 1.113,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 0
+    },
+    {
+      "case_id": "43051dd6",
+      "full_case_id": "43051dd6-2b5d-4122-8e7b-1b215107bd31",
+      "cluster_id": "79a048df-f3c7-4fcc-9128-f756ff765558",
+      "region": "United Kingdom",
+      "risk_score": 1.555,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "44c08352",
+      "full_case_id": "44c08352-1740-469a-9342-148af3530074",
+      "cluster_id": "987a5dc2-6003-4621-af5b-310ffde49e93",
+      "region": "United Kingdom",
+      "risk_score": 1.031,
+      "risk_band": "low",
+      "outgoing_links": 1,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "478872e5",
+      "full_case_id": "478872e5-9766-42f2-8e5c-a03c138f2d61",
+      "cluster_id": "3435e495-5237-4ae4-b514-e9c2cbb23757",
+      "region": "United Kingdom",
+      "risk_score": 1.488,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "483c633a",
+      "full_case_id": "483c633a-4fff-4566-b0e0-2ae5148512dc",
+      "cluster_id": "077623b2-74b4-40dc-8ee8-e2deb3a4e2f9",
+      "region": "United Kingdom",
+      "risk_score": 0.45,
+      "risk_band": "low",
+      "outgoing_links": 0,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "48ed6762",
+      "full_case_id": "48ed6762-8688-4fd4-acff-ba3b3b6eb7be",
+      "cluster_id": "79a048df-f3c7-4fcc-9128-f756ff765558",
+      "region": "United Kingdom",
+      "risk_score": 1.496,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "49151db8",
+      "full_case_id": "49151db8-f3e5-46b6-bf2d-843323831763",
+      "cluster_id": "79a048df-f3c7-4fcc-9128-f756ff765558",
+      "region": "United Kingdom",
+      "risk_score": 1.255,
       "risk_band": "medium",
       "outgoing_links": 2,
       "incoming_links": 1
+    },
+    {
+      "case_id": "4980e631",
+      "full_case_id": "4980e631-629c-4e73-a066-971458038c49",
+      "cluster_id": "79a048df-f3c7-4fcc-9128-f756ff765558",
+      "region": "United Kingdom",
+      "risk_score": 1.616,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "4a350bb3",
+      "full_case_id": "4a350bb3-71c1-4374-a90a-b19b7bc27456",
+      "cluster_id": "077623b2-74b4-40dc-8ee8-e2deb3a4e2f9",
+      "region": "United Kingdom",
+      "risk_score": 1.49,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "4aa38a75",
+      "full_case_id": "4aa38a75-1fee-41b9-aaac-cb54e3aaafdb",
+      "cluster_id": "8a80bac0-47b5-4b47-89da-a26c13bd5759",
+      "region": "United Kingdom",
+      "risk_score": 1.475,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "4cd34262",
+      "full_case_id": "4cd34262-97a7-4de9-b093-445f3e4aeef0",
+      "cluster_id": "79a048df-f3c7-4fcc-9128-f756ff765558",
+      "region": "United Kingdom",
+      "risk_score": 1.576,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "4d8d4be0",
+      "full_case_id": "4d8d4be0-c6bb-4d8b-b4a5-883509a45dfa",
+      "cluster_id": "d9c032fd-bf9a-42b4-8f42-7f7a2d6ad832",
+      "region": "United Kingdom",
+      "risk_score": 1.559,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "4eab99c7",
+      "full_case_id": "4eab99c7-8be8-4bbb-96c7-c362c6e7f346",
+      "cluster_id": "79a048df-f3c7-4fcc-9128-f756ff765558",
+      "region": "United Kingdom",
+      "risk_score": 1.502,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "52260f56",
+      "full_case_id": "52260f56-b542-4f52-bc17-b1503dbab367",
+      "cluster_id": "077623b2-74b4-40dc-8ee8-e2deb3a4e2f9",
+      "region": "United Kingdom",
+      "risk_score": 1.475,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "57047132",
+      "full_case_id": "57047132-22de-45d8-8bd9-5754f7784647",
+      "cluster_id": "987a5dc2-6003-4621-af5b-310ffde49e93",
+      "region": "United Kingdom",
+      "risk_score": 1.523,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "57cbd1b3",
+      "full_case_id": "57cbd1b3-9581-4e54-a6aa-eea55d7a01a4",
+      "cluster_id": "8a80bac0-47b5-4b47-89da-a26c13bd5759",
+      "region": "United Kingdom",
+      "risk_score": 1.531,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "5d152053",
+      "full_case_id": "5d152053-d699-4e52-96a5-387be0826367",
+      "cluster_id": "987a5dc2-6003-4621-af5b-310ffde49e93",
+      "region": "United Kingdom",
+      "risk_score": 1.015,
+      "risk_band": "low",
+      "outgoing_links": 2,
+      "incoming_links": 0
+    },
+    {
+      "case_id": "5f7842d1",
+      "full_case_id": "5f7842d1-a3c3-449b-b59a-d5cfb07e2efd",
+      "cluster_id": "077623b2-74b4-40dc-8ee8-e2deb3a4e2f9",
+      "region": "United Kingdom",
+      "risk_score": 1.113,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 0
+    },
+    {
+      "case_id": "66f739d4",
+      "full_case_id": "66f739d4-35fe-4fbf-a1af-87cf74071235",
+      "cluster_id": "987a5dc2-6003-4621-af5b-310ffde49e93",
+      "region": "United Kingdom",
+      "risk_score": 1.469,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "6c20a693",
+      "full_case_id": "6c20a693-b3c4-4691-a5aa-0bd370630054",
+      "cluster_id": "79a048df-f3c7-4fcc-9128-f756ff765558",
+      "region": "United Kingdom",
+      "risk_score": 1.506,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "6c4bbe08",
+      "full_case_id": "6c4bbe08-7064-4786-8ba3-4c9a36a9dd96",
+      "cluster_id": "987a5dc2-6003-4621-af5b-310ffde49e93",
+      "region": "United Kingdom",
+      "risk_score": 1.487,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "71829c93",
+      "full_case_id": "71829c93-7bc9-44f7-8f78-bf9a6079eda8",
+      "cluster_id": "987a5dc2-6003-4621-af5b-310ffde49e93",
+      "region": "United Kingdom",
+      "risk_score": 1.559,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "71a8e8ac",
+      "full_case_id": "71a8e8ac-4219-43fb-9360-25f9de65a9d7",
+      "cluster_id": "8a80bac0-47b5-4b47-89da-a26c13bd5759",
+      "region": "United Kingdom",
+      "risk_score": 1.345,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 1
+    },
+    {
+      "case_id": "7273d36e",
+      "full_case_id": "7273d36e-c665-42f6-a852-7d500a5a3bb7",
+      "cluster_id": "8a80bac0-47b5-4b47-89da-a26c13bd5759",
+      "region": "United Kingdom",
+      "risk_score": 1.567,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "73ad26cb",
+      "full_case_id": "73ad26cb-7b10-49d6-85a8-d232cf9e24f4",
+      "cluster_id": "077623b2-74b4-40dc-8ee8-e2deb3a4e2f9",
+      "region": "United Kingdom",
+      "risk_score": 1.476,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "77b8106d",
+      "full_case_id": "77b8106d-66f8-40fd-b19b-b6e709894250",
+      "cluster_id": "79a048df-f3c7-4fcc-9128-f756ff765558",
+      "region": "United Kingdom",
+      "risk_score": 1.573,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "77e02ae3",
+      "full_case_id": "77e02ae3-9798-4a60-9f0d-e3a848e65d83",
+      "cluster_id": "8a80bac0-47b5-4b47-89da-a26c13bd5759",
+      "region": "United Kingdom",
+      "risk_score": 1.448,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "780e1659",
+      "full_case_id": "780e1659-63cb-4e5f-a1c5-9564622464e2",
+      "cluster_id": "3435e495-5237-4ae4-b514-e9c2cbb23757",
+      "region": "United Kingdom",
+      "risk_score": 1.557,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "78f083c6",
+      "full_case_id": "78f083c6-2f28-4bff-aea0-501bbe7d0e9d",
+      "cluster_id": "3435e495-5237-4ae4-b514-e9c2cbb23757",
+      "region": "United Kingdom",
+      "risk_score": 1.497,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "7b060c4e",
+      "full_case_id": "7b060c4e-48f3-433e-b403-bd0756343d02",
+      "cluster_id": "077623b2-74b4-40dc-8ee8-e2deb3a4e2f9",
+      "region": "United Kingdom",
+      "risk_score": 1.547,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "7da565dd",
+      "full_case_id": "7da565dd-5b3a-4f32-85ae-e89a7c161523",
+      "cluster_id": "8a80bac0-47b5-4b47-89da-a26c13bd5759",
+      "region": "United Kingdom",
+      "risk_score": 1.559,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "7dedea21",
+      "full_case_id": "7dedea21-f107-4ffc-b427-6dc3954befd0",
+      "cluster_id": "79a048df-f3c7-4fcc-9128-f756ff765558",
+      "region": "United Kingdom",
+      "risk_score": 1.546,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "7e4e2258",
+      "full_case_id": "7e4e2258-331f-437b-b341-879956b5421b",
+      "cluster_id": "077623b2-74b4-40dc-8ee8-e2deb3a4e2f9",
+      "region": "United Kingdom",
+      "risk_score": 1.511,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "7eba2fd6",
+      "full_case_id": "7eba2fd6-5f13-4ecd-9f3a-b0ab2af07019",
+      "cluster_id": "d9c032fd-bf9a-42b4-8f42-7f7a2d6ad832",
+      "region": "United Kingdom",
+      "risk_score": 1.588,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "81961a00",
+      "full_case_id": "81961a00-7741-4273-8cc6-d50f57973042",
+      "cluster_id": "8a80bac0-47b5-4b47-89da-a26c13bd5759",
+      "region": "United Kingdom",
+      "risk_score": 1.492,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "841a611a",
+      "full_case_id": "841a611a-3a03-45f4-ad17-fcf9817fe1ad",
+      "cluster_id": "79a048df-f3c7-4fcc-9128-f756ff765558",
+      "region": "United Kingdom",
+      "risk_score": 1.51,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "85547c02",
+      "full_case_id": "85547c02-8268-44ae-9571-f256f217fd61",
+      "cluster_id": "077623b2-74b4-40dc-8ee8-e2deb3a4e2f9",
+      "region": "United Kingdom",
+      "risk_score": 1.569,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "87775f73",
+      "full_case_id": "87775f73-fed5-4510-921e-6caf4476e06d",
+      "cluster_id": "987a5dc2-6003-4621-af5b-310ffde49e93",
+      "region": "United Kingdom",
+      "risk_score": 1.628,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "8909e531",
+      "full_case_id": "8909e531-f1c8-410c-acf4-a94a9601298b",
+      "cluster_id": "987a5dc2-6003-4621-af5b-310ffde49e93",
+      "region": "United Kingdom",
+      "risk_score": 1.489,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "8972812f",
+      "full_case_id": "8972812f-80cb-41a9-b948-69057d410fd7",
+      "cluster_id": "8a80bac0-47b5-4b47-89da-a26c13bd5759",
+      "region": "United Kingdom",
+      "risk_score": 1.475,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "89994631",
+      "full_case_id": "89994631-04d5-4f5a-8893-3813d3b7899f",
+      "cluster_id": "8a80bac0-47b5-4b47-89da-a26c13bd5759",
+      "region": "United Kingdom",
+      "risk_score": 1.448,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "89ab6cda",
+      "full_case_id": "89ab6cda-d59e-4cc9-8ac5-c326a28f60a1",
+      "cluster_id": "d9c032fd-bf9a-42b4-8f42-7f7a2d6ad832",
+      "region": "United Kingdom",
+      "risk_score": 1.551,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "89ad050c",
+      "full_case_id": "89ad050c-d6ba-4dd1-8c14-f5765b20f746",
+      "cluster_id": "d9c032fd-bf9a-42b4-8f42-7f7a2d6ad832",
+      "region": "United Kingdom",
+      "risk_score": 1.455,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "8d008fee",
+      "full_case_id": "8d008fee-b96c-4c2f-b022-c3b6669ac762",
+      "cluster_id": "3435e495-5237-4ae4-b514-e9c2cbb23757",
+      "region": "United Kingdom",
+      "risk_score": 1.603,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "8e919e32",
+      "full_case_id": "8e919e32-5ce3-408d-b7e8-0a7649cb2107",
+      "cluster_id": "8a80bac0-47b5-4b47-89da-a26c13bd5759",
+      "region": "United Kingdom",
+      "risk_score": 1.491,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "8eda3818",
+      "full_case_id": "8eda3818-97db-4429-9c0b-b65bc2654226",
+      "cluster_id": "987a5dc2-6003-4621-af5b-310ffde49e93",
+      "region": "United Kingdom",
+      "risk_score": 1.559,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "91429d71",
+      "full_case_id": "91429d71-7655-45de-89fd-770d8ae2d4b8",
+      "cluster_id": "d9c032fd-bf9a-42b4-8f42-7f7a2d6ad832",
+      "region": "United Kingdom",
+      "risk_score": 1.566,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "942641c9",
+      "full_case_id": "942641c9-2202-47ac-9a87-a5ebe428bb2b",
+      "cluster_id": "3435e495-5237-4ae4-b514-e9c2cbb23757",
+      "region": "United Kingdom",
+      "risk_score": 1.506,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "98748ccb",
+      "full_case_id": "98748ccb-ffec-4896-96d7-f4f195406932",
+      "cluster_id": "d9c032fd-bf9a-42b4-8f42-7f7a2d6ad832",
+      "region": "United Kingdom",
+      "risk_score": 1.539,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "98f372f7",
+      "full_case_id": "98f372f7-4f02-416e-ab03-764b09396a27",
+      "cluster_id": "8a80bac0-47b5-4b47-89da-a26c13bd5759",
+      "region": "United Kingdom",
+      "risk_score": 1.497,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "99b3da3b",
+      "full_case_id": "99b3da3b-319d-4fd8-b363-38f5d5f9f6cd",
+      "cluster_id": "79a048df-f3c7-4fcc-9128-f756ff765558",
+      "region": "United Kingdom",
+      "risk_score": 1.517,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "9b1ccbb6",
+      "full_case_id": "9b1ccbb6-48ca-4c78-8444-dd024b31ac30",
+      "cluster_id": "79a048df-f3c7-4fcc-9128-f756ff765558",
+      "region": "United Kingdom",
+      "risk_score": 1.487,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "9d37759f",
+      "full_case_id": "9d37759f-0cc7-4432-bf11-25f9497e39ec",
+      "cluster_id": "79a048df-f3c7-4fcc-9128-f756ff765558",
+      "region": "United Kingdom",
+      "risk_score": 1.045,
+      "risk_band": "low",
+      "outgoing_links": 1,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "9f9a24ec",
+      "full_case_id": "9f9a24ec-2239-494f-87b6-013d3efc3674",
+      "cluster_id": "077623b2-74b4-40dc-8ee8-e2deb3a4e2f9",
+      "region": "United Kingdom",
+      "risk_score": 1.474,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "9fb44946",
+      "full_case_id": "9fb44946-c071-4d90-9aa2-569f1b8b2cc6",
+      "cluster_id": "3435e495-5237-4ae4-b514-e9c2cbb23757",
+      "region": "United Kingdom",
+      "risk_score": 1.405,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "a029b075",
+      "full_case_id": "a029b075-5651-4b3e-b39a-3e2142c25a55",
+      "cluster_id": "d9c032fd-bf9a-42b4-8f42-7f7a2d6ad832",
+      "region": "United Kingdom",
+      "risk_score": 1.579,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "a10a6bf2",
+      "full_case_id": "a10a6bf2-3c73-48af-bea5-ff927248b237",
+      "cluster_id": "d9c032fd-bf9a-42b4-8f42-7f7a2d6ad832",
+      "region": "United Kingdom",
+      "risk_score": 0.471,
+      "risk_band": "low",
+      "outgoing_links": 0,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "a11c3493",
+      "full_case_id": "a11c3493-1795-4942-8912-8a2f10f1344f",
+      "cluster_id": "3435e495-5237-4ae4-b514-e9c2cbb23757",
+      "region": "United Kingdom",
+      "risk_score": 0.441,
+      "risk_band": "low",
+      "outgoing_links": 0,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "a302b98c",
+      "full_case_id": "a302b98c-1892-4192-94f3-9fdc37a0c37d",
+      "cluster_id": "987a5dc2-6003-4621-af5b-310ffde49e93",
+      "region": "United Kingdom",
+      "risk_score": 1.499,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "a4f3f642",
+      "full_case_id": "a4f3f642-1415-44dc-995c-f11fcc1c2850",
+      "cluster_id": "8a80bac0-47b5-4b47-89da-a26c13bd5759",
+      "region": "United Kingdom",
+      "risk_score": 1.537,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "a5f0e7a7",
+      "full_case_id": "a5f0e7a7-d0b8-4630-b40c-b24f87c9c3d0",
+      "cluster_id": "8a80bac0-47b5-4b47-89da-a26c13bd5759",
+      "region": "United Kingdom",
+      "risk_score": 1.568,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "a79bd3f8",
+      "full_case_id": "a79bd3f8-4f90-4ea0-bf9f-0a634266f81e",
+      "cluster_id": "987a5dc2-6003-4621-af5b-310ffde49e93",
+      "region": "United Kingdom",
+      "risk_score": 1.606,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "a9099063",
+      "full_case_id": "a9099063-6882-4c62-989c-4bb2f9ca0b82",
+      "cluster_id": "987a5dc2-6003-4621-af5b-310ffde49e93",
+      "region": "United Kingdom",
+      "risk_score": 1.517,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "a9172cfc",
+      "full_case_id": "a9172cfc-9b73-4775-aade-758aacdd863d",
+      "cluster_id": "79a048df-f3c7-4fcc-9128-f756ff765558",
+      "region": "United Kingdom",
+      "risk_score": 1.483,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "ac50783b",
+      "full_case_id": "ac50783b-fbd5-42c4-aa19-d0ba06a7c190",
+      "cluster_id": "077623b2-74b4-40dc-8ee8-e2deb3a4e2f9",
+      "region": "United Kingdom",
+      "risk_score": 0.995,
+      "risk_band": "low",
+      "outgoing_links": 1,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "ace6b385",
+      "full_case_id": "ace6b385-7dfe-426d-ad31-3782d9162de8",
+      "cluster_id": "3435e495-5237-4ae4-b514-e9c2cbb23757",
+      "region": "United Kingdom",
+      "risk_score": 1.471,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "b46b830a",
+      "full_case_id": "b46b830a-bfdb-49bf-b4a4-d90052aac06d",
+      "cluster_id": "d9c032fd-bf9a-42b4-8f42-7f7a2d6ad832",
+      "region": "United Kingdom",
+      "risk_score": 1.01,
+      "risk_band": "low",
+      "outgoing_links": 1,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "b548db2c",
+      "full_case_id": "b548db2c-ee60-4647-955d-a9104272a18e",
+      "cluster_id": "8a80bac0-47b5-4b47-89da-a26c13bd5759",
+      "region": "United Kingdom",
+      "risk_score": 1.587,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "b56a905a",
+      "full_case_id": "b56a905a-4ee8-4510-9fcc-ff8dbd6c9991",
+      "cluster_id": "987a5dc2-6003-4621-af5b-310ffde49e93",
+      "region": "United Kingdom",
+      "risk_score": 1.545,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "b64e53ce",
+      "full_case_id": "b64e53ce-bf9c-4fa3-88a8-846d65e1ccce",
+      "cluster_id": "8a80bac0-47b5-4b47-89da-a26c13bd5759",
+      "region": "United Kingdom",
+      "risk_score": 0.42,
+      "risk_band": "low",
+      "outgoing_links": 0,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "b6c4eca9",
+      "full_case_id": "b6c4eca9-859a-450e-a6f3-98672aba6f18",
+      "cluster_id": "79a048df-f3c7-4fcc-9128-f756ff765558",
+      "region": "United Kingdom",
+      "risk_score": 1.099,
+      "risk_band": "low",
+      "outgoing_links": 2,
+      "incoming_links": 0
+    },
+    {
+      "case_id": "b74be404",
+      "full_case_id": "b74be404-f24f-4104-bb53-630119934c71",
+      "cluster_id": "8a80bac0-47b5-4b47-89da-a26c13bd5759",
+      "region": "United Kingdom",
+      "risk_score": 1.581,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "b839db56",
+      "full_case_id": "b839db56-bd56-4e89-b088-3b330b29bcbc",
+      "cluster_id": "8a80bac0-47b5-4b47-89da-a26c13bd5759",
+      "region": "United Kingdom",
+      "risk_score": 1.482,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "b8437fba",
+      "full_case_id": "b8437fba-c30f-4b22-88d1-3ae36f8e669f",
+      "cluster_id": "79a048df-f3c7-4fcc-9128-f756ff765558",
+      "region": "United Kingdom",
+      "risk_score": 1.493,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "b88b2876",
+      "full_case_id": "b88b2876-34a8-46e8-85d1-fdfc7abc4f78",
+      "cluster_id": "d9c032fd-bf9a-42b4-8f42-7f7a2d6ad832",
+      "region": "United Kingdom",
+      "risk_score": 1.588,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "b8c87b84",
+      "full_case_id": "b8c87b84-3bf7-42e2-a18e-9a59950073ea",
+      "cluster_id": "8a80bac0-47b5-4b47-89da-a26c13bd5759",
+      "region": "United Kingdom",
+      "risk_score": 1.565,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "bac25fc0",
+      "full_case_id": "bac25fc0-507a-4d6b-b64c-d15bb75363fe",
+      "cluster_id": "8a80bac0-47b5-4b47-89da-a26c13bd5759",
+      "region": "United Kingdom",
+      "risk_score": 1.569,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "bbc91c70",
+      "full_case_id": "bbc91c70-8c39-4ca1-9649-25e6f698b999",
+      "cluster_id": "d9c032fd-bf9a-42b4-8f42-7f7a2d6ad832",
+      "region": "United Kingdom",
+      "risk_score": 1.519,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "bf8882cb",
+      "full_case_id": "bf8882cb-3a42-4f96-9e4a-9ff3df440d2d",
+      "cluster_id": "d9c032fd-bf9a-42b4-8f42-7f7a2d6ad832",
+      "region": "United Kingdom",
+      "risk_score": 1.529,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "c08aefc2",
+      "full_case_id": "c08aefc2-ab5b-40b4-bff8-403f5dd54703",
+      "cluster_id": "3435e495-5237-4ae4-b514-e9c2cbb23757",
+      "region": "United Kingdom",
+      "risk_score": 1.51,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "c522d99a",
+      "full_case_id": "c522d99a-3aa9-4be9-8f95-df83e4691907",
+      "cluster_id": "987a5dc2-6003-4621-af5b-310ffde49e93",
+      "region": "United Kingdom",
+      "risk_score": 1.473,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "c7717a73",
+      "full_case_id": "c7717a73-b359-4cfe-8800-09a58cbe1697",
+      "cluster_id": "8a80bac0-47b5-4b47-89da-a26c13bd5759",
+      "region": "United Kingdom",
+      "risk_score": 1.458,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "c7bc74cb",
+      "full_case_id": "c7bc74cb-9b79-49f4-a513-7937560856b6",
+      "cluster_id": "8a80bac0-47b5-4b47-89da-a26c13bd5759",
+      "region": "United Kingdom",
+      "risk_score": 1.492,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "c7c53f4d",
+      "full_case_id": "c7c53f4d-5df6-4432-9062-cb67ff9ea59a",
+      "cluster_id": "79a048df-f3c7-4fcc-9128-f756ff765558",
+      "region": "United Kingdom",
+      "risk_score": 1.581,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "c7f860e9",
+      "full_case_id": "c7f860e9-5ba3-4818-99c5-2553eac27340",
+      "cluster_id": "077623b2-74b4-40dc-8ee8-e2deb3a4e2f9",
+      "region": "United Kingdom",
+      "risk_score": 1.504,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "caf10f71",
+      "full_case_id": "caf10f71-4754-4e2a-8628-2e4fc52f537b",
+      "cluster_id": "077623b2-74b4-40dc-8ee8-e2deb3a4e2f9",
+      "region": "United Kingdom",
+      "risk_score": 1.453,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "d21f98f7",
+      "full_case_id": "d21f98f7-024e-454e-bf4e-a82c3055c58e",
+      "cluster_id": "3435e495-5237-4ae4-b514-e9c2cbb23757",
+      "region": "United Kingdom",
+      "risk_score": 1.526,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "d29320bb",
+      "full_case_id": "d29320bb-f914-497a-ba4b-cf841d4c87f0",
+      "cluster_id": "077623b2-74b4-40dc-8ee8-e2deb3a4e2f9",
+      "region": "United Kingdom",
+      "risk_score": 1.538,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "d2fb54ac",
+      "full_case_id": "d2fb54ac-3df9-4d5b-9f1e-0b2ebcf664b1",
+      "cluster_id": "077623b2-74b4-40dc-8ee8-e2deb3a4e2f9",
+      "region": "United Kingdom",
+      "risk_score": 1.47,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "d5ac0f71",
+      "full_case_id": "d5ac0f71-ac6f-4352-914f-36a6d433bab2",
+      "cluster_id": "987a5dc2-6003-4621-af5b-310ffde49e93",
+      "region": "United Kingdom",
+      "risk_score": 1.468,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "d6caa902",
+      "full_case_id": "d6caa902-6bc9-44e5-b24d-d6beb218a56c",
+      "cluster_id": "3435e495-5237-4ae4-b514-e9c2cbb23757",
+      "region": "United Kingdom",
+      "risk_score": 1.552,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "d744e00d",
+      "full_case_id": "d744e00d-a6c2-4992-9cd4-e3f8749bdc8e",
+      "cluster_id": "79a048df-f3c7-4fcc-9128-f756ff765558",
+      "region": "United Kingdom",
+      "risk_score": 1.488,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "d76e4462",
+      "full_case_id": "d76e4462-230a-4234-b892-f8e36aaa4620",
+      "cluster_id": "8a80bac0-47b5-4b47-89da-a26c13bd5759",
+      "region": "United Kingdom",
+      "risk_score": 1.453,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "d7de618f",
+      "full_case_id": "d7de618f-8fea-445f-9f87-0d41a8f5aed0",
+      "cluster_id": "d9c032fd-bf9a-42b4-8f42-7f7a2d6ad832",
+      "region": "United Kingdom",
+      "risk_score": 1.49,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "d94dbbd8",
+      "full_case_id": "d94dbbd8-4481-400c-8d36-a674fae994aa",
+      "cluster_id": "79a048df-f3c7-4fcc-9128-f756ff765558",
+      "region": "United Kingdom",
+      "risk_score": 1.503,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "d9b3335d",
+      "full_case_id": "d9b3335d-2ae4-4d5c-a917-b92d415b077e",
+      "cluster_id": "987a5dc2-6003-4621-af5b-310ffde49e93",
+      "region": "United Kingdom",
+      "risk_score": 1.571,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "da963109",
+      "full_case_id": "da963109-f7e7-4115-bc7f-d31840eac475",
+      "cluster_id": "077623b2-74b4-40dc-8ee8-e2deb3a4e2f9",
+      "region": "United Kingdom",
+      "risk_score": 1.476,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "db2131b0",
+      "full_case_id": "db2131b0-4172-40f0-8f60-e2c1754eb20c",
+      "cluster_id": "8a80bac0-47b5-4b47-89da-a26c13bd5759",
+      "region": "United Kingdom",
+      "risk_score": 1.029,
+      "risk_band": "low",
+      "outgoing_links": 2,
+      "incoming_links": 0
+    },
+    {
+      "case_id": "dc52a0b9",
+      "full_case_id": "dc52a0b9-c885-44c3-a817-5d802a4df97c",
+      "cluster_id": "8a80bac0-47b5-4b47-89da-a26c13bd5759",
+      "region": "United Kingdom",
+      "risk_score": 1.509,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "dda4a07f",
+      "full_case_id": "dda4a07f-972a-47f3-84c1-f78382e6be81",
+      "cluster_id": "8a80bac0-47b5-4b47-89da-a26c13bd5759",
+      "region": "United Kingdom",
+      "risk_score": 1.56,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "de4a7913",
+      "full_case_id": "de4a7913-be5a-4d2d-a3d9-ba493146bb17",
+      "cluster_id": "8a80bac0-47b5-4b47-89da-a26c13bd5759",
+      "region": "United Kingdom",
+      "risk_score": 1.557,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "e02d6da8",
+      "full_case_id": "e02d6da8-aa60-4137-b30c-52d803b4bca3",
+      "cluster_id": "79a048df-f3c7-4fcc-9128-f756ff765558",
+      "region": "United Kingdom",
+      "risk_score": 1.586,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "e0462157",
+      "full_case_id": "e0462157-86cd-4655-a3f1-64090dbc219c",
+      "cluster_id": "8a80bac0-47b5-4b47-89da-a26c13bd5759",
+      "region": "United Kingdom",
+      "risk_score": 0.987,
+      "risk_band": "low",
+      "outgoing_links": 1,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "e120bd48",
+      "full_case_id": "e120bd48-22e8-46ed-9ebe-f9a4bc5c6f4a",
+      "cluster_id": "3435e495-5237-4ae4-b514-e9c2cbb23757",
+      "region": "United Kingdom",
+      "risk_score": 1.49,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "e38e8e79",
+      "full_case_id": "e38e8e79-7f78-4299-a29c-54366b3acafb",
+      "cluster_id": "d9c032fd-bf9a-42b4-8f42-7f7a2d6ad832",
+      "region": "United Kingdom",
+      "risk_score": 1.503,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "e51dc4ca",
+      "full_case_id": "e51dc4ca-307d-48bd-b50d-bd8db7e4455b",
+      "cluster_id": "79a048df-f3c7-4fcc-9128-f756ff765558",
+      "region": "United Kingdom",
+      "risk_score": 1.564,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "e62af3ea",
+      "full_case_id": "e62af3ea-80d8-4af4-8372-34ba119bb71b",
+      "cluster_id": "8a80bac0-47b5-4b47-89da-a26c13bd5759",
+      "region": "United Kingdom",
+      "risk_score": 1.591,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "ea84824f",
+      "full_case_id": "ea84824f-0e48-44f7-a3f3-96bcdebab39a",
+      "cluster_id": "987a5dc2-6003-4621-af5b-310ffde49e93",
+      "region": "United Kingdom",
+      "risk_score": 1.523,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "eaea6a74",
+      "full_case_id": "eaea6a74-e698-472d-b047-abbd1f4eb52c",
+      "cluster_id": "987a5dc2-6003-4621-af5b-310ffde49e93",
+      "region": "United Kingdom",
+      "risk_score": 0.45,
+      "risk_band": "low",
+      "outgoing_links": 0,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "f0d58192",
+      "full_case_id": "f0d58192-9a94-4c5a-9b08-b425dc1d9f88",
+      "cluster_id": "3435e495-5237-4ae4-b514-e9c2cbb23757",
+      "region": "United Kingdom",
+      "risk_score": 1.504,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "f128c087",
+      "full_case_id": "f128c087-f3ae-46ac-9af3-e69cd25fc507",
+      "cluster_id": "d9c032fd-bf9a-42b4-8f42-7f7a2d6ad832",
+      "region": "United Kingdom",
+      "risk_score": 1.29,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 1
+    },
+    {
+      "case_id": "f2410d3c",
+      "full_case_id": "f2410d3c-68fc-4320-8fa5-4ee4cc3dba86",
+      "cluster_id": "8a80bac0-47b5-4b47-89da-a26c13bd5759",
+      "region": "United Kingdom",
+      "risk_score": 1.477,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "f3963a8b",
+      "full_case_id": "f3963a8b-da37-4422-aa12-deda928e26ff",
+      "cluster_id": "d9c032fd-bf9a-42b4-8f42-7f7a2d6ad832",
+      "region": "United Kingdom",
+      "risk_score": 1.49,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "f67857f6",
+      "full_case_id": "f67857f6-00a0-4493-abf3-f7a443d9d8f3",
+      "cluster_id": "3435e495-5237-4ae4-b514-e9c2cbb23757",
+      "region": "United Kingdom",
+      "risk_score": 1.524,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "f7d6a852",
+      "full_case_id": "f7d6a852-9a51-45cd-be1a-53de208cd97a",
+      "cluster_id": "987a5dc2-6003-4621-af5b-310ffde49e93",
+      "region": "United Kingdom",
+      "risk_score": 1.559,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "f8c5fffe",
+      "full_case_id": "f8c5fffe-2579-41e5-8c3e-fa8bd591ae7d",
+      "cluster_id": "8a80bac0-47b5-4b47-89da-a26c13bd5759",
+      "region": "United Kingdom",
+      "risk_score": 1.498,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "fa7874ad",
+      "full_case_id": "fa7874ad-d53d-42a7-8e8c-e2f9febaaab3",
+      "cluster_id": "3435e495-5237-4ae4-b514-e9c2cbb23757",
+      "region": "United Kingdom",
+      "risk_score": 1.578,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "faf2fd3b",
+      "full_case_id": "faf2fd3b-6845-4ede-9e2a-29d5c44d684d",
+      "cluster_id": "d9c032fd-bf9a-42b4-8f42-7f7a2d6ad832",
+      "region": "United Kingdom",
+      "risk_score": 1.573,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "fd65bf29",
+      "full_case_id": "fd65bf29-00f8-4c42-af3d-cb49d16b5baf",
+      "cluster_id": "077623b2-74b4-40dc-8ee8-e2deb3a4e2f9",
+      "region": "United Kingdom",
+      "risk_score": 1.29,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 1
+    },
+    {
+      "case_id": "fddf5c94",
+      "full_case_id": "fddf5c94-d57b-4f5e-95f3-055d937d0650",
+      "cluster_id": "8a80bac0-47b5-4b47-89da-a26c13bd5759",
+      "region": "United Kingdom",
+      "risk_score": 1.549,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "ffc1668f",
+      "full_case_id": "ffc1668f-3224-47f6-8c81-43b0b4b816aa",
+      "cluster_id": "077623b2-74b4-40dc-8ee8-e2deb3a4e2f9",
+      "region": "United Kingdom",
+      "risk_score": 1.517,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "ffca906f",
+      "full_case_id": "ffca906f-b098-4f90-8480-f5e7dbb362e5",
+      "cluster_id": "077623b2-74b4-40dc-8ee8-e2deb3a4e2f9",
+      "region": "United Kingdom",
+      "risk_score": 1.528,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
     }
   ],
   "key_nodes": [
     {
-      "case_id": "885e4a0d",
-      "full_case_id": "885e4a0d-76aa-4330-a6f4-d1172a59a875",
-      "cluster_id": "5f07e57f-c789-5702-91c8-d625cf91853a",
-      "region": "Ireland",
-      "risk_score": 1.575,
-      "risk_band": "medium",
-      "outgoing_links": 2,
-      "incoming_links": 2
-    },
-    {
-      "case_id": "1b4f38b6",
-      "full_case_id": "1b4f38b6-cfa4-47f0-abfa-dd4a8b56374f",
-      "cluster_id": "5f07e57f-c789-5702-91c8-d625cf91853a",
-      "region": "Ireland",
-      "risk_score": 1.564,
-      "risk_band": "medium",
-      "outgoing_links": 2,
-      "incoming_links": 2
-    },
-    {
-      "case_id": "e99a2c5d",
-      "full_case_id": "e99a2c5d-7fd0-4c09-96a4-58ebfb1b53d0",
-      "cluster_id": "b695d152-a5e9-5112-94b5-c7d5b963d0dd",
+      "case_id": "87775f73",
+      "full_case_id": "87775f73-fed5-4510-921e-6caf4476e06d",
+      "cluster_id": "987a5dc2-6003-4621-af5b-310ffde49e93",
       "region": "United Kingdom",
-      "risk_score": 1.525,
+      "risk_score": 1.628,
       "risk_band": "medium",
       "outgoing_links": 2,
       "incoming_links": 2
     },
     {
-      "case_id": "ee138916",
-      "full_case_id": "ee138916-8293-462d-a754-26f346a29a39",
-      "cluster_id": "5f07e57f-c789-5702-91c8-d625cf91853a",
-      "region": "Ireland",
-      "risk_score": 1.491,
-      "risk_band": "medium",
-      "outgoing_links": 2,
-      "incoming_links": 2
-    },
-    {
-      "case_id": "c331f5e4",
-      "full_case_id": "c331f5e4-1a6d-475e-bc33-aba9e3f568e0",
-      "cluster_id": "5f07e57f-c789-5702-91c8-d625cf91853a",
-      "region": "Ireland",
-      "risk_score": 1.465,
-      "risk_band": "medium",
-      "outgoing_links": 2,
-      "incoming_links": 2
-    },
-    {
-      "case_id": "adf75539",
-      "full_case_id": "adf75539-6ba2-490a-ad49-f8ad4be31248",
-      "cluster_id": "b695d152-a5e9-5112-94b5-c7d5b963d0dd",
+      "case_id": "0300f948",
+      "full_case_id": "0300f948-68f3-46d1-8ce9-21b9244de4e4",
+      "cluster_id": "8a80bac0-47b5-4b47-89da-a26c13bd5759",
       "region": "United Kingdom",
-      "risk_score": 1.441,
+      "risk_score": 1.622,
       "risk_band": "medium",
       "outgoing_links": 2,
       "incoming_links": 2
     },
     {
-      "case_id": "ca116d74",
-      "full_case_id": "ca116d74-132b-4821-a35e-8cc02fd772c3",
-      "cluster_id": "b751a8b9-d713-5c47-b9c1-efd5f8081033",
+      "case_id": "4980e631",
+      "full_case_id": "4980e631-629c-4e73-a066-971458038c49",
+      "cluster_id": "79a048df-f3c7-4fcc-9128-f756ff765558",
       "region": "United Kingdom",
-      "risk_score": 1.382,
+      "risk_score": 1.616,
       "risk_band": "medium",
       "outgoing_links": 2,
       "incoming_links": 2
     },
     {
-      "case_id": "0fa5b0ae",
-      "full_case_id": "0fa5b0ae-a3cd-4d4c-8071-7f5c034e9764",
-      "cluster_id": "c45b45af-ff64-5cf7-bb0a-aa8c50afeb57",
+      "case_id": "a79bd3f8",
+      "full_case_id": "a79bd3f8-4f90-4ea0-bf9f-0a634266f81e",
+      "cluster_id": "987a5dc2-6003-4621-af5b-310ffde49e93",
       "region": "United Kingdom",
-      "risk_score": 1.382,
+      "risk_score": 1.606,
       "risk_band": "medium",
       "outgoing_links": 2,
       "incoming_links": 2
     },
     {
-      "case_id": "8ff939b4",
-      "full_case_id": "8ff939b4-18ef-4210-8a03-fd761715f08d",
-      "cluster_id": "c45b45af-ff64-5cf7-bb0a-aa8c50afeb57",
-      "region": "Ireland",
-      "risk_score": 1.371,
-      "risk_band": "medium",
-      "outgoing_links": 2,
-      "incoming_links": 2
-    },
-    {
-      "case_id": "2ebe441e",
-      "full_case_id": "2ebe441e-37bd-440b-ac32-0b484b3214cb",
-      "cluster_id": "c45b45af-ff64-5cf7-bb0a-aa8c50afeb57",
+      "case_id": "8d008fee",
+      "full_case_id": "8d008fee-b96c-4c2f-b022-c3b6669ac762",
+      "cluster_id": "3435e495-5237-4ae4-b514-e9c2cbb23757",
       "region": "United Kingdom",
-      "risk_score": 1.347,
+      "risk_score": 1.603,
       "risk_band": "medium",
       "outgoing_links": 2,
-      "incoming_links": 1
+      "incoming_links": 2
+    },
+    {
+      "case_id": "207e1c31",
+      "full_case_id": "207e1c31-4c16-4bb3-a172-c1bc93dac035",
+      "cluster_id": "3435e495-5237-4ae4-b514-e9c2cbb23757",
+      "region": "United Kingdom",
+      "risk_score": 1.596,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "3854cb14",
+      "full_case_id": "3854cb14-2f7e-4fb3-ad4c-3dcbd5140d05",
+      "cluster_id": "79a048df-f3c7-4fcc-9128-f756ff765558",
+      "region": "United Kingdom",
+      "risk_score": 1.596,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "1b694f1b",
+      "full_case_id": "1b694f1b-0c5d-4453-89ca-ee9b134f671e",
+      "cluster_id": "987a5dc2-6003-4621-af5b-310ffde49e93",
+      "region": "United Kingdom",
+      "risk_score": 1.594,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "e62af3ea",
+      "full_case_id": "e62af3ea-80d8-4af4-8372-34ba119bb71b",
+      "cluster_id": "8a80bac0-47b5-4b47-89da-a26c13bd5759",
+      "region": "United Kingdom",
+      "risk_score": 1.591,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "0e4d643c",
+      "full_case_id": "0e4d643c-7e9f-4136-9773-78ff6c55aacd",
+      "cluster_id": "79a048df-f3c7-4fcc-9128-f756ff765558",
+      "region": "United Kingdom",
+      "risk_score": 1.59,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
     }
   ],
   "clusters": [
     {
-      "cluster_id": "5f07e57f-c789-5702-91c8-d625cf91853a",
-      "nodes": 17
+      "cluster_id": "077623b2-74b4-40dc-8ee8-e2deb3a4e2f9",
+      "nodes": 27
     },
     {
-      "cluster_id": "b695d152-a5e9-5112-94b5-c7d5b963d0dd",
-      "nodes": 10
+      "cluster_id": "3435e495-5237-4ae4-b514-e9c2cbb23757",
+      "nodes": 27
     },
     {
-      "cluster_id": "b751a8b9-d713-5c47-b9c1-efd5f8081033",
-      "nodes": 6
+      "cluster_id": "79a048df-f3c7-4fcc-9128-f756ff765558",
+      "nodes": 28
     },
     {
-      "cluster_id": "c45b45af-ff64-5cf7-bb0a-aa8c50afeb57",
-      "nodes": 12
+      "cluster_id": "8a80bac0-47b5-4b47-89da-a26c13bd5759",
+      "nodes": 39
+    },
+    {
+      "cluster_id": "987a5dc2-6003-4621-af5b-310ffde49e93",
+      "nodes": 23
+    },
+    {
+      "cluster_id": "d9c032fd-bf9a-42b4-8f42-7f7a2d6ad832",
+      "nodes": 27
     }
   ]
 }

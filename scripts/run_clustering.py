@@ -12,6 +12,41 @@ from sqlalchemy import text
 from backend.database import SessionLocal
 
 
+def _write_json_with_fallback(preferred_path: str, payload: dict) -> str:
+    try:
+        with open(preferred_path, "w", encoding="utf-8") as f:
+            json.dump(payload, f, indent=2)
+        return preferred_path
+    except PermissionError:
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        root, ext = os.path.splitext(preferred_path)
+        fallback_path = f"{root}_{stamp}{ext}"
+        with open(fallback_path, "w", encoding="utf-8") as f:
+            json.dump(payload, f, indent=2)
+        return fallback_path
+
+
+def _write_csv_with_fallback(preferred_path: str, rows: list[dict]) -> str:
+    fieldnames = ["case_id", "specimen_date", "geographic_region", "cluster_id"]
+    try:
+        with open(preferred_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            for row in rows:
+                writer.writerow(row)
+        return preferred_path
+    except PermissionError:
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        root, ext = os.path.splitext(preferred_path)
+        fallback_path = f"{root}_{stamp}{ext}"
+        with open(fallback_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            for row in rows:
+                writer.writerow(row)
+        return fallback_path
+
+
 def main() -> None:
     os.makedirs("exports", exist_ok=True)
     db = SessionLocal()
@@ -61,24 +96,23 @@ def main() -> None:
             ],
         }
 
-        with open("exports/clustering_summary.json", "w", encoding="utf-8") as f:
-            json.dump(summary, f, indent=2)
+        summary_path = _write_json_with_fallback("exports/clustering_summary.json", summary)
 
-        with open("exports/cluster_assignments.csv", "w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(
-                f,
-                fieldnames=["case_id", "specimen_date", "geographic_region", "cluster_id"],
-            )
-            writer.writeheader()
-            for row in assignments:
-                writer.writerow(
-                    {
-                        "case_id": row["case_id"],
-                        "specimen_date": row["specimen_date"],
-                        "geographic_region": row["geographic_region"],
-                        "cluster_id": row["cluster_id"] or "",
-                    }
-                )
+        assignment_rows = [
+            {
+                "case_id": row["case_id"],
+                "specimen_date": row["specimen_date"],
+                "geographic_region": row["geographic_region"],
+                "cluster_id": row["cluster_id"] or "",
+            }
+            for row in assignments
+        ]
+        assignments_path = _write_csv_with_fallback("exports/cluster_assignments.csv", assignment_rows)
+
+        summary["output_files"] = {
+            "summary_json": summary_path,
+            "assignments_csv": assignments_path,
+        }
 
         print(json.dumps(summary, indent=2))
     finally:

@@ -1,5 +1,5 @@
 
-const API='http://localhost:8000';let activeJob=null;
+let API='http://localhost:8000';const API_FALLBACK='http://127.0.0.1:8010';let activeJob=null;
 async function uploadFile(){const f=document.getElementById('fileInput').files[0];if(!f)return;const fd=new FormData();fd.append('file',f);const r=await fetch(`${API}/ingest/file`,{method:'POST',body:fd});document.getElementById('uploadResult').textContent=JSON.stringify(await r.json());}
 async function seedSyntheticData(){
 	const caseCount=Number(document.getElementById('seedCaseCount').value||250);
@@ -20,7 +20,32 @@ async function seedSyntheticData(){
 		resultBox.textContent=`Failed to generate synthetic data: ${e}`;
 	}
 }
-async function runJob(job){document.getElementById('jobStatus').textContent='Starting '+job;const r=await fetch(`${API}/jobs/run/${job}`,{method:'POST'});const d=await r.json();if(!d.job_id){document.getElementById('jobStatus').textContent=JSON.stringify(d,null,2);return;}activeJob=d.job_id;poll();}
+async function runJob(job){
+	document.getElementById('jobStatus').textContent='Starting '+job;
+	let r=await fetch(`${API}/jobs/run/${job}`,{method:'POST'});
+	let d=await r.json();
+
+	// If main API points to an older backend process, retry derive step on fallback port.
+	if(
+		job==='derive_sequence_clusters' &&
+		d && d.error==='Job not allowed' &&
+		API!==API_FALLBACK
+	){
+		const r2=await fetch(`${API_FALLBACK}/jobs/run/${job}`,{method:'POST'});
+		const d2=await r2.json();
+		if(d2 && d2.job_id){
+			API=API_FALLBACK;
+			d=d2;
+		}
+	}
+
+	if(!d.job_id){
+		document.getElementById('jobStatus').textContent=JSON.stringify(d,null,2);
+		return;
+	}
+	activeJob=d.job_id;
+	poll();
+}
 async function poll(){if(!activeJob)return;const r=await fetch(`${API}/jobs/status/${activeJob}`);const d=await r.json();document.getElementById('jobStatus').textContent=JSON.stringify(d,null,2);const bar=document.getElementById('progressBar');bar.style.width=(d.progress||0)+'%';bar.textContent=(d.progress||0)+'%';if(d.status!=='completed'&&d.status!=='failed'){setTimeout(poll,1500);} }
 async function loadCases(){const r=await fetch(`${API}/cases`);document.getElementById('cases').textContent=JSON.stringify(await r.json(),null,2);} 
 async function loadOutbreakerResults(){

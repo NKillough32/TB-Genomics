@@ -20,6 +20,7 @@ ALLOWED_JOBS = {
     "run_clustering": [python_exe, "scripts/run_clustering.py"],
     "export_outbreaker": [python_exe, "scripts/export_outbreaker.py"],
     "run_outbreaker2": ["Rscript", "outbreaker2/run_outbreaker2.R"],
+    "run_secondary_validation": [python_exe, "scripts/run_secondary_engine_validation.py"],
 }
 
 def _log_to_audit(action: str, user_id: str, details: dict):

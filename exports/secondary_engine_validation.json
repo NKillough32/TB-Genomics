@@ -1,0 +1,31 @@
+{
+  "generated_at": "2026-05-08T22:40:58Z",
+  "status": "completed",
+  "scaffold_version": "1.0",
+  "engines": {
+    "transphylo": {
+      "status": "not_installed",
+      "package": "TransPhylo",
+      "version": null,
+      "message": "TransPhylo package not installed"
+    },
+    "bactdating": {
+      "status": "not_installed",
+      "package": "BactDating",
+      "version": null,
+      "message": "BactDating package not installed"
+    }
+  },
+  "prerequisites": {
+    "has_tree_newick": false,
+    "has_cases_csv": true,
+    "tree_path": "exports/outbreaker_phylo.nwk",
+    "dates_path": "exports/cases.csv"
+  },
+  "consensus": {
+    "status": "pending_secondary_outputs",
+    "agreement": null,
+    "confidence": "unknown"
+  },
+  "notes": ["This scaffold validates package and input readiness for secondary engines.", "It does not infer additional transmission links until tree/date prerequisites are satisfied."]
+}

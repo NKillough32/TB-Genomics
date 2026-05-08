@@ -313,6 +313,7 @@ def outbreaker_analysis():
         "graphics": [],
         "summary": None,
         "transmission_network": None,
+        "secondary_validation": None,
         "provenance": None,
         "is_mock": None,
     }
@@ -344,6 +345,14 @@ def outbreaker_analysis():
                         result["is_mock"] = network_provenance == "mock"
         except Exception:
             result["transmission_network"] = None
+
+    secondary_path = "exports/secondary_engine_validation.json"
+    if os.path.exists(secondary_path):
+        try:
+            with open(secondary_path, "r", encoding="utf-8") as f:
+                result["secondary_validation"] = json.load(f)
+        except Exception:
+            result["secondary_validation"] = None
 
     if result["provenance"] is None:
         result["provenance"] = "unknown"

@@ -35,6 +35,7 @@ FALLBACK_INCIDENCE = {
 
 DRUGS = ["isoniazid", "rifampicin", "ethambutol", "pyrazinamide", "fluoroquinolones"]
 LINEAGES = ["L1", "L2", "L3", "L4"]
+NUCLEOTIDES = ["A", "C", "G", "T"]
 
 
 def _fetch_latest_incidence() -> Tuple[Dict[str, Dict[str, float]], bool]:
@@ -115,6 +116,16 @@ def _build_resistance_profile(incidence: float) -> Tuple[Dict[str, str], List[Di
             }
             mutations.append(mutation)
     return predicted, mutations
+
+
+def _build_consensus_sequence(incidence: float) -> str:
+    # Keep synthetic consensus compact for dev performance while preserving variability.
+    seq_len = random.randint(900, 1300)
+    base_weights = [0.25, 0.25, 0.25, 0.25]
+    # Add a slight GC tilt for higher-incidence settings to diversify synthetic patterns.
+    if incidence >= 250:
+        base_weights = [0.22, 0.28, 0.28, 0.22]
+    return "".join(random.choices(NUCLEOTIDES, weights=base_weights, k=seq_len))
 
 
 def seed_synthetic_dataset(
@@ -216,6 +227,22 @@ def seed_synthetic_dataset(
                     ),
                 },
             )
+
+            # Most synthetic cases include sequence records so sequencing coverage KPI is meaningful.
+            sequencing_chance = min(0.95, 0.75 + (incidence / 3000.0))
+            if random.random() < sequencing_chance:
+                sequence = _build_consensus_sequence(incidence)
+                db.execute(
+                    text(
+                        "INSERT INTO consensus_sequences (sample_id, sequence, length) "
+                        "VALUES (:sample_id, :sequence, :length)"
+                    ),
+                    {
+                        "sample_id": case_id,
+                        "sequence": sequence,
+                        "length": len(sequence),
+                    },
+                )
 
             if random.random() < 0.7:
                 cluster_id = random.choice(created_cluster_ids)

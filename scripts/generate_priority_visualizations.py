@@ -358,7 +358,6 @@ def generate_resistance_heatmap():
                 FROM cases c
                 LEFT JOIN tb_interpretation ti ON c.pseudonymised_case_id = ti.sample_id
                 ORDER BY c.geographic_region, c.specimen_date
-                LIMIT 100
             """))
             
             cases_data = []
@@ -399,7 +398,7 @@ def generate_resistance_heatmap():
             resistance_matrix = []
             case_ids = []
             
-            for case in cases_data[:50]:  # Limit to 50 cases
+            for case in cases_data:
                 case_ids.append(case['case_id'])
                 row = []
                 for drug in all_drugs:
@@ -417,7 +416,8 @@ def generate_resistance_heatmap():
                 return
             
             # Create heatmap
-            fig, ax = plt.subplots(figsize=(10, 14))
+            fig_height = min(24, max(10, len(case_ids) * 0.25))
+            fig, ax = plt.subplots(figsize=(10, fig_height))
             resistance_matrix = np.array(resistance_matrix)
             
             # Custom colormap: Green (S) -> Yellow (I) -> Red (R)

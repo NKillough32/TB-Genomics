@@ -32,16 +32,19 @@
     <div id="uploadResult" class="message"></div>
     <hr />
     <p class="hint">Or generate a realistic synthetic dataset from online public TB incidence data.</p>
+    <p class="hint">This is useful for demos and training. It creates synthetic (not real patient) records.</p>
     <div class="seed-controls">
-      <label for="seedCaseCount">Cases</label>
+      <label for="seedCaseCount">Cases to generate</label>
       <input id="seedCaseCount" type="number" min="10" max="5000" value="250" />
-      <label for="seedValue">Seed</label>
+      <label for="seedValue">Seed value</label>
       <input id="seedValue" type="number" value="42" />
       <label class="inline-checkbox" for="seedReset">
         <input id="seedReset" type="checkbox" checked />
         Reset existing synthetic data first
       </label>
     </div>
+    <p class="field-help">Cases to generate: how many synthetic case records will be created.</p>
+    <p class="field-help">Seed value: a repeatable random key. Use the same seed + settings to recreate the same synthetic dataset.</p>
     <label class="seed-country-label" for="seedCountries">Restrict to countries <span class="hint-inline">(Ctrl/Cmd+click to select multiple; leave blank for all)</span></label>
     <select id="seedCountries" multiple size="5" class="country-select">
       <option value="BGD">Bangladesh</option>

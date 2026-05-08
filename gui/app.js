@@ -45,7 +45,9 @@ async function loadOutbreakerResults(){
 		html+='<h4>Outbreak Analysis</h4>';
 		html+=`<p>Status: ${analysis.status}</p>`;
 		if(analysis.summary){
-			html+=`<div class="kpi-strip">Samples: ${analysis.summary.n_samples} | Mean Likelihood: ${analysis.summary.likelihood_mean?.toFixed(2)}</div>`;
+			const posteriorSamples=(analysis.summary.n_samples??'n/a');
+			const caseCount=(analysis.summary.case_count??'n/a');
+			html+=`<div class="kpi-strip">Case count: ${caseCount} | Posterior samples (MCMC): ${posteriorSamples} | Mean Likelihood: ${analysis.summary.likelihood_mean?.toFixed(2)}</div>`;
 		}
 
 		if(analysis.transmission_network){

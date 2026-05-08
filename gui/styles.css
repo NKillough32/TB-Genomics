@@ -192,6 +192,13 @@ input[type="file"] {
 	font-size: 0.82rem;
 }
 
+.field-help {
+	margin: 0.18rem 0;
+	font-size: 0.82rem;
+	line-height: 1.35;
+	color: #486480;
+}
+
 .country-select {
 	width: 100%;
 	max-width: 560px;

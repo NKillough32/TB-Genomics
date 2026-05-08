@@ -43,6 +43,21 @@ async function loadOutbreakerResults(){
 		if(analysis.summary){
 			html+=`Samples: ${analysis.summary.n_samples} | Mean Likelihood: ${analysis.summary.likelihood_mean?.toFixed(2)}<br/>`;
 		}
+
+		if(analysis.transmission_network){
+			const net=analysis.transmission_network;
+			html+='<h4>Transmission Network Insights</h4>';
+			html+=`Nodes: ${net.node_count||0} | Links: ${net.edge_count||0} | Clusters: ${net.cluster_count||0} | High-confidence links: ${net.high_confidence_edges||0}<br/>`;
+			if(Array.isArray(net.key_nodes)&&net.key_nodes.length>0){
+				html+='<div style="margin-top:8px;"><strong>Potential priority spreaders</strong></div>';
+				html+='<table style="width:100%;font-size:0.85rem;border-collapse:collapse;margin-top:6px;">';
+				html+='<tr style="border-bottom:1px solid #ccc;"><th>Case</th><th>Cluster</th><th>Region</th><th>Risk</th><th>Band</th><th>Out</th><th>In</th></tr>';
+				for(const n of net.key_nodes.slice(0,8)){
+					html+=`<tr style="border-bottom:1px solid #eee;"><td>${n.case_id}</td><td>${(n.cluster_id||'').toString().slice(0,8)}</td><td>${n.region||'Unknown'}</td><td>${n.risk_score??0}</td><td>${n.risk_band||'low'}</td><td>${n.outgoing_links??0}</td><td>${n.incoming_links??0}</td></tr>`;
+				}
+				html+='</table>';
+			}
+		}
 		
 		// Graphics
 		if(analysis.graphics.length > 0){

@@ -1,0 +1,125 @@
+{
+  "generated_at": "2026-05-08T11:17:15",
+  "node_count": 184,
+  "edge_count": 208,
+  "cluster_count": 6,
+  "high_confidence_edges": 8,
+  "key_nodes": [
+    {
+      "case_id": "60537014",
+      "cluster_id": "98422fad-a021-4f3d-8b46-42aa78bfc75c",
+      "region": "Indonesia",
+      "risk_score": 1.242,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "41abf85c",
+      "cluster_id": "3cca5f7a-180c-487c-9764-f6e4a4b2b7a9",
+      "region": "Indonesia",
+      "risk_score": 1.237,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "eef64a1f",
+      "cluster_id": "6be8bf93-1f0e-4bca-8922-025a89dad2d1",
+      "region": "Indonesia",
+      "risk_score": 1.184,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 1
+    },
+    {
+      "case_id": "802acbae",
+      "cluster_id": "e487b390-c5c9-4a51-ab78-661f835e2705",
+      "region": "Philippines",
+      "risk_score": 1.183,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "fba4b20e",
+      "cluster_id": "6be8bf93-1f0e-4bca-8922-025a89dad2d1",
+      "region": "India",
+      "risk_score": 1.172,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "80c2257d",
+      "cluster_id": "e487b390-c5c9-4a51-ab78-661f835e2705",
+      "region": "South Africa",
+      "risk_score": 1.169,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 1
+    },
+    {
+      "case_id": "c29ae27d",
+      "cluster_id": "98422fad-a021-4f3d-8b46-42aa78bfc75c",
+      "region": "Ukraine",
+      "risk_score": 1.145,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 2
+    },
+    {
+      "case_id": "06038671",
+      "cluster_id": "3cca5f7a-180c-487c-9764-f6e4a4b2b7a9",
+      "region": "Philippines",
+      "risk_score": 1.144,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 1
+    },
+    {
+      "case_id": "99f3dc3a",
+      "cluster_id": "e487b390-c5c9-4a51-ab78-661f835e2705",
+      "region": "Pakistan",
+      "risk_score": 1.113,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 1
+    },
+    {
+      "case_id": "17f98cff",
+      "cluster_id": "3cca5f7a-180c-487c-9764-f6e4a4b2b7a9",
+      "region": "Philippines",
+      "risk_score": 1.11,
+      "risk_band": "medium",
+      "outgoing_links": 2,
+      "incoming_links": 1
+    }
+  ],
+  "clusters": [
+    {
+      "cluster_id": "367e9049-d9eb-4720-a06b-36ab0d802663",
+      "nodes": 32
+    },
+    {
+      "cluster_id": "3cca5f7a-180c-487c-9764-f6e4a4b2b7a9",
+      "nodes": 41
+    },
+    {
+      "cluster_id": "6be8bf93-1f0e-4bca-8922-025a89dad2d1",
+      "nodes": 30
+    },
+    {
+      "cluster_id": "815b5b9f-369a-4d5b-a49f-d4ae1393dd6c",
+      "nodes": 26
+    },
+    {
+      "cluster_id": "98422fad-a021-4f3d-8b46-42aa78bfc75c",
+      "nodes": 37
+    },
+    {
+      "cluster_id": "e487b390-c5c9-4a51-ab78-661f835e2705",
+      "nodes": 18
+    }
+  ]
+}

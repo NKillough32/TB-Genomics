@@ -85,6 +85,7 @@ def outbreaker_analysis():
         "message": "Analysis has not been run yet",
         "graphics": [],
         "summary": None,
+        "transmission_network": None,
     }
     
     # Check for analysis summary
@@ -97,6 +98,14 @@ def outbreaker_analysis():
         except Exception as e:
             result["status"] = "error"
             result["message"] = str(e)
+
+    network_path = "exports/transmission_network.json"
+    if os.path.exists(network_path):
+        try:
+            with open(network_path, "r", encoding="utf-8") as f:
+                result["transmission_network"] = json.load(f)
+        except Exception:
+            result["transmission_network"] = None
     
     # List available graphics
     graphics_dir = "exports"

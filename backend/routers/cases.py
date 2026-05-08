@@ -240,6 +240,19 @@ def surveillance_kpis(weeks: int = 12, db: Session = Depends(get_db)):
     }
 
 
+@router.get("/regions")
+def list_regions(db: Session = Depends(get_db)):
+    """Return distinct geographic regions present in the cases table."""
+    rows = db.execute(
+        text(
+            "SELECT DISTINCT geographic_region FROM cases "
+            "WHERE geographic_region IS NOT NULL "
+            "ORDER BY geographic_region"
+        )
+    ).scalars().all()
+    return {"regions": list(rows)}
+
+
 @router.get("/outbreaker-status")
 def outbreaker_status():
     return {

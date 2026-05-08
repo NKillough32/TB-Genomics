@@ -5,13 +5,17 @@ async function seedSyntheticData(){
 	const caseCount=Number(document.getElementById('seedCaseCount').value||250);
 	const seed=Number(document.getElementById('seedValue').value||42);
 	const reset=document.getElementById('seedReset').checked;
+	const selectedCountries=Array.from(document.getElementById('seedCountries').selectedOptions).map(o=>o.value);
 	const resultBox=document.getElementById('seedResult');
 	resultBox.textContent='Generating synthetic dataset...';
 	try{
-		const url=`${API}/ingest/seed-synthetic?case_count=${encodeURIComponent(caseCount)}&reset=${encodeURIComponent(reset)}&seed=${encodeURIComponent(seed)}`;
+		let url=`${API}/ingest/seed-synthetic?case_count=${encodeURIComponent(caseCount)}&reset=${encodeURIComponent(reset)}&seed=${encodeURIComponent(seed)}`;
+		if(selectedCountries.length>0) url+=`&countries=${encodeURIComponent(selectedCountries.join(','))}`;
 		const r=await fetch(url,{method:'POST'});
 		const payload=await r.json();
 		resultBox.textContent=JSON.stringify(payload,null,2);
+		// Refresh region dropdown after seeding
+		loadRegions();
 	}catch(e){
 		resultBox.textContent=`Failed to generate synthetic data: ${e}`;
 	}
@@ -154,4 +158,21 @@ async function loadCaseHistory(caseIdOverride){
 		box.textContent=`Failed to load case history: ${e}`;
 	}
 }
-(async()=>{try{await fetch(`${API}/`);document.getElementById('status').innerHTML='<li>✅ Backend running</li>';}catch{document.getElementById('status').innerHTML='<li>❌ Backend unavailable</li>';}})();
+async function loadRegions(){
+	const sel=document.getElementById('searchRegion');
+	try{
+		const r=await fetch(`${API}/cases/regions`);
+		const data=await r.json();
+		// Keep the "All regions" placeholder, then rebuild options
+		sel.innerHTML='<option value="">All regions</option>';
+		for(const region of (data.regions||[])){
+			const opt=document.createElement('option');
+			opt.value=region;
+			opt.textContent=region;
+			sel.appendChild(opt);
+		}
+	}catch{
+		// Backend unavailable — leave placeholder only
+	}
+}
+(async()=>{try{await fetch(`${API}/`);document.getElementById('status').innerHTML='<li>✅ Backend running</li>';}catch{document.getElementById('status').innerHTML='<li>❌ Backend unavailable</li>';}loadRegions();})();

@@ -11,6 +11,7 @@ import argparse
 import csv
 import json
 import random
+import sys
 import uuid
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -137,14 +138,36 @@ def write_csv(path: Path, fieldnames: list[str], rows: list[dict[str, object]]) 
         writer.writerows(rows)
 
 
+AVAILABLE_COUNTRIES = {d["country"] for d in FALLBACK_INCIDENCE.values()}
+AVAILABLE_ISO3 = set(FALLBACK_INCIDENCE.keys())
+
+
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Generate ingest-ready example files")
+    parser = argparse.ArgumentParser(
+        description="Generate ingest-ready example files",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Available countries (use exact name or ISO3 code):\n  "
+            + "\n  ".join(
+                sorted(f"{iso3}: {d['country']}" for iso3, d in FALLBACK_INCIDENCE.items())
+            )
+        ),
+    )
     parser.add_argument("--cases", type=int, default=30, help="Number of example cases")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument(
         "--output-dir",
         default="examples/ingest_bundle",
         help="Directory where bundle files are written",
+    )
+    parser.add_argument(
+        "--countries",
+        nargs="+",
+        metavar="COUNTRY_OR_ISO3",
+        help=(
+            "Filter to specific countries. Accepts ISO3 codes (e.g. GBR IRL) or full country "
+            "names (e.g. \"United Kingdom\"). Case-insensitive. Multiple values allowed."
+        ),
     )
     args = parser.parse_args()
 
@@ -153,6 +176,37 @@ def main() -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     incidence_data, used_fallback = fetch_latest_incidence()
+
+    if args.countries:
+        # Build a lookup of both ISO3 codes and country names (lower-cased) for flexible matching.
+        requested = [c.strip().lower() for c in args.countries]
+        filtered = {
+            iso3: d
+            for iso3, d in incidence_data.items()
+            if iso3.lower() in requested or d["country"].lower() in requested
+        }
+        if not filtered:
+            available = ", ".join(
+                f"{iso3} ({d['country']})" for iso3, d in sorted(incidence_data.items())
+            )
+            print(
+                f"ERROR: None of the specified countries matched available data.\n"
+                f"Available: {available}",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+        unmatched = [
+            c for c in requested
+            if c not in {k.lower() for k in filtered}
+            and c not in {d["country"].lower() for d in filtered.values()}
+        ]
+        if unmatched:
+            print(
+                f"WARNING: The following countries were not found and will be skipped: {unmatched}",
+                file=sys.stderr,
+            )
+        incidence_data = filtered
+
     sampler = build_sampler(incidence_data)
 
     run_id = f"RUN-{datetime.utcnow():%Y%m%d}-EXAMPLE"
@@ -322,6 +376,7 @@ def main() -> None:
         "generated_at": datetime.utcnow().isoformat(),
         "source": WORLD_BANK_SOURCE_URL,
         "used_fallback_incidence_values": used_fallback,
+        "countries_included": sorted(d["country"] for d in incidence_data.values()),
         "notes": [
             "All records are synthetic and non-identifiable.",
             "Use these files as shape templates for your own data mapping.",
@@ -339,7 +394,17 @@ def main() -> None:
     with (output_dir / "ingest_manifest.json").open("w", encoding="utf-8") as f:
         json.dump(manifest, f, indent=2)
 
-    print(json.dumps({"status": "ok", "output_dir": str(output_dir), "cases": args.cases}, indent=2))
+    print(
+        json.dumps(
+            {
+                "status": "ok",
+                "output_dir": str(output_dir),
+                "cases": args.cases,
+                "countries": sorted(d["country"] for d in incidence_data.values()),
+            },
+            indent=2,
+        )
+    )
 
 
 if __name__ == "__main__":

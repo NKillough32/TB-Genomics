@@ -42,6 +42,21 @@
         Reset existing synthetic data first
       </label>
     </div>
+    <label class="seed-country-label" for="seedCountries">Restrict to countries <span class="hint-inline">(Ctrl/Cmd+click to select multiple; leave blank for all)</span></label>
+    <select id="seedCountries" multiple size="5" class="country-select">
+      <option value="BGD">Bangladesh</option>
+      <option value="CHN">China</option>
+      <option value="GBR">United Kingdom</option>
+      <option value="IDN">Indonesia</option>
+      <option value="IND">India</option>
+      <option value="IRL">Ireland</option>
+      <option value="NGA">Nigeria</option>
+      <option value="PAK">Pakistan</option>
+      <option value="PER">Peru</option>
+      <option value="PHL">Philippines</option>
+      <option value="UKR">Ukraine</option>
+      <option value="ZAF">South Africa</option>
+    </select>
     <button onclick="seedSyntheticData()">Generate synthetic dataset</button>
     <pre id="seedResult" class="log-box"></pre>
   </section>
@@ -65,7 +80,11 @@
     <h2>Step 4A - Advanced Search and Case History</h2>
     <p class="hint">Search cases by region, lineage, date range, and resistance profile.</p>
     <div class="search-controls">
-      <label>Region: <input type="text" id="searchRegion" placeholder="e.g., Northern Ireland" /></label>
+      <label>Region:
+        <select id="searchRegion">
+          <option value="">All regions</option>
+        </select>
+      </label>
       <label>Lineage: <select id="searchLineage">
         <option value="">All</option>
         <option value="L1">L1 (Ancient)</option>

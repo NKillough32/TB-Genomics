@@ -117,9 +117,28 @@ def _build_resistance_profile(incidence: float) -> Tuple[Dict[str, str], List[Di
     return predicted, mutations
 
 
-def seed_synthetic_dataset(case_count: int = 250, reset: bool = False, seed: int = 42) -> Dict[str, object]:
+def seed_synthetic_dataset(
+    case_count: int = 250,
+    reset: bool = False,
+    seed: int = 42,
+    countries: List[str] = None,
+) -> Dict[str, object]:
     random.seed(seed)
     incidence_data, used_fallback = _fetch_latest_incidence()
+
+    if countries:
+        requested = [c.strip().lower() for c in countries]
+        incidence_data = {
+            iso3: d
+            for iso3, d in incidence_data.items()
+            if iso3.lower() in requested or d["country"].lower() in requested
+        }
+        if not incidence_data:
+            raise ValueError(
+                f"No matching countries found. Requested: {countries}. "
+                "Use ISO3 codes (e.g. GBR) or full country names."
+            )
+
     sampler = _weighted_country_sampler(incidence_data)
 
     db = SessionLocal()
@@ -220,6 +239,7 @@ def seed_synthetic_dataset(case_count: int = 250, reset: bool = False, seed: int
                         "case_count": case_count,
                         "source": WORLD_BANK_SOURCE_URL,
                         "used_fallback": used_fallback,
+                        "countries_filter": countries or "all",
                     }
                 ),
             },

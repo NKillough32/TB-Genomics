@@ -41,6 +41,16 @@ def seed_synthetic(
     case_count: int = Query(250, ge=10, le=5000),
     reset: bool = Query(False),
     seed: int = Query(42),
+    countries: str = Query(
+        None,
+        description=(
+            "Comma-separated ISO3 codes or country names to restrict seeding. "
+            "Example: GBR,IRL  Leave blank for all countries."
+        ),
+    ),
     _auth: None = Depends(_require_ingest_api_key),
 ):
-    return seed_synthetic_dataset(case_count=case_count, reset=reset, seed=seed)
+    country_list = [c.strip() for c in countries.split(",") if c.strip()] if countries else None
+    return seed_synthetic_dataset(
+        case_count=case_count, reset=reset, seed=seed, countries=country_list
+    )

@@ -3,21 +3,29 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>NI TB Genomic Surveillance</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Source+Serif+4:opsz,wght@8..60,600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
+<div class="page-glow" aria-hidden="true"></div>
 <header>
-  <h1>NI TB Genomic Surveillance</h1>
-  <p class="subtitle">Whole‑genome sequencing analysis for outbreak support (prototype)</p>
+  <div class="header-inner">
+    <p class="eyebrow">Northern Ireland TB Programme</p>
+    <h1>Genomic Surveillance Operations Console</h1>
+    <p class="subtitle">Whole-genome sequencing analysis for outbreak support and programme oversight</p>
+  </div>
 </header>
-<main>
+<main class="dashboard">
   <section class="card">
-    <h2>Step 1 — System status</h2>
+    <h2>Step 1 - System status</h2>
     <ul id="status" class="status-list"><li>Checking…</li></ul>
   </section>
   <section class="card">
-    <h2>Step 2 — Upload data</h2>
+    <h2>Step 2 - Upload data</h2>
     <p class="hint">Upload CSV / JSON / FASTA files to enable analysis.</p>
     <input type="file" id="fileInput" />
     <button onclick="uploadFile()">Upload file</button>
@@ -38,7 +46,7 @@
     <pre id="seedResult" class="log-box"></pre>
   </section>
   <section class="card">
-    <h2>Step 3 — Run analysis</h2>
+    <h2>Step 3 - Run analysis</h2>
     <button id="clusterBtn" onclick="runJob('run_clustering')">Run clustering</button>
     <button id="exportBtn" onclick="runJob('export_outbreaker')">Generate outbreaker2 inputs</button>
     <button id="outbreakerBtn" onclick="runJob('run_outbreaker2')">Run outbreaker2</button>
@@ -46,7 +54,7 @@
     <pre id="jobStatus" class="log-box">Idle</pre>
   </section>
   <section class="card">
-    <h2>Step 4 — Results</h2>
+    <h2>Step 4 - Results</h2>
     <button onclick="loadCases()">View cases</button>
     <pre id="cases" class="log-box"></pre>
     <button onclick="loadOutbreakerResults()">View outbreaker2 summary</button>
@@ -54,7 +62,7 @@
     <pre id="outbreakerResults" class="log-box"></pre>
   </section>
   <section class="card">
-    <h2>Step 4A — Advanced Search & Case History</h2>
+    <h2>Step 4A - Advanced Search and Case History</h2>
     <p class="hint">Search cases by region, lineage, date range, and resistance profile.</p>
     <div class="search-controls">
       <label>Region: <input type="text" id="searchRegion" placeholder="e.g., Northern Ireland" /></label>
@@ -77,14 +85,14 @@
     <pre id="caseHistory" class="log-box"></pre>
   </section>
   <section class="card">
-    <h2>Step 5 — Governance & Compliance</h2>
+    <h2>Step 5 - Governance and Compliance</h2>
     <p class="hint">Audit trail showing all system actions for accountability.</p>
     <button onclick="loadAuditTrail()">View audit trail</button>
     <pre id="auditTrail" class="log-box"></pre>
   </section>
 </main>
 <footer>
-  <p>Decision‑support tool only. No automated decisions are made.</p>
+  <p>Decision-support tool only. No automated decisions are made.</p>
 </footer>
 <script src="app.js"></script>
 </body>

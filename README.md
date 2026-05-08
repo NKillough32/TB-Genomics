@@ -93,3 +93,22 @@ Schema additions for WGS reporting:
 
 If your database was created before these additions, apply the updated db/schema.sql.
 The endpoint remains backward-compatible and returns a warning until QC tables exist.
+
+Ingest example bundle (for user onboarding)
+-------------------------------------------
+
+To help users augment data into an ingest-ready shape, the project includes a generator that
+creates realistic synthetic templates using public TB incidence data where available:
+
+- Script: `scripts/generate_ingest_example_bundle.py`
+- Output folder: `examples/ingest_bundle/`
+- Guide: `examples/ingest_bundle/README.md`
+
+Run from project root:
+
+```bash
+python scripts/generate_ingest_example_bundle.py --cases 40 --output-dir examples/ingest_bundle
+```
+
+The bundle includes CSV files for core tables, FASTA sequence examples, a manifest, and a SQL
+loader template so users can validate formatting before loading real programme data.

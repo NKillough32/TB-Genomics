@@ -1,0 +1,36 @@
+pseudonymised_case_id,local_lab_sample_id,specimen_date,geographic_region,case_status
+d200823a-1983-4498-bac6-869543c66ad4,LAB-2026-00001,2026-04-13,Philippines,confirmed
+7704ddb6-6373-40b1-94d5-08911923022a,LAB-2026-00002,2025-02-03,Pakistan,confirmed
+a1d742c7-4628-41fd-843c-e9cd03cca7ae,LAB-2026-00003,2025-07-12,Pakistan,probable
+e99f6210-0602-43e3-902f-90b0188626d5,LAB-2026-00004,2025-08-08,South Africa,confirmed
+512af4ab-2081-41c1-9096-7b5f85688ba0,LAB-2026-00005,2025-06-20,India,confirmed
+f104b367-2762-49a7-99a3-ea0386dbe59c,LAB-2026-00006,2026-01-16,India,confirmed
+a801720d-a518-46e0-8457-28cce6538956,LAB-2026-00007,2025-05-25,South Africa,confirmed
+38fe9eaf-0a9e-4198-a95c-904e286def06,LAB-2026-00008,2024-12-24,Philippines,confirmed
+601ac1bb-b1f6-40aa-a665-e35af253866f,LAB-2026-00009,2025-10-15,South Africa,confirmed
+9d4d440e-0808-4b30-ae92-5d821c79aa2a,LAB-2026-00010,2024-12-27,Nigeria,confirmed
+3ce06036-a2d0-4c10-af09-b01b73cca78c,LAB-2026-00011,2025-02-03,South Africa,confirmed
+65e90513-67a1-4b6a-ab1e-8844f6f6b4c0,LAB-2026-00012,2025-11-21,Indonesia,confirmed
+9ac5e137-48d2-4860-9cc6-221a5afd8793,LAB-2026-00013,2025-11-28,China,confirmed
+c92a1909-60d5-4417-a988-d446eb1c4eb3,LAB-2026-00014,2025-06-21,Philippines,confirmed
+983e8b8d-05b9-47b1-a72f-f2495bd7daec,LAB-2026-00015,2025-02-14,Nigeria,probable
+9b688038-9b44-4727-96d1-ecbd083574a1,LAB-2026-00016,2026-03-17,Bangladesh,confirmed
+a68aa9c1-1ff8-4318-b147-995d2e480652,LAB-2026-00017,2025-02-22,Philippines,confirmed
+d25cd914-1cdc-4870-b222-72e63950d53e,LAB-2026-00018,2025-06-02,India,probable
+e554b8be-12d5-4585-8280-76428d0864bf,LAB-2026-00019,2025-07-27,India,confirmed
+6649b44a-d099-4c57-bf39-71de07dd0283,LAB-2026-00020,2025-10-26,Pakistan,confirmed
+65c6c13b-801d-496c-9775-2337c7754b09,LAB-2026-00021,2025-07-05,Indonesia,confirmed
+4063f40a-28f0-4a7f-af48-980c56842729,LAB-2026-00022,2025-06-13,South Africa,confirmed
+0a79b8a8-195f-422f-955b-492f7390be0c,LAB-2026-00023,2025-09-20,Philippines,probable
+b7f340e0-f48d-49e8-9bd6-e7bc36565268,LAB-2026-00024,2024-11-24,South Africa,confirmed
+675bdec9-1d36-4532-b3e3-b6144d2f9374,LAB-2026-00025,2025-02-06,China,probable
+6b741246-6ce8-4c31-8a97-70d54503d98e,LAB-2026-00026,2026-02-15,Nigeria,confirmed
+b7e88586-5a6c-429f-b725-ebd87f528f38,LAB-2026-00027,2025-01-05,Philippines,confirmed
+b555c720-039a-4e21-b751-401d62efeafd,LAB-2026-00028,2025-01-15,South Africa,probable
+3cbfc6df-2845-4530-8738-c0505aaab328,LAB-2026-00029,2025-03-03,Philippines,confirmed
+53bc259e-b034-438a-a34b-e8b3976d5694,LAB-2026-00030,2026-01-11,Bangladesh,confirmed
+dc0af5f7-9133-4406-a03a-6fe34dfde425,LAB-2026-00031,2025-09-02,India,confirmed
+a7bf604b-7506-40ba-86ec-6f250c981711,LAB-2026-00032,2025-01-23,Philippines,confirmed
+58d5837d-1713-4c17-b542-4c4be8b2e2f8,LAB-2026-00033,2025-04-15,Bangladesh,confirmed
+c8c26e68-2e8b-49c3-948f-ecfd5f938bc7,LAB-2026-00034,2025-09-04,Philippines,confirmed
+90358d46-1a3a-4ac1-9c77-57c59e9764b1,LAB-2026-00035,2025-10-23,South Africa,confirmed

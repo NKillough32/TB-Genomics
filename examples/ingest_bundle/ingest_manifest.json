@@ -1,0 +1,18 @@
+{
+  "generated_at": "2026-05-08T13:20:26.718742",
+  "source": "https://api.worldbank.org/v2/country/GBR,IRL,IND,ZAF,NGA,PAK,BGD,PHL,IDN,CHN,PER,UKR/indicator/SH.TBS.INCD?format=json&per_page=20000",
+  "used_fallback_incidence_values": true,
+  "notes": [
+    "All records are synthetic and non-identifiable.",
+    "Use these files as shape templates for your own data mapping.",
+    "Join key across files is pseudonymised_case_id/sample_id."
+  ],
+  "files": {
+    "cases.csv": "Core case records for cases table",
+    "tb_interpretation.csv": "Lineage and resistance interpretation",
+    "sequencing_runs.csv": "Run metadata",
+    "sample_qc_metrics.csv": "QC metrics linked to sample and run",
+    "analysis_provenance.csv": "Pipeline/provenance metadata",
+    "dna.fasta": "Consensus sequences named by sample_id"
+  }
+}

@@ -1,0 +1,2 @@
+run_id,platform,instrument_name,pipeline_version,reference_genome,started_at,completed_at
+RUN-20260508-EXAMPLE,Illumina,MiSeq,tb-wgs-pipeline-1.4.0,H37Rv,2026-05-08T08:20:26.704971,2026-05-08T13:20:26.704971

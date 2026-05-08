@@ -54,7 +54,7 @@ def surveillance_kpis(weeks: int = 12, db: Session = Depends(get_db)):
                 WITH window_cases AS (
                     SELECT *
                     FROM cases
-                    WHERE specimen_date >= CURRENT_DATE - (:weeks::int * INTERVAL '7 days')
+                    WHERE specimen_date >= CURRENT_DATE - (CAST(:weeks AS int) * INTERVAL '7 days')
                 ),
                 totals AS (
                     SELECT
@@ -124,7 +124,7 @@ def surveillance_kpis(weeks: int = 12, db: Session = Depends(get_db)):
             WITH window_cases AS (
                 SELECT *
                 FROM cases
-                WHERE specimen_date >= CURRENT_DATE - (:weeks::int * INTERVAL '7 days')
+                WHERE specimen_date >= CURRENT_DATE - (CAST(:weeks AS int) * INTERVAL '7 days')
             ),
             totals AS (
                 SELECT
@@ -360,6 +360,144 @@ def outbreak_report(db: Session = Depends(get_db)):
         except Exception:
             summary_data = None
 
+    transmission_data = None
+    transmission_path = os.path.join("exports", "transmission_network.json")
+    if os.path.exists(transmission_path):
+        try:
+            with open(transmission_path, "r", encoding="utf-8") as f:
+                transmission_data = json.load(f)
+        except Exception:
+            transmission_data = None
+
+    kpi_data = None
+    try:
+        kpi_data = surveillance_kpis(weeks=12, db=db)
+    except Exception:
+        kpi_data = None
+
+    qc_table_exists = db.execute(
+        text("SELECT to_regclass('public.sample_qc_metrics') IS NOT NULL")
+    ).scalar()
+
+    weekly_trends = []
+    if qc_table_exists:
+        weekly_trends = db.execute(
+            text(
+                """
+                WITH week_windows AS (
+                    SELECT (DATE_TRUNC('week', CURRENT_DATE) - (s * INTERVAL '7 days'))::date AS week_start
+                    FROM generate_series(11, 0, -1) s
+                ),
+                weekly AS (
+                    SELECT
+                        ww.week_start,
+                        COUNT(c.pseudonymised_case_id)::int AS eligible_cases,
+                        COUNT(cs.sample_id)::int AS sequenced_cases,
+                        COUNT(sqm.sample_id)::int AS qc_reported_cases,
+                        COUNT(*) FILTER (
+                            WHERE LOWER(COALESCE(sqm.qc_status, '')) IN ('pass', 'passed')
+                        )::int AS qc_pass_cases
+                    FROM week_windows ww
+                    LEFT JOIN cases c
+                        ON c.specimen_date >= ww.week_start
+                        AND c.specimen_date < ww.week_start + INTERVAL '7 days'
+                    LEFT JOIN consensus_sequences cs ON cs.sample_id = c.pseudonymised_case_id
+                    LEFT JOIN sample_qc_metrics sqm ON sqm.sample_id = c.pseudonymised_case_id
+                    GROUP BY ww.week_start
+                )
+                SELECT
+                    week_start,
+                    eligible_cases,
+                    sequenced_cases,
+                    CASE
+                        WHEN eligible_cases = 0 THEN NULL
+                        ELSE ROUND((sequenced_cases::numeric / eligible_cases::numeric) * 100.0, 2)
+                    END AS sequenced_pct,
+                    CASE
+                        WHEN qc_reported_cases = 0 THEN NULL
+                        ELSE ROUND((qc_pass_cases::numeric / qc_reported_cases::numeric) * 100.0, 2)
+                    END AS qc_pass_pct
+                FROM weekly
+                ORDER BY week_start
+                """
+            )
+        ).mappings().all()
+    else:
+        weekly_trends = db.execute(
+            text(
+                """
+                WITH week_windows AS (
+                    SELECT (DATE_TRUNC('week', CURRENT_DATE) - (s * INTERVAL '7 days'))::date AS week_start
+                    FROM generate_series(11, 0, -1) s
+                ),
+                weekly AS (
+                    SELECT
+                        ww.week_start,
+                        COUNT(c.pseudonymised_case_id)::int AS eligible_cases,
+                        COUNT(cs.sample_id)::int AS sequenced_cases
+                    FROM week_windows ww
+                    LEFT JOIN cases c
+                        ON c.specimen_date >= ww.week_start
+                        AND c.specimen_date < ww.week_start + INTERVAL '7 days'
+                    LEFT JOIN consensus_sequences cs ON cs.sample_id = c.pseudonymised_case_id
+                    GROUP BY ww.week_start
+                )
+                SELECT
+                    week_start,
+                    eligible_cases,
+                    sequenced_cases,
+                    CASE
+                        WHEN eligible_cases = 0 THEN NULL
+                        ELSE ROUND((sequenced_cases::numeric / eligible_cases::numeric) * 100.0, 2)
+                    END AS sequenced_pct,
+                    NULL::numeric AS qc_pass_pct
+                FROM weekly
+                ORDER BY week_start
+                """
+            )
+        ).mappings().all()
+
+    cluster_action_rows = db.execute(
+        text(
+            """
+            WITH cluster_stats AS (
+                SELECT
+                    cc.cluster_id,
+                    COUNT(*)::int AS case_count,
+                    MAX(c.specimen_date) AS most_recent_specimen,
+                    COUNT(DISTINCT c.geographic_region)::int AS region_count,
+                    COALESCE(cl.investigation_status, 'unknown') AS investigation_status,
+                    EXTRACT(DAY FROM (CURRENT_DATE::timestamp - MAX(c.specimen_date)::timestamp))::int AS recency_days
+                FROM case_clusters cc
+                JOIN cases c ON c.pseudonymised_case_id = cc.sample_id
+                LEFT JOIN clusters cl ON cl.cluster_id = cc.cluster_id
+                GROUP BY cc.cluster_id, cl.investigation_status
+            )
+            SELECT
+                cluster_id,
+                case_count,
+                region_count,
+                most_recent_specimen,
+                recency_days,
+                investigation_status,
+                (
+                    (case_count * 2)
+                    + (region_count * 3)
+                    + CASE
+                        WHEN recency_days <= 14 THEN 3
+                        WHEN recency_days <= 30 THEN 2
+                        WHEN recency_days <= 60 THEN 1
+                        ELSE 0
+                    END
+                    + CASE WHEN investigation_status = 'open' THEN 3 ELSE 0 END
+                )::int AS priority_score
+            FROM cluster_stats
+            ORDER BY priority_score DESC, case_count DESC, most_recent_specimen DESC
+            LIMIT 10
+            """
+        )
+    ).mappings().all()
+
     graphic_files = [
         "outbreaker_trace.png",
         "outbreaker_hist.png",
@@ -382,6 +520,42 @@ def outbreak_report(db: Session = Depends(get_db)):
         scaled_width = original_width * scale
         scaled_height = original_height * scale
         return Image(image_path, width=scaled_width, height=scaled_height)
+
+    def build_trend_chart() -> str | None:
+        if not weekly_trends:
+            return None
+        try:
+            import matplotlib
+
+            matplotlib.use("Agg")
+            import matplotlib.pyplot as plt
+
+            labels = [str(row["week_start"])[5:] for row in weekly_trends]
+            coverage = [float(row["sequenced_pct"]) if row["sequenced_pct"] is not None else 0.0 for row in weekly_trends]
+            qc_pass = [
+                float(row["qc_pass_pct"]) if row["qc_pass_pct"] is not None else None
+                for row in weekly_trends
+            ]
+
+            plt.figure(figsize=(8.2, 2.6))
+            plt.plot(labels, coverage, marker="o", linewidth=1.8, label="Sequencing coverage %")
+            if any(v is not None for v in qc_pass):
+                qc_pass_clean = [v if v is not None else 0.0 for v in qc_pass]
+                plt.plot(labels, qc_pass_clean, marker="s", linewidth=1.6, label="QC pass %")
+
+            plt.ylim(0, 100)
+            plt.ylabel("Percent")
+            plt.xlabel("Week")
+            plt.grid(True, linestyle="--", alpha=0.35)
+            plt.legend(loc="lower right", fontsize=8)
+            plt.tight_layout()
+
+            chart_path = os.path.join("exports", "outbreaker_weekly_trends.png")
+            plt.savefig(chart_path, dpi=140)
+            plt.close()
+            return chart_path
+        except Exception:
+            return None
 
     doc = SimpleDocTemplate(report_path, pagesize=A4, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36)
     styles = getSampleStyleSheet()
@@ -414,12 +588,84 @@ def outbreak_report(db: Session = Depends(get_db)):
     story.append(summary_table)
     story.append(Spacer(1, 0.2 * inch))
 
+    interpretation_flags = []
+    if kpi_data:
+        sequenced_pct = kpi_data.get("sequenced_pct")
+        qc_pass_pct = kpi_data.get("qc_pass_pct")
+        contamination_flags = int(kpi_data.get("contamination_flag_cases") or 0)
+        qc_turnaround = kpi_data.get("median_days_specimen_to_qc")
+
+        if sequenced_pct is not None and float(sequenced_pct) < 80.0:
+            interpretation_flags.append(
+                f"Sequencing coverage is below target: {sequenced_pct}% (target >= 80%)."
+            )
+        if qc_pass_pct is not None and float(qc_pass_pct) < 90.0:
+            interpretation_flags.append(
+                f"QC pass rate is below target: {qc_pass_pct}% (target >= 90%)."
+            )
+        if contamination_flags > 0:
+            interpretation_flags.append(
+                f"Contamination flags detected: {contamination_flags} cases require review."
+            )
+        if qc_turnaround is not None and float(qc_turnaround) > 21.0:
+            interpretation_flags.append(
+                f"Median specimen-to-QC turnaround is elevated: {qc_turnaround} days."
+            )
+    if int(open_clusters or 0) > 0:
+        interpretation_flags.append(f"Open clusters requiring investigation: {int(open_clusters)}.")
+    if transmission_data and int(transmission_data.get("high_confidence_edges", 0) or 0) > 0:
+        interpretation_flags.append(
+            "High-confidence transmission links present; prioritize epidemiology follow-up."
+        )
+
+    story.append(Paragraph("Automated Interpretation Flags", styles["Heading3"]))
+    if interpretation_flags:
+        for flag in interpretation_flags:
+            story.append(Paragraph(f"- {flag}", styles["Normal"]))
+    else:
+        story.append(Paragraph("No elevated operational risk flags detected in current report window.", styles["Normal"]))
+
+    story.append(Spacer(1, 0.2 * inch))
+
     story.append(Paragraph("Analysis Summary", styles["Heading3"]))
     if summary_data:
+        analysis_label_map = {
+            "n_samples": "Posterior Samples",
+            "n_generations": "MCMC Iterations",
+            "n_iter": "MCMC Iterations",
+            "burnin": "Burn-in",
+            "likelihood_mean": "Mean Log-Likelihood",
+            "likelihood_sd": "Log-Likelihood SD",
+            "transmission_probability": "Transmission Probability",
+            "generation_time_mean": "Generation Time Mean (days)",
+            "generation_time_sd": "Generation Time SD (days)",
+            "sampling_probability": "Sampling Probability",
+            "convergence_diagnostic": "Convergence Diagnostic",
+        }
+
+        ordered_keys = [
+            "n_samples",
+            "n_generations",
+            "n_iter",
+            "burnin",
+            "likelihood_mean",
+            "likelihood_sd",
+            "transmission_probability",
+            "generation_time_mean",
+            "generation_time_sd",
+            "sampling_probability",
+            "convergence_diagnostic",
+        ]
+
+        def format_metric_value(value):
+            if isinstance(value, float):
+                return f"{value:.3f}" if abs(value) < 10 else f"{value:.2f}"
+            return str(value)
+
         analysis_rows = []
-        for key in ["n_samples", "n_iter", "burnin", "likelihood_mean", "converged"]:
+        for key in ordered_keys:
             if key in summary_data:
-                analysis_rows.append([key, str(summary_data[key])])
+                analysis_rows.append([analysis_label_map.get(key, key), format_metric_value(summary_data[key])])
         if analysis_rows:
             analysis_table = Table(analysis_rows, colWidths=[2.4 * inch, 3.4 * inch])
             analysis_table.setStyle(
@@ -439,6 +685,178 @@ def outbreak_report(db: Session = Depends(get_db)):
         story.append(Paragraph("No outbreak summary JSON found.", styles["Normal"]))
 
     story.append(Spacer(1, 0.2 * inch))
+    story.append(Paragraph("Programme Surveillance KPIs (Last 12 Weeks)", styles["Heading3"]))
+    if kpi_data:
+        kpi_table_data = [
+            ["Eligible Cases", str(kpi_data.get("eligible_cases", 0))],
+            ["Sequenced Cases", str(kpi_data.get("sequenced_cases", 0))],
+            ["Sequencing Coverage (%)", str(kpi_data.get("sequenced_pct", "n/a"))],
+            ["QC Reported Cases", str(kpi_data.get("qc_reported_cases", 0))],
+            ["QC Pass Cases", str(kpi_data.get("qc_pass_cases", 0))],
+            ["QC Fail Cases", str(kpi_data.get("qc_fail_cases", 0))],
+            ["QC Pass Rate (%)", str(kpi_data.get("qc_pass_pct", "n/a"))],
+            ["Contamination Flags", str(kpi_data.get("contamination_flag_cases", 0))],
+            ["Median Days Specimen to QC", str(kpi_data.get("median_days_specimen_to_qc", "n/a"))],
+        ]
+        kpi_table = Table(kpi_table_data, colWidths=[2.8 * inch, 3.0 * inch])
+        kpi_table.setStyle(
+            TableStyle(
+                [
+                    ("BOX", (0, 0), (-1, -1), 0.5, colors.grey),
+                    ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.lightgrey),
+                    ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+                    ("FONTSIZE", (0, 0), (-1, -1), 10),
+                ]
+            )
+        )
+        story.append(kpi_table)
+
+        if kpi_data.get("warning"):
+            story.append(Spacer(1, 0.1 * inch))
+            story.append(Paragraph(f"KPI Warning: {kpi_data['warning']}", styles["Italic"]))
+
+        representativeness = kpi_data.get("representativeness_by_region") or []
+        if representativeness:
+            story.append(Spacer(1, 0.15 * inch))
+            story.append(Paragraph("Regional Sequencing Representativeness", styles["Heading4"]))
+            region_rows = [["Region", "Eligible", "Sequenced", "Coverage %"]]
+            for row in representativeness[:8]:
+                region_rows.append([
+                    str(row.get("region", "Unknown")),
+                    str(row.get("eligible_cases", 0)),
+                    str(row.get("sequenced_cases", 0)),
+                    str(row.get("sequenced_pct", "n/a")),
+                ])
+            region_table = Table(region_rows, colWidths=[2.1 * inch, 1.1 * inch, 1.1 * inch, 1.1 * inch])
+            region_table.setStyle(
+                TableStyle(
+                    [
+                        ("BACKGROUND", (0, 0), (-1, 0), colors.whitesmoke),
+                        ("BOX", (0, 0), (-1, -1), 0.5, colors.grey),
+                        ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.lightgrey),
+                        ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+                        ("FONTSIZE", (0, 0), (-1, -1), 9),
+                    ]
+                )
+            )
+            story.append(region_table)
+    else:
+        story.append(Paragraph("Surveillance KPIs unavailable.", styles["Normal"]))
+
+    story.append(Spacer(1, 0.2 * inch))
+    story.append(Paragraph("Weekly Surveillance Trends (12 Weeks)", styles["Heading3"]))
+    if weekly_trends:
+        trend_rows = [["Week", "Eligible", "Sequenced", "Coverage %", "QC Pass %"]]
+        for row in weekly_trends:
+            trend_rows.append(
+                [
+                    str(row.get("week_start", "")),
+                    str(row.get("eligible_cases", 0)),
+                    str(row.get("sequenced_cases", 0)),
+                    str(row.get("sequenced_pct", "n/a")),
+                    str(row.get("qc_pass_pct", "n/a")),
+                ]
+            )
+        trend_table = Table(trend_rows, colWidths=[1.35 * inch, 1.0 * inch, 1.0 * inch, 1.0 * inch, 1.0 * inch])
+        trend_table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.whitesmoke),
+                    ("BOX", (0, 0), (-1, -1), 0.5, colors.grey),
+                    ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.lightgrey),
+                    ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+                    ("FONTSIZE", (0, 0), (-1, -1), 8),
+                ]
+            )
+        )
+        story.append(trend_table)
+
+        trend_chart_path = build_trend_chart()
+        if trend_chart_path and os.path.exists(trend_chart_path):
+            story.append(Spacer(1, 0.12 * inch))
+            story.append(build_report_image(trend_chart_path))
+    else:
+        story.append(Paragraph("Weekly trends unavailable.", styles["Normal"]))
+
+    story.append(Spacer(1, 0.2 * inch))
+    story.append(Paragraph("Cluster Action Prioritization", styles["Heading3"]))
+    if cluster_action_rows:
+        action_rows = [["Cluster", "Cases", "Regions", "Most Recent", "Status", "Priority"]]
+        for row in cluster_action_rows:
+            action_rows.append(
+                [
+                    str(row.get("cluster_id", ""))[:8],
+                    str(row.get("case_count", 0)),
+                    str(row.get("region_count", 0)),
+                    str(row.get("most_recent_specimen", "")),
+                    str(row.get("investigation_status", "unknown")),
+                    str(row.get("priority_score", 0)),
+                ]
+            )
+        action_table = Table(action_rows, colWidths=[1.1 * inch, 0.8 * inch, 0.85 * inch, 1.35 * inch, 1.0 * inch, 0.8 * inch])
+        action_table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.whitesmoke),
+                    ("BOX", (0, 0), (-1, -1), 0.5, colors.grey),
+                    ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.lightgrey),
+                    ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+                    ("FONTSIZE", (0, 0), (-1, -1), 8),
+                ]
+            )
+        )
+        story.append(action_table)
+        story.append(Spacer(1, 0.08 * inch))
+        story.append(
+            Paragraph(
+                "Priority score combines cluster size, cross-region spread, specimen recency, and open investigation status.",
+                styles["Normal"],
+            )
+        )
+    else:
+        story.append(Paragraph("No cluster action data available.", styles["Normal"]))
+
+    story.append(Spacer(1, 0.2 * inch))
+    story.append(Paragraph("Transmission Priority Signals", styles["Heading3"]))
+    if transmission_data and transmission_data.get("key_nodes"):
+        priority_rows = [["Case", "Region", "Risk", "Out", "In"]]
+        for node in transmission_data.get("key_nodes", [])[:10]:
+            priority_rows.append([
+                str(node.get("case_id", "")),
+                str(node.get("region", "")),
+                str(node.get("risk_score", "n/a")),
+                str(node.get("outgoing_links", 0)),
+                str(node.get("incoming_links", 0)),
+            ])
+        priority_table = Table(priority_rows, colWidths=[1.25 * inch, 1.9 * inch, 1.0 * inch, 0.8 * inch, 0.8 * inch])
+        priority_table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.whitesmoke),
+                    ("BOX", (0, 0), (-1, -1), 0.5, colors.grey),
+                    ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.lightgrey),
+                    ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+                    ("FONTSIZE", (0, 0), (-1, -1), 9),
+                ]
+            )
+        )
+        story.append(priority_table)
+
+        story.append(Spacer(1, 0.1 * inch))
+        story.append(
+            Paragraph(
+                (
+                    f"Network snapshot: nodes={transmission_data.get('node_count', 0)}, "
+                    f"edges={transmission_data.get('edge_count', 0)}, "
+                    f"high-confidence links={transmission_data.get('high_confidence_edges', 0)}"
+                ),
+                styles["Normal"],
+            )
+        )
+    else:
+        story.append(Paragraph("No transmission priority data found.", styles["Normal"]))
+
+    story.append(Spacer(1, 0.2 * inch))
     story.append(Paragraph("Diagnostic Graphics", styles["Heading3"]))
     if existing_graphics:
         for name in existing_graphics:
@@ -448,6 +866,19 @@ def outbreak_report(db: Session = Depends(get_db)):
             story.append(Spacer(1, 0.12 * inch))
     else:
         story.append(Paragraph("No outbreak graphics found in exports/.", styles["Normal"]))
+
+    story.append(Spacer(1, 0.16 * inch))
+    story.append(Paragraph("Data Provenance", styles["Heading3"]))
+    story.append(
+        Paragraph(
+            "This report combines case tables, cluster assignments, outbreaker summary metrics, surveillance KPIs, and transmission network outputs available at generation time.",
+            styles["Normal"],
+        )
+    )
+    if summary_data and summary_data.get("generated_at"):
+        story.append(Paragraph(f"Outbreaker summary timestamp: {summary_data.get('generated_at')}", styles["Normal"]))
+    if transmission_data and transmission_data.get("generated_at"):
+        story.append(Paragraph(f"Transmission network timestamp: {transmission_data.get('generated_at')}", styles["Normal"]))
 
     doc.build(story)
 

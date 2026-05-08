@@ -59,6 +59,9 @@ async function loadOutbreakerResults(){
 		box.textContent=`Failed to load analysis: ${e}`;
 	}
 }
+function downloadOutbreakReport(){
+	window.open(`${API}/cases/outbreak-report`, '_blank');
+}
 async function loadAuditTrail(){
 	const box=document.getElementById('auditTrail');
 	box.textContent='Loading audit trail...';
@@ -96,9 +99,9 @@ async function advancedSearch(){
 		let html=`<h4>Search Results: ${data.total_results} cases found</h4>`;
 		if(data.total_results>0){
 			html+='<table style="width:100%;font-size:0.85rem;border-collapse:collapse;">';
-			html+='<tr style="border-bottom:1px solid #ccc;"><th>Case ID</th><th>Date</th><th>Region</th><th>Lineage</th><th>Cluster</th></tr>';
+			html+='<tr style="border-bottom:1px solid #ccc;"><th>Case ID</th><th>Date</th><th>Region</th><th>Lineage</th><th>Cluster</th><th>Action</th></tr>';
 			for(const c of data.cases){
-				html+=`<tr style="border-bottom:1px solid #eee;"><td>${c.case_id}</td><td>${c.specimen_date}</td><td>${c.region}</td><td>${c.lineage}</td><td>${c.cluster_id||'—'}</td></tr>`;
+				html+=`<tr style="border-bottom:1px solid #eee;"><td>${c.case_id}</td><td>${c.specimen_date}</td><td>${c.region}</td><td>${c.lineage}</td><td>${c.cluster_id||'—'}</td><td><button type="button" onclick="loadCaseHistory('${c.case_id}')">View history</button></td></tr>`;
 			}
 			html+='</table>';
 		}
@@ -107,10 +110,12 @@ async function advancedSearch(){
 		box.textContent=`Search failed: ${e}`;
 	}
 }
-async function loadCaseHistory(){
-	const caseId=document.getElementById('caseHistoryId').value;
+async function loadCaseHistory(caseIdOverride){
+	const input=document.getElementById('caseHistoryId');
+	const caseId=caseIdOverride||input.value;
 	const box=document.getElementById('caseHistory');
 	if(!caseId){box.textContent='Please enter a case ID';return;}
+	input.value=caseId;
 	box.textContent='Loading case history...';
 	try{
 		const r=await fetch(`${API}/cases/case-history/${encodeURIComponent(caseId)}`);
@@ -127,6 +132,7 @@ async function loadCaseHistory(){
 			html+='</table>';
 		}
 		box.innerHTML=html;
+		box.scrollIntoView({behavior:'smooth',block:'start'});
 	}catch(e){
 		box.textContent=`Failed to load case history: ${e}`;
 	}

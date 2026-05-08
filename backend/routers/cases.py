@@ -118,6 +118,120 @@ def outbreaker_analysis():
     return result
 
 
+@router.get("/outbreak-report")
+def outbreak_report(db: Session = Depends(get_db)):
+    """Generate and return a PDF outbreak investigation report."""
+    try:
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.styles import getSampleStyleSheet
+        from reportlab.lib.units import inch
+        from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+    except Exception as e:
+        return {"error": f"PDF generation dependency missing: {e}"}
+
+    os.makedirs("exports", exist_ok=True)
+    report_path = os.path.join("exports", "outbreaker_investigation_report.pdf")
+
+    total_cases = db.execute(text("SELECT COUNT(*) FROM cases")).scalar() or 0
+    clustered_cases = db.execute(text("SELECT COUNT(DISTINCT sample_id) FROM case_clusters")).scalar() or 0
+    open_clusters = db.execute(
+        text("SELECT COUNT(*) FROM clusters WHERE investigation_status = 'open'")
+    ).scalar() or 0
+
+    summary_data = None
+    summary_path = os.path.join("exports", "outbreaker_summary.json")
+    if os.path.exists(summary_path):
+        try:
+            with open(summary_path, "r", encoding="utf-8") as f:
+                summary_data = json.load(f)
+        except Exception:
+            summary_data = None
+
+    graphic_files = [
+        "outbreaker_trace.png",
+        "outbreaker_hist.png",
+        "outbreaker_tree.png",
+        "outbreaker_phylo.png",
+        "outbreaker_resistance.png",
+    ]
+    existing_graphics = [g for g in graphic_files if os.path.exists(os.path.join("exports", g))]
+
+    doc = SimpleDocTemplate(report_path, pagesize=A4, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36)
+    styles = getSampleStyleSheet()
+    story = []
+
+    story.append(Paragraph("NI TB Genomic Surveillance", styles["Title"]))
+    story.append(Paragraph("Outbreak Investigation Report", styles["Heading2"]))
+    story.append(Paragraph(f"Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC", styles["Normal"]))
+    story.append(Spacer(1, 0.2 * inch))
+
+    story.append(Paragraph("Case Summary", styles["Heading3"]))
+    summary_table_data = [
+        ["Total Cases", str(int(total_cases))],
+        ["Clustered Cases", str(int(clustered_cases))],
+        ["Unclustered Cases", str(int(total_cases) - int(clustered_cases))],
+        ["Open Clusters", str(int(open_clusters))],
+    ]
+    summary_table = Table(summary_table_data, colWidths=[2.4 * inch, 1.5 * inch])
+    summary_table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), colors.whitesmoke),
+                ("BOX", (0, 0), (-1, -1), 0.5, colors.grey),
+                ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.lightgrey),
+                ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+                ("FONTSIZE", (0, 0), (-1, -1), 10),
+            ]
+        )
+    )
+    story.append(summary_table)
+    story.append(Spacer(1, 0.2 * inch))
+
+    story.append(Paragraph("Analysis Summary", styles["Heading3"]))
+    if summary_data:
+        analysis_rows = []
+        for key in ["n_samples", "n_iter", "burnin", "likelihood_mean", "converged"]:
+            if key in summary_data:
+                analysis_rows.append([key, str(summary_data[key])])
+        if analysis_rows:
+            analysis_table = Table(analysis_rows, colWidths=[2.4 * inch, 3.4 * inch])
+            analysis_table.setStyle(
+                TableStyle(
+                    [
+                        ("BOX", (0, 0), (-1, -1), 0.5, colors.grey),
+                        ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.lightgrey),
+                        ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+                        ("FONTSIZE", (0, 0), (-1, -1), 10),
+                    ]
+                )
+            )
+            story.append(analysis_table)
+        else:
+            story.append(Paragraph("No structured analysis metrics available.", styles["Normal"]))
+    else:
+        story.append(Paragraph("No outbreak summary JSON found.", styles["Normal"]))
+
+    story.append(Spacer(1, 0.2 * inch))
+    story.append(Paragraph("Diagnostic Graphics", styles["Heading3"]))
+    if existing_graphics:
+        for name in existing_graphics:
+            story.append(Paragraph(name.replace("outbreaker_", "").replace(".png", "").title(), styles["Heading4"]))
+            image_path = os.path.join("exports", name)
+            story.append(Image(image_path, width=6.4 * inch, height=3.8 * inch))
+            story.append(Spacer(1, 0.12 * inch))
+    else:
+        story.append(Paragraph("No outbreak graphics found in exports/.", styles["Normal"]))
+
+    doc.build(story)
+
+    return FileResponse(
+        report_path,
+        media_type="application/pdf",
+        filename="outbreaker_investigation_report.pdf",
+    )
+
+
 @router.get("/outbreaker-image/{filename}")
 def get_outbreaker_image(filename: str):
     """Serve outbreaker2 generated graphics."""

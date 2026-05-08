@@ -2,6 +2,7 @@
 import subprocess, uuid, threading, os
 import sys
 import json
+import shutil
 from datetime import datetime
 from sqlalchemy import text
 from backend.database import SessionLocal
@@ -49,7 +50,7 @@ def run_job(job_name):
         # Log job start
         _log_to_audit("job_started", "system", {"job_id": job_id, "job_name": job_name})
         
-        with open(log, "w") as lf:
+        with open(log, "w", encoding="utf-8") as lf:
             try:
                 JOBS[job_id]["progress"] = 40
                 # Get the project root (parent of backend dir)
@@ -57,22 +58,34 @@ def run_job(job_name):
                 
                 # Special handling for R job - fall back to mock if R fails
                 if job_name == "run_outbreaker2":
-                    result = subprocess.run(
-                        ALLOWED_JOBS[job_name],
-                        stdout=lf,
-                        stderr=subprocess.STDOUT,
-                        cwd=project_root,
-                        timeout=300,
-                    )
-                    if result.returncode != 0:
-                        # R failed - use mock generator
-                        lf.write("\n--- R execution failed, using mock report generator ---\n")
+                    rscript_path = shutil.which("Rscript")
+                    use_mock_fallback = False
+
+                    if rscript_path:
+                        result = subprocess.run(
+                            [rscript_path, "outbreaker2/run_outbreaker2.R"],
+                            stdout=lf,
+                            stderr=subprocess.STDOUT,
+                            cwd=project_root,
+                            timeout=300,
+                        )
+                        if result.returncode != 0:
+                            use_mock_fallback = True
+                            lf.write("\n--- R execution failed, using mock report generator ---\n")
+                    else:
+                        use_mock_fallback = True
+                        lf.write("\n--- Rscript not found, using mock report generator ---\n")
+
+                    if use_mock_fallback:
+                        child_env = os.environ.copy()
+                        child_env["PYTHONIOENCODING"] = "utf-8"
                         mock_result = subprocess.run(
                             [python_exe, "scripts/generate_mock_outbreaker.py"],
                             stdout=lf,
                             stderr=subprocess.STDOUT,
                             cwd=project_root,
                             timeout=60,
+                            env=child_env,
                         )
                         if mock_result.returncode != 0:
                             raise Exception("Both R and mock generator failed")
@@ -85,6 +98,7 @@ def run_job(job_name):
                         stderr=subprocess.STDOUT,
                         cwd=project_root,
                         timeout=60,
+                        env=child_env,
                     )
                     if priority_result.returncode != 0:
                         lf.write("Warning: Priority visualizations generation had issues\n")

@@ -1,0 +1,14 @@
+Generating mock outbreaker2 report...
+✓ Mock trace plot generated
+✓ Mock histogram generated
+✓ Transmission tree generated with probabilities
+✓ Mock summary generated
+
+✅ Mock report complete - graphics available for demo
+Generating phylogenetic and resistance visualizations...
+✓ Phylogenetic tree generated
+✓ Resistance profile heatmap generated
+
+--- Rscript not found, using mock report generator ---
+
+--- Generating priority visualizations ---

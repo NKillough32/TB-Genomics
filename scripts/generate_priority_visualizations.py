@@ -108,14 +108,23 @@ def generate_resistance_heatmap():
                 try:
                     case_id = str(row[0])[:8]
                     region = row[1] or "Unknown"
-                    resistance = json.loads(row[2]) if row[2] else {}
-                    cases_data.append({
-                        'case_id': case_id,
-                        'region': region,
-                        'resistance': resistance
-                    })
-                except:
-                    pass
+                    raw_resistance = row[2]
+
+                    if isinstance(raw_resistance, dict):
+                        resistance = raw_resistance
+                    elif isinstance(raw_resistance, str) and raw_resistance.strip():
+                        resistance = json.loads(raw_resistance)
+                    else:
+                        resistance = {}
+
+                    if isinstance(resistance, dict):
+                        cases_data.append({
+                            'case_id': case_id,
+                            'region': region,
+                            'resistance': resistance
+                        })
+                except Exception:
+                    continue
             
             if len(cases_data) < 5:
                 print("⚠ Not enough cases for resistance heatmap")
@@ -136,10 +145,10 @@ def generate_resistance_heatmap():
                 case_ids.append(case['case_id'])
                 row = []
                 for drug in all_drugs:
-                    pred = case['resistance'].get(drug, 'U')
-                    if pred == 'R':
+                    pred = str(case['resistance'].get(drug, 'unknown')).strip().lower()
+                    if pred in {'r', 'resistant'}:
                         row.append(2)  # Red: Resistant
-                    elif pred == 'I':
+                    elif pred in {'i', 'intermediate'}:
                         row.append(1)  # Yellow: Intermediate
                     else:
                         row.append(0)  # Green: Susceptible

@@ -21,17 +21,42 @@ async function poll(){if(!activeJob)return;const r=await fetch(`${API}/jobs/stat
 async function loadCases(){const r=await fetch(`${API}/cases`);document.getElementById('cases').textContent=JSON.stringify(await r.json(),null,2);} 
 async function loadOutbreakerResults(){
 	const box=document.getElementById('outbreakerResults');
-	box.textContent='Loading summary...';
+	box.textContent='Loading analysis...';
 	try{
-		const [summaryResp,statusResp]=await Promise.all([
+		const [summaryResp,analysisResp]=await Promise.all([
 			fetch(`${API}/cases/summary`),
-			fetch(`${API}/cases/outbreaker-status`),
+			fetch(`${API}/cases/outbreaker-analysis`),
 		]);
 		const summary=await summaryResp.json();
-		const status=await statusResp.json();
-		box.textContent=JSON.stringify({summary,artifacts:status},null,2);
+		const analysis=await analysisResp.json();
+		
+		// Build HTML display
+		let html='<div style="margin:10px 0;">';
+		
+		// Summary stats
+		html+='<h4>Case Summary</h4>';
+		html+=`Total: ${summary.total_cases} | Clustered: ${summary.clustered_cases} | Unclustered: ${summary.unclustered_cases}<br/>`;
+		
+		// Outbreaker analysis
+		html+='<h4>Outbreak Analysis</h4>';
+		html+=`Status: ${analysis.status}<br/>`;
+		if(analysis.summary){
+			html+=`Samples: ${analysis.summary.n_samples} | Mean Likelihood: ${analysis.summary.likelihood_mean?.toFixed(2)}<br/>`;
+		}
+		
+		// Graphics
+		if(analysis.graphics.length > 0){
+			html+='<h4>Diagnostic Plots</h4>';
+			for(const graphic of analysis.graphics){
+				const fullUrl=graphic.url.startsWith('http')?graphic.url:`${API}${graphic.url}`;
+				html+=`<img src="${fullUrl}" style="max-width:100%; border:1px solid #ccc; margin:10px 0;" alt="${graphic.type}"/>`;
+			}
+		}
+		
+		html+='</div>';
+		box.innerHTML=html;
 	}catch(e){
-		box.textContent=`Failed to load outbreaker summary: ${e}`;
+		box.textContent=`Failed to load analysis: ${e}`;
 	}
 }
 async function loadAuditTrail(){

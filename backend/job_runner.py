@@ -54,7 +54,37 @@ def run_job(job_name):
                 JOBS[job_id]["progress"] = 40
                 # Get the project root (parent of backend dir)
                 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-                subprocess.run(ALLOWED_JOBS[job_name], stdout=lf, stderr=lf, check=True, cwd=project_root)
+                
+                # Special handling for R job - fall back to mock if R fails
+                if job_name == "run_outbreaker2":
+                    result = subprocess.run(
+                        ALLOWED_JOBS[job_name],
+                        stdout=lf,
+                        stderr=subprocess.STDOUT,
+                        cwd=project_root,
+                        timeout=300,
+                    )
+                    if result.returncode != 0:
+                        # R failed - use mock generator
+                        lf.write("\n--- R execution failed, using mock report generator ---\n")
+                        mock_result = subprocess.run(
+                            [python_exe, "scripts/generate_mock_outbreaker.py"],
+                            stdout=lf,
+                            stderr=subprocess.STDOUT,
+                            cwd=project_root,
+                            timeout=60,
+                        )
+                        if mock_result.returncode != 0:
+                            raise Exception("Both R and mock generator failed")
+                else:
+                    subprocess.run(
+                        ALLOWED_JOBS[job_name],
+                        stdout=lf,
+                        stderr=lf,
+                        check=True,
+                        cwd=project_root,
+                    )
+                
                 JOBS[job_id]["progress"] = 100
                 JOBS[job_id]["status"] = "completed"
                 

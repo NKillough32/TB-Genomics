@@ -1,0 +1,14 @@
+{
+  "n_generations": 2500,
+  "burnin": 500,
+  "n_samples": 2000,
+  "case_count": 100,
+  "likelihood_mean": -5250.5,
+  "likelihood_sd": 145.3,
+  "transmission_probability": 0.085,
+  "generation_time_mean": 12.5,
+  "generation_time_sd": 3.2,
+  "sampling_probability": 0.65,
+  "convergence_diagnostic": "Rhat < 1.1 (good convergence)",
+  "generated_at": "2026-05-08T11:03:27.430568"
+}

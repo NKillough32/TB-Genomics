@@ -1,7 +1,9 @@
 
 import os
+import json
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import FileResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from backend.database import SessionLocal
@@ -72,3 +74,59 @@ def audit_trail(limit: int = 50, db: Session = Depends(get_db)):
             for row in rows
         ],
     }
+
+
+@router.get("/outbreaker-analysis")
+def outbreaker_analysis():
+    """Return outbreaker2 analysis results including graphics and summary."""
+    result = {
+        "status": "no_results",
+        "message": "Analysis has not been run yet",
+        "graphics": [],
+        "summary": None,
+    }
+    
+    # Check for analysis summary
+    summary_path = "exports/outbreaker_summary.json"
+    if os.path.exists(summary_path):
+        try:
+            with open(summary_path, "r") as f:
+                result["summary"] = json.load(f)
+                result["status"] = "completed"
+        except Exception as e:
+            result["status"] = "error"
+            result["message"] = str(e)
+    
+    # List available graphics
+    graphics_dir = "exports"
+    if os.path.exists(graphics_dir):
+        # Collect all graphics and sort for consistent order
+        graphics_files = [f for f in os.listdir(graphics_dir) 
+                         if f.startswith("outbreaker_") and f.endswith(".png")]
+        # Sort with preferred order: trace, hist, tree
+        order = {"outbreaker_trace.png": 0, "outbreaker_hist.png": 1, "outbreaker_tree.png": 2}
+        graphics_files.sort(key=lambda f: order.get(f, 999))
+        
+        for file in graphics_files:
+            result["graphics"].append({
+                "name": file,
+                "url": f"/cases/outbreaker-image/{file}",
+                "type": file.replace("outbreaker_", "").replace(".png", ""),
+            })
+    
+    return result
+
+
+@router.get("/outbreaker-image/{filename}")
+def get_outbreaker_image(filename: str):
+    """Serve outbreaker2 generated graphics."""
+    path = f"exports/{filename}"
+    
+    # Security: only serve expected outbreaker2 images
+    if not filename.startswith("outbreaker_") or not filename.endswith(".png"):
+        return {"error": "Invalid file"}
+    
+    if os.path.exists(path):
+        return FileResponse(path, media_type="image/png")
+    
+    return {"error": "Image not found"}

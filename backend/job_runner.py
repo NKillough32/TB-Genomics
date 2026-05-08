@@ -14,6 +14,8 @@ python_exe = sys.executable
 
 JOBS = {}
 ALLOWED_JOBS = {
+    "derive_sequence_clusters": [python_exe, "scripts/derive_sequence_clusters.py"],
+    "compare_clustering_methods": [python_exe, "scripts/compare_clustering_methods.py"],
     "run_clustering": [python_exe, "scripts/run_clustering.py"],
     "export_outbreaker": [python_exe, "scripts/export_outbreaker.py"],
     "run_outbreaker2": ["Rscript", "outbreaker2/run_outbreaker2.R"],

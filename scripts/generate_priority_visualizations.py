@@ -289,6 +289,19 @@ def generate_transmission_network():
             "cluster_count": len(cluster_order),
             "layout": "cluster_centered",
             "high_confidence_edges": high_conf_edges,
+            "all_nodes": [
+                {
+                    "case_id": graph.nodes[node].get("display_case_id", node[:8]),
+                    "full_case_id": graph.nodes[node].get("full_case_id", node),
+                    "cluster_id": graph.nodes[node].get("cluster_id"),
+                    "region": graph.nodes[node].get("region"),
+                    "risk_score": graph.nodes[node].get("risk_score"),
+                    "risk_band": graph.nodes[node].get("risk_band"),
+                    "outgoing_links": int(graph.out_degree(node)),
+                    "incoming_links": int(graph.in_degree(node)),
+                }
+                for node in sorted(graph.nodes())
+            ],
             "key_nodes": [
                 {
                     "case_id": graph.nodes[node].get("display_case_id", node[:8]),

@@ -65,9 +65,12 @@
   </section>
   <section class="card">
     <h2>Step 3 - Run analysis</h2>
+    <p class="hint">For comparison: derive sequence clusters, run outbreaker2, then run method comparison.</p>
+    <button id="seqClusterBtn" onclick="runJob('derive_sequence_clusters')">Derive sequence clusters</button>
     <button id="clusterBtn" onclick="runJob('run_clustering')">Run clustering</button>
     <button id="exportBtn" onclick="runJob('export_outbreaker')">Generate outbreaker2 inputs</button>
     <button id="outbreakerBtn" onclick="runJob('run_outbreaker2')">Run outbreaker2</button>
+    <button id="compareBtn" onclick="runJob('compare_clustering_methods')">Compare clustering methods</button>
     <div class="progress-container"><div id="progressBar" class="progress-bar">0%</div></div>
     <pre id="jobStatus" class="log-box">Idle</pre>
   </section>

@@ -149,15 +149,16 @@ input[type="file"] {
 
 .seed-controls {
 	display: grid;
-	grid-template-columns: max-content minmax(0, 170px);
-	gap: 0.55rem;
-	align-items: center;
-	max-width: 560px;
+	grid-template-columns: 1fr;
+	gap: 0.35rem;
+	align-items: start;
+	justify-items: start;
+	max-width: 100%;
 	margin: 0.85rem 0;
 }
 
 .seed-controls label {
-	white-space: nowrap;
+	white-space: normal;
 }
 
 .seed-controls input[type="number"],
@@ -176,10 +177,20 @@ input[type="file"] {
 }
 
 .seed-controls input[type="number"] {
+	width: 170px;
+	min-width: 170px;
+	max-width: 170px;
+	justify-self: start;
 	padding-right: 1.6rem;
 }
 
 #seedCaseCount {
+	width: 170px;
+	min-width: 170px;
+	max-width: 170px;
+}
+
+#seedValue {
 	width: 170px;
 	min-width: 170px;
 	max-width: 170px;

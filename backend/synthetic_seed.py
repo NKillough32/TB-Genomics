@@ -120,12 +120,21 @@ def _build_resistance_profile(incidence: float) -> Tuple[Dict[str, str], List[Di
 
 def _build_consensus_sequence(incidence: float) -> str:
     # Keep synthetic consensus compact for dev performance while preserving variability.
-    seq_len = random.randint(900, 1300)
+    seq_len = 1200
     base_weights = [0.25, 0.25, 0.25, 0.25]
     # Add a slight GC tilt for higher-incidence settings to diversify synthetic patterns.
     if incidence >= 250:
         base_weights = [0.22, 0.28, 0.28, 0.22]
     return "".join(random.choices(NUCLEOTIDES, weights=base_weights, k=seq_len))
+
+
+def _mutate_sequence(base_sequence: str, mutation_rate: float) -> str:
+    chars = list(base_sequence)
+    for i, current in enumerate(chars):
+        if random.random() < mutation_rate:
+            choices = [b for b in NUCLEOTIDES if b != current]
+            chars[i] = random.choice(choices)
+    return "".join(chars)
 
 
 def seed_synthetic_dataset(
@@ -154,6 +163,9 @@ def seed_synthetic_dataset(
 
     db = SessionLocal()
     created_cluster_ids = [uuid.uuid4() for _ in range(max(4, case_count // 40))]
+    cluster_templates = {
+        cid: _build_consensus_sequence(incidence=220.0) for cid in created_cluster_ids
+    }
 
     try:
         if reset:
@@ -228,10 +240,27 @@ def seed_synthetic_dataset(
                 },
             )
 
+            assigned_cluster_id = None
+            if random.random() < 0.7:
+                assigned_cluster_id = random.choice(created_cluster_ids)
+                db.execute(
+                    text(
+                        "INSERT INTO case_clusters (sample_id, cluster_id) VALUES (:sample_id, :cluster_id)"
+                    ),
+                    {"sample_id": case_id, "cluster_id": assigned_cluster_id},
+                )
+
             # Most synthetic cases include sequence records so sequencing coverage KPI is meaningful.
             sequencing_chance = min(0.95, 0.75 + (incidence / 3000.0))
             if random.random() < sequencing_chance:
-                sequence = _build_consensus_sequence(incidence)
+                if assigned_cluster_id is not None:
+                    # Cluster-linked samples are close variants of a shared template.
+                    base = cluster_templates[assigned_cluster_id]
+                    sequence = _mutate_sequence(base, mutation_rate=0.008)
+                else:
+                    # Unclustered samples remain more diverse.
+                    base = _build_consensus_sequence(incidence)
+                    sequence = _mutate_sequence(base, mutation_rate=0.08)
                 db.execute(
                     text(
                         "INSERT INTO consensus_sequences (sample_id, sequence, length) "
@@ -242,15 +271,6 @@ def seed_synthetic_dataset(
                         "sequence": sequence,
                         "length": len(sequence),
                     },
-                )
-
-            if random.random() < 0.7:
-                cluster_id = random.choice(created_cluster_ids)
-                db.execute(
-                    text(
-                        "INSERT INTO case_clusters (sample_id, cluster_id) VALUES (:sample_id, :cluster_id)"
-                    ),
-                    {"sample_id": case_id, "cluster_id": cluster_id},
                 )
 
         db.execute(

@@ -1,0 +1,34 @@
+{
+  "status": "ok",
+  "method": "sequence_distance_connected_components",
+  "generated_at": "2026-05-08T14:56:58.665113+00:00",
+  "threshold_snp_distance": 25,
+  "min_cluster_size": 2,
+  "sequenced_cases": 58,
+  "clustered_cases": 45,
+  "cluster_count": 4,
+  "unclustered_cases": 13,
+  "pairwise_links_under_threshold": 238,
+  "clusters": [
+    {
+      "cluster_label": "SEQ-001",
+      "cluster_id": "5f07e57f-c789-5702-91c8-d625cf91853a",
+      "case_count": 17
+    },
+    {
+      "cluster_label": "SEQ-002",
+      "cluster_id": "c45b45af-ff64-5cf7-bb0a-aa8c50afeb57",
+      "case_count": 12
+    },
+    {
+      "cluster_label": "SEQ-003",
+      "cluster_id": "b695d152-a5e9-5112-94b5-c7d5b963d0dd",
+      "case_count": 10
+    },
+    {
+      "cluster_label": "SEQ-004",
+      "cluster_id": "b751a8b9-d713-5c47-b9c1-efd5f8081033",
+      "case_count": 6
+    }
+  ]
+}

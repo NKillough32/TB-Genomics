@@ -179,6 +179,12 @@ input[type="file"] {
 	padding-right: 1.6rem;
 }
 
+#seedCaseCount {
+	width: 170px;
+	min-width: 170px;
+	max-width: 170px;
+}
+
 .inline-checkbox {
 	grid-column: 1 / -1;
 	display: flex;

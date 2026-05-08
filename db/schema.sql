@@ -27,6 +27,40 @@ CREATE TABLE consensus_sequences (
   length INTEGER
 );
 
+CREATE TABLE sequencing_runs (
+  run_id TEXT PRIMARY KEY,
+  platform TEXT,
+  instrument_name TEXT,
+  pipeline_version TEXT,
+  reference_genome TEXT,
+  started_at TIMESTAMP,
+  completed_at TIMESTAMP,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE sample_qc_metrics (
+  sample_id UUID PRIMARY KEY REFERENCES cases(pseudonymised_case_id),
+  run_id TEXT REFERENCES sequencing_runs(run_id),
+  mean_depth NUMERIC,
+  coverage_breadth NUMERIC,
+  ambiguous_base_percent NUMERIC,
+  contamination_flag BOOLEAN DEFAULT FALSE,
+  qc_status TEXT,
+  qc_failure_reason TEXT,
+  reported_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE analysis_provenance (
+  provenance_id SERIAL PRIMARY KEY,
+  sample_id UUID REFERENCES cases(pseudonymised_case_id),
+  pipeline_name TEXT,
+  pipeline_version TEXT,
+  reference_genome TEXT,
+  software_versions JSONB,
+  parameters JSONB,
+  generated_at TIMESTAMP DEFAULT NOW()
+);
+
 CREATE TABLE clusters (
   cluster_id UUID PRIMARY KEY,
   snp_distance INTEGER,

@@ -38,6 +38,208 @@ def summary(db: Session = Depends(get_db)):
     }
 
 
+@router.get("/surveillance-kpis")
+def surveillance_kpis(weeks: int = 12, db: Session = Depends(get_db)):
+    """Programme-level surveillance metrics aligned with WGS reporting practice."""
+    weeks = max(1, min(52, int(weeks)))
+
+    qc_table_exists = db.execute(
+        text("SELECT to_regclass('public.sample_qc_metrics') IS NOT NULL")
+    ).scalar()
+
+    if not qc_table_exists:
+        base = db.execute(
+            text(
+                """
+                WITH window_cases AS (
+                    SELECT *
+                    FROM cases
+                    WHERE specimen_date >= CURRENT_DATE - (:weeks::int * INTERVAL '7 days')
+                ),
+                totals AS (
+                    SELECT
+                        COUNT(*)::int AS eligible_cases,
+                        COUNT(*) FILTER (WHERE cs.sample_id IS NOT NULL)::int AS sequenced_cases
+                    FROM window_cases wc
+                    LEFT JOIN consensus_sequences cs ON cs.sample_id = wc.pseudonymised_case_id
+                ),
+                region_counts AS (
+                    SELECT
+                        geographic_region,
+                        COUNT(*)::int AS eligible_cases,
+                        COUNT(*) FILTER (WHERE cs.sample_id IS NOT NULL)::int AS sequenced_cases
+                    FROM window_cases wc
+                    LEFT JOIN consensus_sequences cs ON cs.sample_id = wc.pseudonymised_case_id
+                    GROUP BY geographic_region
+                )
+                SELECT
+                    totals.eligible_cases,
+                    totals.sequenced_cases,
+                    COALESCE(
+                        (
+                            SELECT JSON_AGG(
+                                JSON_BUILD_OBJECT(
+                                    'region', geographic_region,
+                                    'eligible_cases', eligible_cases,
+                                    'sequenced_cases', sequenced_cases,
+                                    'sequenced_pct', CASE
+                                        WHEN eligible_cases = 0 THEN NULL
+                                        ELSE ROUND((sequenced_cases::numeric / eligible_cases::numeric) * 100.0, 2)
+                                    END
+                                )
+                                ORDER BY geographic_region
+                            )
+                            FROM region_counts
+                        ),
+                        '[]'::json
+                    ) AS representativeness_by_region
+                FROM totals
+                """
+            ),
+            {"weeks": weeks},
+        ).mappings().first()
+
+        eligible_cases = int((base or {}).get("eligible_cases") or 0)
+        sequenced_cases = int((base or {}).get("sequenced_cases") or 0)
+        sequenced_pct = round((sequenced_cases / eligible_cases) * 100.0, 2) if eligible_cases else None
+
+        return {
+            "window_weeks": weeks,
+            "eligible_cases": eligible_cases,
+            "sequenced_cases": sequenced_cases,
+            "sequenced_pct": sequenced_pct,
+            "qc_reported_cases": 0,
+            "qc_pass_cases": 0,
+            "qc_fail_cases": 0,
+            "qc_pass_pct": None,
+            "contamination_flag_cases": 0,
+            "median_days_specimen_to_qc": None,
+            "representativeness_by_region": (base or {}).get("representativeness_by_region") or [],
+            "warning": "sample_qc_metrics table not found; apply updated db/schema.sql to enable QC KPIs.",
+        }
+
+    kpi_rows = db.execute(
+        text(
+            """
+            WITH window_cases AS (
+                SELECT *
+                FROM cases
+                WHERE specimen_date >= CURRENT_DATE - (:weeks::int * INTERVAL '7 days')
+            ),
+            totals AS (
+                SELECT
+                    COUNT(*)::int AS eligible_cases,
+                    COUNT(*) FILTER (WHERE cs.sample_id IS NOT NULL)::int AS sequenced_cases,
+                    COUNT(*) FILTER (WHERE sqm.sample_id IS NOT NULL)::int AS qc_reported_cases,
+                    COUNT(*) FILTER (
+                        WHERE LOWER(COALESCE(sqm.qc_status, '')) IN ('pass', 'passed')
+                    )::int AS qc_pass_cases,
+                    COUNT(*) FILTER (
+                        WHERE LOWER(COALESCE(sqm.qc_status, '')) IN ('fail', 'failed')
+                    )::int AS qc_fail_cases,
+                    COUNT(*) FILTER (WHERE COALESCE(sqm.contamination_flag, FALSE))::int AS contamination_flag_cases
+                FROM window_cases wc
+                LEFT JOIN consensus_sequences cs ON cs.sample_id = wc.pseudonymised_case_id
+                LEFT JOIN sample_qc_metrics sqm ON sqm.sample_id = wc.pseudonymised_case_id
+            ),
+            region_counts AS (
+                SELECT
+                    geographic_region,
+                    COUNT(*)::int AS eligible_cases,
+                    COUNT(*) FILTER (WHERE cs.sample_id IS NOT NULL)::int AS sequenced_cases
+                FROM window_cases wc
+                LEFT JOIN consensus_sequences cs ON cs.sample_id = wc.pseudonymised_case_id
+                GROUP BY geographic_region
+            ),
+            lag_stats AS (
+                SELECT
+                    PERCENTILE_CONT(0.5) WITHIN GROUP (
+                        ORDER BY EXTRACT(EPOCH FROM (sqm.reported_at::timestamp - wc.specimen_date::timestamp)) / 86400.0
+                    ) AS median_days_specimen_to_qc
+                FROM window_cases wc
+                JOIN sample_qc_metrics sqm ON sqm.sample_id = wc.pseudonymised_case_id
+                WHERE sqm.reported_at IS NOT NULL
+            )
+            SELECT
+                totals.eligible_cases,
+                totals.sequenced_cases,
+                totals.qc_reported_cases,
+                totals.qc_pass_cases,
+                totals.qc_fail_cases,
+                totals.contamination_flag_cases,
+                lag_stats.median_days_specimen_to_qc,
+                COALESCE(
+                    (
+                        SELECT JSON_AGG(
+                            JSON_BUILD_OBJECT(
+                                'region', geographic_region,
+                                'eligible_cases', eligible_cases,
+                                'sequenced_cases', sequenced_cases,
+                                'sequenced_pct', CASE
+                                    WHEN eligible_cases = 0 THEN NULL
+                                    ELSE ROUND((sequenced_cases::numeric / eligible_cases::numeric) * 100.0, 2)
+                                END
+                            )
+                            ORDER BY geographic_region
+                        )
+                        FROM region_counts
+                    ),
+                    '[]'::json
+                ) AS representativeness_by_region
+            FROM totals
+            CROSS JOIN lag_stats
+            """
+        ),
+        {"weeks": weeks},
+    ).mappings().first()
+
+    if not kpi_rows:
+        return {
+            "window_weeks": weeks,
+            "eligible_cases": 0,
+            "sequenced_cases": 0,
+            "sequenced_pct": None,
+            "qc_reported_cases": 0,
+            "qc_pass_cases": 0,
+            "qc_fail_cases": 0,
+            "qc_pass_pct": None,
+            "contamination_flag_cases": 0,
+            "median_days_specimen_to_qc": None,
+            "representativeness_by_region": [],
+        }
+
+    eligible_cases = int(kpi_rows["eligible_cases"] or 0)
+    sequenced_cases = int(kpi_rows["sequenced_cases"] or 0)
+    qc_reported_cases = int(kpi_rows["qc_reported_cases"] or 0)
+    qc_pass_cases = int(kpi_rows["qc_pass_cases"] or 0)
+
+    sequenced_pct = None
+    if eligible_cases:
+        sequenced_pct = round((sequenced_cases / eligible_cases) * 100.0, 2)
+
+    qc_pass_pct = None
+    if qc_reported_cases:
+        qc_pass_pct = round((qc_pass_cases / qc_reported_cases) * 100.0, 2)
+
+    median_days = kpi_rows["median_days_specimen_to_qc"]
+    if median_days is not None:
+        median_days = round(float(median_days), 2)
+
+    return {
+        "window_weeks": weeks,
+        "eligible_cases": eligible_cases,
+        "sequenced_cases": sequenced_cases,
+        "sequenced_pct": sequenced_pct,
+        "qc_reported_cases": qc_reported_cases,
+        "qc_pass_cases": qc_pass_cases,
+        "qc_fail_cases": int(kpi_rows["qc_fail_cases"] or 0),
+        "qc_pass_pct": qc_pass_pct,
+        "contamination_flag_cases": int(kpi_rows["contamination_flag_cases"] or 0),
+        "median_days_specimen_to_qc": median_days,
+        "representativeness_by_region": kpi_rows["representativeness_by_region"] or [],
+    }
+
+
 @router.get("/outbreaker-status")
 def outbreaker_status():
     return {
@@ -136,6 +338,7 @@ def outbreak_report(db: Session = Depends(get_db)):
         from reportlab.lib.styles import getSampleStyleSheet
         from reportlab.lib.units import inch
         from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+        from reportlab.lib.utils import ImageReader
     except Exception as e:
         return {"error": f"PDF generation dependency missing: {e}"}
 
@@ -165,6 +368,20 @@ def outbreak_report(db: Session = Depends(get_db)):
         "outbreaker_resistance.png",
     ]
     existing_graphics = [g for g in graphic_files if os.path.exists(os.path.join("exports", g))]
+
+    def build_report_image(image_path: str):
+        max_width = 6.4 * inch
+        max_height = 5.2 * inch
+        img_reader = ImageReader(image_path)
+        original_width, original_height = img_reader.getSize()
+
+        if not original_width or not original_height:
+            return Image(image_path, width=max_width, height=max_height)
+
+        scale = min(max_width / original_width, max_height / original_height)
+        scaled_width = original_width * scale
+        scaled_height = original_height * scale
+        return Image(image_path, width=scaled_width, height=scaled_height)
 
     doc = SimpleDocTemplate(report_path, pagesize=A4, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36)
     styles = getSampleStyleSheet()
@@ -227,7 +444,7 @@ def outbreak_report(db: Session = Depends(get_db)):
         for name in existing_graphics:
             story.append(Paragraph(name.replace("outbreaker_", "").replace(".png", "").title(), styles["Heading4"]))
             image_path = os.path.join("exports", name)
-            story.append(Image(image_path, width=6.4 * inch, height=3.8 * inch))
+            story.append(build_report_image(image_path))
             story.append(Spacer(1, 0.12 * inch))
     else:
         story.append(Paragraph("No outbreak graphics found in exports/.", styles["Normal"]))

@@ -78,8 +78,8 @@ story.append(Spacer(1, 0.3*inch))
 story.append(Paragraph(f"<i>Generated: {datetime.now().strftime('%d %B %Y')}</i>", styles['Normal']))
 story.append(Spacer(1, 0.5*inch))
 story.append(Paragraph(
-    "This guide provides complete instructions for deploying, configuring, and operating "
-    "the TB Genomic Surveillance PoC system on Windows.",
+    "This guide provides current instructions for deploying, configuring, and operating "
+    "the TB Genomic Surveillance PoC system on Windows using the updated workflow.",
     styles['Normal']
 ))
 
@@ -154,7 +154,7 @@ story.append(Paragraph("<b>Step 2.4: Install Python Dependencies</b>", styles['H
 story.append(Spacer(1, 0.1*inch))
 story.append(Paragraph("With the virtual environment active, install required packages:", step_style))
 story.append(Paragraph("<font face='Courier' size='9' color='#333333'>pip install -r backend/requirements.txt</font>", code_style))
-story.append(Paragraph("This installs FastAPI, SQLAlchemy, matplotlib, and other dependencies.", step_style))
+story.append(Paragraph("This installs FastAPI, SQLAlchemy, matplotlib, networkx, scipy, reportlab, and other dependencies.", step_style))
 
 story.append(PageBreak())
 
@@ -173,8 +173,8 @@ story.append(Paragraph(
 story.append(Spacer(1, 0.2*inch))
 story.append(Paragraph("<b>Step 3.2: Connect to PostgreSQL</b>", styles['Heading3']))
 story.append(Spacer(1, 0.1*inch))
-story.append(Paragraph("Open PowerShell and connect to PostgreSQL:", step_style))
-story.append(Paragraph("<font face='Courier' size='9' color='#333333'>psql -U postgres -h localhost</font>", code_style))
+story.append(Paragraph("Open PowerShell and connect to PostgreSQL. If psql is not on PATH, use the full executable path:", step_style))
+story.append(Paragraph("<font face='Courier' size='9' color='#333333'>&amp; \"C:\\Program Files\\PostgreSQL\\18\\bin\\psql.exe\" -U postgres -h localhost -d postgres</font>", code_style))
 story.append(Paragraph("Enter your PostgreSQL password when prompted.", step_style))
 
 story.append(Spacer(1, 0.2*inch))
@@ -191,12 +191,13 @@ story.append(Paragraph(
 story.append(Spacer(1, 0.2*inch))
 story.append(Paragraph("<b>Step 3.4: Load Database Schema</b>", styles['Heading3']))
 story.append(Spacer(1, 0.1*inch))
-story.append(Paragraph("Exit psql (type \\q) and load the schema:", step_style))
+story.append(Paragraph("Exit psql (type \\q) and load the schema. In PowerShell use the -f flag instead of shell redirection:", step_style))
 story.append(Paragraph(
-    "<font face='Courier' size='9' color='#333333'>psql -U tb -h localhost tb_surveillance < db/schema.sql</font>",
+    "<font face='Courier' size='9' color='#333333'>&amp; \"C:\\Program Files\\PostgreSQL\\18\\bin\\psql.exe\" -U tb -h localhost -d tb_surveillance -f .\\db\\schema.sql</font>",
     code_style
 ))
 story.append(Paragraph("When prompted for password, enter 'tb'.", step_style))
+story.append(Paragraph("If psql is already on PATH, you can remove the full executable path and keep the same arguments.", step_style))
 
 story.append(PageBreak())
 
@@ -258,7 +259,7 @@ story.append(Paragraph(
     code_style
 ))
 story.append(Paragraph(
-    "You should see the NI TB Genomic Surveillance interface with 5 workflow steps.",
+    "You should see the NI TB Genomic Surveillance interface with workflow steps for ingest, analysis, search, and governance.",
     step_style
 ))
 
@@ -325,7 +326,11 @@ story.append(Paragraph("1. Click <b>Run outbreaker2</b>", step_style))
 story.append(Paragraph("2. This may take 30-60 seconds", step_style))
 story.append(Paragraph("3. Status will show when analysis completes", step_style))
 story.append(Paragraph(
-    "Result: Outbreak analysis completes and generates diagnostic plots.",
+    "Result: Outbreak analysis completes and generates diagnostic plots, an enhanced transmission network, and a PDF outbreak report.",
+    step_style
+))
+story.append(Paragraph(
+    "Note: If R/outbreaker2 is unavailable, the system falls back to a mock report generator so the workflow remains usable for demos.",
     step_style
 ))
 
@@ -351,15 +356,26 @@ story.append(Paragraph("2. The results panel displays:", step_style))
 story.append(Paragraph(
     "• <b>Case Summary:</b> Total cases, clustered cases, unclustered cases<br/>"
     "• <b>Outbreak Analysis:</b> MCMC analysis status and likelihood statistics<br/>"
+    "• <b>Transmission Network Insights:</b> Node count, high-confidence links, and ranked priority spreaders<br/>"
     "• <b>Diagnostic Plots:</b><br/>"
     "&nbsp;&nbsp;- <b>MCMC Trace:</b> Shows convergence of likelihood estimate<br/>"
     "&nbsp;&nbsp;- <b>Posterior Distributions:</b> 4-panel histogram of key parameters<br/>"
-    "&nbsp;&nbsp;- <b>Transmission Tree:</b> Network diagram showing inferred transmission chains",
+    "&nbsp;&nbsp;- <b>Transmission Tree:</b> Network diagram showing inferred transmission chains<br/>"
+    "&nbsp;&nbsp;- <b>Phylogenetic Tree:</b> Genetic similarity clustering of isolates<br/>"
+    "&nbsp;&nbsp;- <b>Resistance Heatmap:</b> Drug resistance pattern overview across cases",
     step_style
 ))
 
 story.append(Spacer(1, 0.2*inch))
-story.append(Paragraph("<b>Step 8.3: View Governance & Audit Trail</b>", styles['Heading3']))
+story.append(Paragraph("<b>Step 8.3: Download the Outbreak Report PDF</b>", styles['Heading3']))
+story.append(Spacer(1, 0.1*inch))
+story.append(Paragraph("In <b>Step 4 — Results</b>:", step_style))
+story.append(Paragraph("1. Click <b>Download outbreak report (PDF)</b>", step_style))
+story.append(Paragraph("2. Open the generated report", step_style))
+story.append(Paragraph("3. The updated report preserves image aspect ratios so plots are not stretched or squashed", step_style))
+
+story.append(Spacer(1, 0.2*inch))
+story.append(Paragraph("<b>Step 8.4: View Governance & Audit Trail</b>", styles['Heading3']))
 story.append(Spacer(1, 0.1*inch))
 story.append(Paragraph("In <b>Step 5 — Governance & Compliance</b>:", step_style))
 story.append(Paragraph("1. Click <b>View audit trail</b>", step_style))
@@ -380,12 +396,16 @@ issues = [
      "Ensure backend is running (uvicorn command). Check firewall settings. Verify port 8000 is available."),
     ("Database connection error", 
      "Verify PostgreSQL is running. Check user 'tb' exists with password 'tb'. Ensure database 'tb_surveillance' was created."),
+    ("psql command is not recognized", 
+     "Use the full PostgreSQL executable path or add the PostgreSQL bin directory to PATH. In PowerShell, load schema with `psql -f .\\db\\schema.sql`, not `< db/schema.sql`."),
     ("Synthetic data generation fails", 
      "Check internet connection (World Bank API is called). If offline, system uses fallback values. Verify database is accessible."),
     ("Analysis jobs timeout or fail", 
      "Check disk space in exports/ folder. Verify all Python dependencies are installed. Try regenerating synthetic data."),
     ("Graphics not displaying", 
      "Ensure matplotlib is installed. Check exports/ folder contains PNG files. Try refreshing browser (Ctrl+F5)."),
+    ("PDF images look distorted", 
+     "Regenerate the outbreak report from the updated backend. The current report code scales images proportionally to preserve aspect ratio."),
 ]
 
 for issue, solution in issues:

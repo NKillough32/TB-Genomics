@@ -1,15 +1,28 @@
 
-TB GENOMIC SURVEILLANCE PLATFORM – v0.6 (POLISHED UI + AUTOMATION)
-=================================================================
+TB Genomic Surveillance Platform
+===============================
 
-This bundle contains a near‑deployment‑ready prototype for the NI TB Genomic Surveillance
-platform with:
-- Fully‑wired FastAPI backend
-- Button‑driven automation (jobs, progress, logs)
-- Polished, NHS‑appropriate web GUI
-- PostgreSQL schema
-- Outbreaker2 integration (analyst‑led)
-- Governance notes and test instructions
+This project helps TB teams turn sequencing-linked case data into clear operational insight.
+
+It supports day-to-day surveillance by:
+- identifying potential genomic clusters
+- tracking programme performance (coverage, QC, turnaround)
+- prioritizing where follow-up is most urgent
+- producing repeatable investigation reports for review
+
+Current prototype capabilities include:
+- FastAPI backend APIs for cases, ingest, KPIs, jobs, and reporting
+- Button-driven workflow for running and tracking analysis jobs
+- Web interface for operational use
+- PostgreSQL data model for surveillance and WGS reporting
+- Outbreaker2 integration for analyst-led outbreak analysis
+- Governance/setup documentation for secure deployment and integration
+
+Plain-language project overview
+------------------------------
+
+For a simple explanation of what this project does and how it supports TB programme operations,
+see: PROJECT_EXPLAINED_SIMPLE.md
 
 External dependencies (not bundled):
 - PostgreSQL

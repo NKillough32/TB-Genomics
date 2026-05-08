@@ -3,6 +3,7 @@ import subprocess, uuid, threading, os
 import sys
 import json
 import shutil
+import glob
 from datetime import datetime
 from sqlalchemy import text
 from backend.database import SessionLocal
@@ -61,6 +62,12 @@ def run_job(job_name):
                 # Special handling for R job - fall back to mock if R fails
                 if job_name == "run_outbreaker2":
                     rscript_path = shutil.which("Rscript")
+                    if not rscript_path:
+                        candidates = sorted(glob.glob(r"C:\Program Files\R\R-*\bin\Rscript.exe"), reverse=True)
+                        if not candidates:
+                            candidates = sorted(glob.glob(r"C:\Program Files\R\R-*\bin\x64\Rscript.exe"), reverse=True)
+                        if candidates:
+                            rscript_path = candidates[0]
                     use_mock_fallback = False
                     allow_mock_fallback = os.getenv("TB_ALLOW_MOCK_OUTBREAKER", "0") == "1"
                     child_env = os.environ.copy()

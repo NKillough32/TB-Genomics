@@ -1,0 +1,20 @@
+bibentry(
+  bibtype = "Article",
+  title = "Bayesian reconstruction of disease outbreaks by combining epidemiologic and genomic data",
+  journal = "PLoS Computational Biology",
+  year = "2014",
+  author = c(
+    person("Thibaut", "Jombart"),
+    person("Anne", "Cori"),
+    person("Xavier", "Didelot"),
+    person("Simon", "Cauchemez"),
+    person("Christophe", "Fraser"),
+    person("Neil", "Ferguson")
+  ),
+  header = "To cite outbreaker2:",
+  volume = "10",
+  number = "11",
+  pages = "e1003457",
+  doi = "10.1371/journal.pcbi.1003457",
+  textVersion = "Jombart T, Cori A, Didelot X, Cauchemez S, Fraser C and Ferguson N (2014). Bayesian reconstruction of disease outbreaks by combining epidemiologic and genomic data. PLoS Computational Biology, 10(11), e1003457. doi:10.1371/journal.pcbi.1003457"
+)

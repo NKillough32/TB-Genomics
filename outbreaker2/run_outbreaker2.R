@@ -3,6 +3,12 @@
 # TB Genomic Surveillance - Outbreaker2 Analysis Script
 
 tryCatch({
+  # Set up local library path for packages
+  local_lib <- file.path(getwd(), "R_libs")
+  if (dir.exists(local_lib)) {
+    .libPaths(c(local_lib, .libPaths()))
+  }
+  
   library(outbreaker2)
   library(ape)
   library(jsonlite)

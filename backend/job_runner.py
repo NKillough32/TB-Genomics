@@ -74,6 +74,7 @@ def run_job(job_name):
                     allow_mock_fallback = os.getenv("TB_ALLOW_MOCK_OUTBREAKER", "0") == "1"
                     child_env = os.environ.copy()
                     child_env["PYTHONIOENCODING"] = "utf-8"
+                    child_env["R_LIBS_USER"] = os.path.join(project_root, "R_libs")
 
                     if rscript_path:
                         result = subprocess.run(
@@ -82,6 +83,7 @@ def run_job(job_name):
                             stderr=subprocess.STDOUT,
                             cwd=project_root,
                             timeout=300,
+                            env=child_env,
                         )
                         if result.returncode != 0:
                             if allow_mock_fallback:

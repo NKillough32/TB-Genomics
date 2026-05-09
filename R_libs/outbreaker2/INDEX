@@ -1,0 +1,18 @@
+bind_to_function        Encloses argument in a function's environment
+chains_pal              Color palettes used in outbreaker
+create_config           Set and check parameter settings of outbreaker
+create_param            Initializes outputs for outbreaker
+custom_likelihoods      Customise likelihood functions for outbreaker
+custom_moves            Customise samplers for outbreaker
+custom_priors           Customise priors for outbreaker
+fake_outbreak           Small simulated outbreak
+get_cpp_api             Access internal C++ rountines used in
+                        outbreaker2
+outbreaker              outbreaker2: main function for reconstructing
+                        disease outbreaks
+outbreaker_data         Process input data for outbreaker
+outbreaker_package      outbreaker2: a platform for disease outbreak
+                        reconstruction
+print.outbreaker_chains
+                        Basic methods for processing outbreaker results
+sim_ctd                 Simulate contact data from a transmission tree

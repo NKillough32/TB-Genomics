@@ -177,11 +177,18 @@ tryCatch({
   grid(col='grey85')
   dev.off()
   cat("✓ Histogram saved\n")  
-  # Generate transmission tree
+  # Generate transmission tree/network
   cat("Generating transmission tree...\n")
   tryCatch({
     png('exports/outbreaker_tree.png', width=1400, height=1000)
-    plot(res, type='tree')
+    tryCatch({
+      plot(res, type='tree')
+    }, error=function(tree_err) {
+      # Newer/alternate outbreaker2 versions may not expose type='tree'.
+      # Fallback to the supported network visualization.
+      cat("  tree plot mode unavailable, falling back to type='network'\n")
+      plot(res, type='network')
+    })
     dev.off()
     cat("✓ Transmission tree saved\n")
   }, error=function(e) {
@@ -189,7 +196,8 @@ tryCatch({
     if (file.exists('exports/outbreaker_tree.png')) {
       file.remove('exports/outbreaker_tree.png')
     }
-    cat("⚠ Could not generate transmission tree plot\n")
+    cat("⚠ Could not generate transmission tree plot:\n")
+    cat("  ", as.character(e), "\n")
   })  
 
   # Export posterior-derived transmission network in JSON format.

@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-05-09T11:01:30.296171+00:00",
-  "status": "blocked_tool_dependencies",
+  "generated_at": "2026-05-09T12:19:02.056486+00:00",
+  "status": "completed",
   "scaffold_version": "1.0",
   "engines": {
     "tb_profiler": {
@@ -28,6 +28,34 @@
     "fallback_enabled": true,
     "tbprofiler_image": "quay.io/jodyphelan/tbprofiler:latest"
   },
+  "wsl": {
+    "available": true,
+    "status": "ok",
+    "probe": "Default Distribution: Ubuntu-22.04",
+    "details": [
+      "Default Distribution: Ubuntu-22.04",
+      "",
+      "Default Version: 2"
+    ],
+    "fallback_enabled": true,
+    "env": "tbtools",
+    "tbprofiler": {
+      "status": "installed",
+      "probe": {
+        "status": "ok",
+        "output": "/home/nfk/.local/share/mamba/envs/tbtools/lib/python3.11/site-packages/docxcompose/properties.py:18: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_re | tb-profiler version 6.6.6"
+      },
+      "message": "tb-profiler available in WSL env"
+    },
+    "mykrobe": {
+      "status": "installed",
+      "probe": {
+        "status": "ok",
+        "output": "/home/nfk/.local/share/mamba/envs/tbtools/lib/python3.11/site-packages/mykrobe/version.py:1: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources. |     variants (vars)     build variant probes"
+      },
+      "message": "mykrobe available in WSL env"
+    }
+  },
   "inputs": {
     "fastq_count": 0,
     "vcf_count": 0,
@@ -39,13 +67,25 @@
     ]
   },
   "tbprofiler_run": {
-    "status": "skipped",
-    "message": "tb-profiler not ready to run",
-    "runner": "none",
-    "attempted_samples": 0,
-    "successful_samples": 0,
+    "status": "completed",
+    "runner": "wsl",
+    "wsl_env": "tbtools",
+    "message": "tb-profiler WSL execution finished",
+    "attempted_samples": 10,
+    "successful_samples": 10,
     "failed_samples": 0,
-    "output_jsons": [],
+    "output_jsons": [
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/87ef58ef-b5c4-4944-8542-b885eeb52c9d.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/66c038c2-bb16-4cbf-b661-ec6413f10019.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/08eea384-5d0d-48ba-9e75-f53f0dcca0db.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/e29ce654-222d-4264-b7b7-7f43c5a088e2.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/5c2b5eba-1eca-4ebd-9c0d-3f58491b77e7.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/aed8a068-bfbf-4ebd-b02d-758f5c7968cf.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/d6dbe72f-0e81-4c58-a2db-f5e64e37714e.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/1d370e23-a6b3-4b5b-b8c4-91d7deca638f.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/8a3f5b4d-3423-4ce7-ac7f-94923d67038d.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/bebd0a04-24e0-41c5-8c57-26e0b73fafa4.results.json"
+    ],
     "failures": []
   },
   "tbprofiler_local_run": {
@@ -56,6 +96,28 @@
     "successful_samples": 0,
     "failed_samples": 0,
     "output_jsons": [],
+    "failures": []
+  },
+  "tbprofiler_wsl_run": {
+    "status": "completed",
+    "runner": "wsl",
+    "wsl_env": "tbtools",
+    "message": "tb-profiler WSL execution finished",
+    "attempted_samples": 10,
+    "successful_samples": 10,
+    "failed_samples": 0,
+    "output_jsons": [
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/87ef58ef-b5c4-4944-8542-b885eeb52c9d.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/66c038c2-bb16-4cbf-b661-ec6413f10019.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/08eea384-5d0d-48ba-9e75-f53f0dcca0db.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/e29ce654-222d-4264-b7b7-7f43c5a088e2.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/5c2b5eba-1eca-4ebd-9c0d-3f58491b77e7.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/aed8a068-bfbf-4ebd-b02d-758f5c7968cf.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/d6dbe72f-0e81-4c58-a2db-f5e64e37714e.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/1d370e23-a6b3-4b5b-b8c4-91d7deca638f.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/8a3f5b4d-3423-4ce7-ac7f-94923d67038d.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/bebd0a04-24e0-41c5-8c57-26e0b73fafa4.results.json"
+    ],
     "failures": []
   },
   "tbprofiler_docker_run": {
@@ -76,14 +138,14 @@
     "warnings": []
   },
   "tbprofiler_db_import": {
-    "status": "skipped",
-    "message": "No tb-profiler result JSON files imported",
-    "imported_rows": 0,
+    "status": "imported",
+    "message": "tb-profiler results imported into tb_interpretation",
+    "imported_rows": 10,
     "skipped_rows": 0,
     "warnings": []
   },
   "next_steps": [
-    "Install tb-profiler/mykrobe dependencies (for Windows this is often easiest in WSL2 or Conda).",
+    "Install tb-profiler/mykrobe dependencies (WSL2 micromamba env is supported via TBPROFILER_WSL_FALLBACK=1).",
     "If local dependencies fail, install Docker Desktop and rerun with TBPROFILER_DOCKER_FALLBACK=1.",
     "Place FASTQ/VCF/FASTA inputs in uploads/ (or export pipeline outputs there).",
     "Optionally provide exports/lineage_resistance_calls.csv to hydrate tb_interpretation."

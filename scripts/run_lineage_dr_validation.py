@@ -171,6 +171,83 @@ def _probe_docker() -> dict[str, Any]:
     }
 
 
+def _probe_wsl() -> dict[str, Any]:
+    if os.name != "nt":
+        return {
+            "available": False,
+            "status": "skipped",
+            "output": "non-windows host",
+        }
+
+    try:
+        proc = subprocess.run(
+            ["wsl", "--status"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            timeout=20,
+            check=False,
+        )
+    except Exception as exc:
+        return {
+            "available": False,
+            "status": "error",
+            "output": f"wsl probe failed: {exc}",
+        }
+
+    output = (proc.stdout or "").replace("\x00", "").strip()
+    lines = output.splitlines()
+    summary = lines[0][:200] if lines else f"exit_code={proc.returncode}"
+    if proc.returncode == 0:
+        return {
+            "available": True,
+            "status": "ok",
+            "output": summary,
+            "details": lines[:10],
+        }
+    return {
+        "available": False,
+        "status": "error",
+        "output": summary,
+        "details": lines[:10],
+    }
+
+
+def _wsl_probe_tool(command: str) -> tuple[str, str]:
+    try:
+        proc = subprocess.run(
+            ["wsl", "--", "bash", "-lc", command],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+    except Exception as exc:
+        return "unknown", f"wsl probe failed: {exc}"
+
+    output = (proc.stdout or "").strip()
+    if not output:
+        output = f"exit_code={proc.returncode}"
+    lines = output.splitlines()
+    first_line = lines[0][:200]
+    last_line = lines[-1][:200]
+    summary = first_line if first_line == last_line else f"{first_line} | {last_line}"
+    return ("ok", summary) if proc.returncode == 0 else ("error", summary)
+
+
+def _win_to_wsl_path(path: Path) -> str | None:
+    absolute = str(path.resolve()).replace("\\", "/")
+    # Convert Windows paths like C:/Users/... into /mnt/c/Users/...
+    if len(absolute) >= 3 and absolute[1] == ":" and absolute[2] == "/":
+        drive = absolute[0].lower()
+        tail = absolute[2:]
+        return f"/mnt/{drive}{tail}"
+    if absolute.startswith("/"):
+        return absolute
+    return None
+
+
 def _to_container_path(path: Path) -> str:
     relative = path.resolve().relative_to(ROOT.resolve())
     return "/work/" + str(relative).replace("\\", "/")
@@ -205,7 +282,7 @@ def _split_fasta_records(path: Path, max_records: int = 10) -> list[tuple[str, s
 def _extract_lineage_and_resistance(result_json: Path) -> dict[str, Any]:
     payload = json.loads(result_json.read_text(encoding="utf-8"))
 
-    lineage = None
+    lineage: Any = None
     dr_payload: Any = None
     confidence = None
     summary = None
@@ -228,8 +305,24 @@ def _extract_lineage_and_resistance(result_json: Path) -> dict[str, Any]:
         confidence = payload.get("lineage_confidence") or payload.get("confidence")
         summary = payload.get("resistance_summary") or payload.get("prediction") or None
 
+    # tb-profiler lineage can be a list/dict structure. Persist a compact string
+    # for the lineage column while preserving full details in JSON fields.
+    lineage_value: str | None
+    if isinstance(lineage, list):
+        first = lineage[0] if lineage else None
+        if isinstance(first, dict):
+            lineage_value = str(first.get("lineage") or first.get("id") or "") or None
+        else:
+            lineage_value = str(first) if first is not None else None
+    elif isinstance(lineage, dict):
+        lineage_value = str(lineage.get("lineage") or lineage.get("id") or "") or None
+    elif lineage is None:
+        lineage_value = None
+    else:
+        lineage_value = str(lineage)
+
     return {
-        "lineage": lineage,
+        "lineage": lineage_value,
         "predicted_drug_resistance": dr_payload,
         "confidence_score": _to_float(str(confidence)) if confidence is not None else None,
         "interpretation_summary": str(summary) if summary is not None else None,
@@ -410,6 +503,331 @@ def _run_tbprofiler_on_fasta_docker(fasta_files: list[Path], image: str) -> dict
         "output_jsons": output_jsons,
         "failures": failures[:10],
     }
+
+
+def _run_tbprofiler_on_fasta_wsl(fasta_files: list[Path], wsl_env: str) -> dict[str, Any]:
+    run_dir = EXPORTS / "tbprofiler"
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    if not fasta_files:
+        return {
+            "status": "skipped",
+            "runner": "wsl",
+            "message": "No FASTA inputs detected for tb-profiler run",
+            "attempted_samples": 0,
+            "successful_samples": 0,
+            "failed_samples": 0,
+            "output_jsons": [],
+            "failures": [],
+        }
+
+    sample_inputs: list[tuple[str, str]] = []
+    for fasta in fasta_files[:2]:
+        for sample_id, sequence in _split_fasta_records(fasta, max_records=10):
+            sample_inputs.append((sample_id, sequence))
+            if len(sample_inputs) >= 10:
+                break
+        if len(sample_inputs) >= 10:
+            break
+
+    output_jsons: list[str] = []
+    failures: list[dict[str, Any]] = []
+    successful_samples = 0
+
+    run_dir_wsl = _win_to_wsl_path(run_dir)
+    if not run_dir_wsl:
+        return {
+            "status": "failed",
+            "runner": "wsl",
+            "message": "Unable to map run directory to WSL path",
+            "attempted_samples": 0,
+            "successful_samples": 0,
+            "failed_samples": 0,
+            "output_jsons": [],
+            "failures": [{"sample_id": "n/a", "exit_code": 1, "output_tail": "wslpath conversion failed"}],
+        }
+
+    with tempfile.TemporaryDirectory(prefix="tbprofiler_wsl_") as tmp_dir:
+        tmp_base = Path(tmp_dir)
+        for sample_id, sequence in sample_inputs:
+            sample_fasta = tmp_base / f"{sample_id}.fasta"
+            sample_fasta.write_text(f">{sample_id}\n{sequence}\n", encoding="utf-8")
+
+            sample_fasta_wsl = _win_to_wsl_path(sample_fasta)
+            if not sample_fasta_wsl:
+                failures.append(
+                    {
+                        "sample_id": sample_id,
+                        "exit_code": 1,
+                        "output_tail": "Unable to map sample FASTA to WSL path",
+                    }
+                )
+                continue
+
+            bash_cmd = (
+                f'$HOME/micromamba run -n {wsl_env} tb-profiler profile '
+                f'--fasta "{sample_fasta_wsl}" '
+                f'--prefix "{sample_id}" '
+                f'--dir "{run_dir_wsl}"'
+            )
+            proc = subprocess.run(
+                ["wsl", "--", "bash", "-lc", bash_cmd],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                timeout=1800,
+                cwd=str(ROOT),
+                check=False,
+            )
+
+            result_json = run_dir / "results" / f"{sample_id}.results.json"
+            if proc.returncode == 0 and result_json.exists():
+                successful_samples += 1
+                output_jsons.append(str(result_json.as_posix()))
+            else:
+                tail = "\n".join((proc.stdout or "").splitlines()[-20:])
+                failures.append(
+                    {
+                        "sample_id": sample_id,
+                        "exit_code": proc.returncode,
+                        "output_tail": tail,
+                    }
+                )
+
+    status = "completed" if successful_samples else "failed"
+    return {
+        "status": status,
+        "runner": "wsl",
+        "wsl_env": wsl_env,
+        "message": "tb-profiler WSL execution finished" if successful_samples else "tb-profiler WSL execution failed",
+        "attempted_samples": len(sample_inputs),
+        "successful_samples": successful_samples,
+        "failed_samples": len(sample_inputs) - successful_samples,
+        "output_jsons": output_jsons,
+        "failures": failures[:10],
+    }
+
+
+def _run_mykrobe_on_fasta_wsl(fasta_files: list[Path], wsl_env: str) -> dict[str, Any]:
+    run_dir = EXPORTS / "mykrobe"
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    if not fasta_files:
+        return {
+            "status": "skipped",
+            "runner": "wsl",
+            "message": "No FASTA inputs detected for mykrobe run",
+            "attempted_samples": 0,
+            "successful_samples": 0,
+            "failed_samples": 0,
+            "output_jsons": [],
+            "failures": [],
+        }
+
+    sample_inputs: list[tuple[str, str]] = []
+    for fasta in fasta_files[:2]:
+        for sample_id, sequence in _split_fasta_records(fasta, max_records=10):
+            sample_inputs.append((sample_id, sequence))
+            if len(sample_inputs) >= 10:
+                break
+        if len(sample_inputs) >= 10:
+            break
+
+    output_jsons: list[str] = []
+    failures: list[dict[str, Any]] = []
+    successful_samples = 0
+
+    run_dir_wsl = _win_to_wsl_path(run_dir)
+    if not run_dir_wsl:
+        return {
+            "status": "failed",
+            "runner": "wsl",
+            "message": "Unable to map run directory to WSL path",
+            "attempted_samples": 0,
+            "successful_samples": 0,
+            "failed_samples": 0,
+            "output_jsons": [],
+            "failures": [{"sample_id": "n/a", "exit_code": 1, "output_tail": "wslpath conversion failed"}],
+        }
+
+    with tempfile.TemporaryDirectory(prefix="mykrobe_wsl_") as tmp_dir:
+        tmp_base = Path(tmp_dir)
+        for sample_id, sequence in sample_inputs:
+            sample_fasta = tmp_base / f"{sample_id}.fasta"
+            sample_fasta.write_text(f">{sample_id}\n{sequence}\n", encoding="utf-8")
+
+            sample_fasta_wsl = _win_to_wsl_path(sample_fasta)
+            if not sample_fasta_wsl:
+                failures.append(
+                    {
+                        "sample_id": sample_id,
+                        "exit_code": 1,
+                        "output_tail": "Unable to map sample FASTA to WSL path",
+                    }
+                )
+                continue
+
+            result_json = run_dir / f"{sample_id}_mykrobe.json"
+            result_json_wsl = _win_to_wsl_path(result_json)
+
+            bash_cmd = (
+                f'$HOME/micromamba run -n {wsl_env} mykrobe predict '
+                f'--sample "{sample_id}" '
+                f'--seq "{sample_fasta_wsl}" '
+                f'--species tb '
+                f'--format json '
+                f'--output "{result_json_wsl}"'
+            )
+            proc = subprocess.run(
+                ["wsl", "--", "bash", "-lc", bash_cmd],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                timeout=1800,
+                cwd=str(ROOT),
+                check=False,
+            )
+
+            if proc.returncode == 0 and result_json.exists():
+                successful_samples += 1
+                output_jsons.append(str(result_json.as_posix()))
+            else:
+                tail = "\n".join((proc.stdout or "").splitlines()[-20:])
+                failures.append(
+                    {
+                        "sample_id": sample_id,
+                        "exit_code": proc.returncode,
+                        "output_tail": tail,
+                    }
+                )
+
+    status = "completed" if successful_samples else "failed"
+    return {
+        "status": status,
+        "runner": "wsl",
+        "wsl_env": wsl_env,
+        "message": "mykrobe WSL execution finished" if successful_samples else "mykrobe WSL execution failed",
+        "attempted_samples": len(sample_inputs),
+        "successful_samples": successful_samples,
+        "failed_samples": len(sample_inputs) - successful_samples,
+        "output_jsons": output_jsons,
+        "failures": failures[:10],
+    }
+
+
+def _extract_mykrobe_results(result_json: Path) -> dict[str, Any]:
+    payload = json.loads(result_json.read_text(encoding="utf-8"))
+
+    # mykrobe JSON is keyed by sample_id at the top level
+    sample_key = next(iter(payload), None) if isinstance(payload, dict) else None
+    sample_data = payload.get(sample_key, {}) if sample_key else {}
+
+    # Lineage: payload[sample]["phylogenetics"]["lineage"] → dict of {lineage_name: {percent_coverage, ...}}
+    phylo = sample_data.get("phylogenetics", {})
+    lineage_dict = phylo.get("lineage", {})
+    if lineage_dict:
+        # Pick the lineage with highest percent_coverage
+        best = max(lineage_dict.items(), key=lambda kv: kv[1].get("percent_coverage", 0) if isinstance(kv[1], dict) else 0)
+        lineage_value: str | None = str(best[0])
+    else:
+        lineage_value = None
+
+    # DR susceptibility: payload[sample]["susceptibility"] → {Drug: {predict: "S"/"R"/"N"}}
+    susceptibility = sample_data.get("susceptibility", {})
+    dr_payload: dict[str, str] | None = None
+    if susceptibility:
+        dr_payload = {drug: info.get("predict", "U") for drug, info in susceptibility.items() if isinstance(info, dict)}
+
+    return {
+        "lineage": lineage_value,
+        "predicted_drug_resistance": dr_payload,
+        "confidence_score": None,
+        "interpretation_summary": (
+            ", ".join(f"{d}:{p}" for d, p in dr_payload.items() if p in {"R", "r"})
+            if dr_payload
+            else None
+        ),
+    }
+
+
+def _import_mykrobe_results(result_json_paths: list[str]) -> dict[str, Any]:
+    db = SessionLocal()
+    imported = 0
+    skipped = 0
+    warnings: list[str] = []
+
+    try:
+        for path_str in result_json_paths:
+            path = Path(path_str)
+            # Filename: <sample_id>_mykrobe.json
+            sample_id = path.stem.replace("_mykrobe", "")
+
+            exists = db.execute(
+                text("SELECT 1 FROM cases WHERE pseudonymised_case_id = CAST(:sample_id AS uuid)"),
+                {"sample_id": sample_id},
+            ).scalar()
+            if not exists:
+                skipped += 1
+                warnings.append(f"sample_id not found in cases ({sample_id})")
+                continue
+
+            fields = _extract_mykrobe_results(path)
+            db.execute(
+                text(
+                    """
+                    INSERT INTO tb_interpretation (
+                        sample_id,
+                        species_confirmation,
+                        lineage,
+                        predicted_drug_resistance,
+                        confidence_score,
+                        interpretation_summary
+                    )
+                    VALUES (
+                        CAST(:sample_id AS uuid),
+                        :species_confirmation,
+                        :lineage,
+                        CAST(:predicted_drug_resistance AS jsonb),
+                        :confidence_score,
+                        :interpretation_summary
+                    )
+                    ON CONFLICT (sample_id) DO UPDATE SET
+                        lineage = COALESCE(EXCLUDED.lineage, tb_interpretation.lineage),
+                        predicted_drug_resistance = COALESCE(EXCLUDED.predicted_drug_resistance, tb_interpretation.predicted_drug_resistance),
+                        confidence_score = COALESCE(EXCLUDED.confidence_score, tb_interpretation.confidence_score),
+                        interpretation_summary = COALESCE(EXCLUDED.interpretation_summary, tb_interpretation.interpretation_summary)
+                    """
+                ),
+                {
+                    "sample_id": sample_id,
+                    "species_confirmation": "M. tuberculosis complex",
+                    "lineage": fields["lineage"],
+                    "predicted_drug_resistance": json.dumps(fields["predicted_drug_resistance"]) if fields["predicted_drug_resistance"] is not None else "null",
+                    "confidence_score": fields["confidence_score"],
+                    "interpretation_summary": fields["interpretation_summary"],
+                },
+            )
+            imported += 1
+
+        db.commit()
+        return {
+            "status": "imported",
+            "message": "mykrobe results imported into tb_interpretation",
+            "imported_rows": imported,
+            "skipped_rows": skipped,
+            "warnings": warnings[:25],
+        }
+    except Exception as exc:
+        db.rollback()
+        return {
+            "status": "failed",
+            "message": str(exc),
+            "imported_rows": imported,
+            "skipped_rows": skipped,
+            "warnings": warnings[:25],
+        }
+    finally:
+        db.close()
 
 
 def _import_tbprofiler_results(result_json_paths: list[str]) -> dict[str, Any]:
@@ -619,8 +1037,11 @@ def main() -> None:
     EXPORTS.mkdir(parents=True, exist_ok=True)
 
     docker = _probe_docker()
+    wsl = _probe_wsl()
     docker_image = os.getenv("TBPROFILER_DOCKER_IMAGE", "quay.io/jodyphelan/tbprofiler:latest")
     docker_fallback_enabled = os.getenv("TBPROFILER_DOCKER_FALLBACK", "1") == "1"
+    wsl_fallback_enabled = os.getenv("TBPROFILER_WSL_FALLBACK", "1") == "1"
+    wsl_env_name = os.getenv("TBPROFILER_WSL_ENV", "tbtools")
 
     tbprofiler_exec = _which_many(["tb-profiler", "tb-profiler.exe", "tb_profiler", "tb-profiler-tools"])
     mykrobe_exec = _which_many(["mykrobe", "mykrobe.exe"])
@@ -655,6 +1076,31 @@ def main() -> None:
             "executable": mykrobe_exec,
             "version_probe": {"status": probe_status, "output": probe_output},
             "message": "mykrobe detected",
+        }
+
+    wsl_tbprofiler = {
+        "status": "not_checked",
+        "probe": None,
+        "message": "WSL tool probe not run",
+    }
+    wsl_mykrobe = {
+        "status": "not_checked",
+        "probe": None,
+        "message": "WSL tool probe not run",
+    }
+    if wsl.get("available") and wsl_fallback_enabled:
+        probe_status, probe_output = _wsl_probe_tool(f"$HOME/micromamba run -n {wsl_env_name} tb-profiler version")
+        wsl_tbprofiler = {
+            "status": "installed" if probe_status == "ok" else "not_ready",
+            "probe": {"status": probe_status, "output": probe_output},
+            "message": "tb-profiler available in WSL env" if probe_status == "ok" else "tb-profiler unavailable in WSL env",
+        }
+
+        mk_status, mk_output = _wsl_probe_tool(f"$HOME/micromamba run -n {wsl_env_name} mykrobe --help")
+        wsl_mykrobe = {
+            "status": "installed" if mk_status == "ok" else "not_ready",
+            "probe": {"status": mk_status, "output": mk_output},
+            "message": "mykrobe available in WSL env" if mk_status == "ok" else "mykrobe unavailable in WSL env",
         }
 
     import_candidates = [
@@ -705,9 +1151,47 @@ def main() -> None:
         "output_jsons": [],
         "failures": [],
     }
+    tbprofiler_wsl_run = {
+        "status": "skipped",
+        "runner": "wsl",
+        "message": "WSL tb-profiler execution not attempted",
+        "attempted_samples": 0,
+        "successful_samples": 0,
+        "failed_samples": 0,
+        "output_jsons": [],
+        "failures": [],
+    }
     tbprofiler_import = {
         "status": "skipped",
         "message": "No tb-profiler result JSON files imported",
+        "imported_rows": 0,
+        "skipped_rows": 0,
+        "warnings": [],
+    }
+
+    mykrobe_run = {
+        "status": "skipped",
+        "message": "mykrobe not ready to run",
+        "runner": "none",
+        "attempted_samples": 0,
+        "successful_samples": 0,
+        "failed_samples": 0,
+        "output_jsons": [],
+        "failures": [],
+    }
+    mykrobe_wsl_run = {
+        "status": "skipped",
+        "runner": "wsl",
+        "message": "WSL mykrobe execution not attempted",
+        "attempted_samples": 0,
+        "successful_samples": 0,
+        "failed_samples": 0,
+        "output_jsons": [],
+        "failures": [],
+    }
+    mykrobe_import = {
+        "status": "skipped",
+        "message": "No mykrobe result JSON files imported",
         "imported_rows": 0,
         "skipped_rows": 0,
         "warnings": [],
@@ -729,6 +1213,22 @@ def main() -> None:
         }
 
     if (
+        wsl_fallback_enabled
+        and fasta_inputs
+        and wsl.get("available")
+        and wsl_tbprofiler.get("status") == "installed"
+        and (
+            tbprofiler_run["status"] in {"skipped", "failed"}
+            or tbprofiler["status"] in {"not_installed", "installed_but_unusable"}
+        )
+    ):
+        tbprofiler_wsl_run = _run_tbprofiler_on_fasta_wsl(fasta_inputs, wsl_env_name)
+        if tbprofiler_wsl_run["status"] == "completed":
+            tbprofiler_run = tbprofiler_wsl_run
+        elif tbprofiler_run["status"] == "skipped":
+            tbprofiler_run = tbprofiler_wsl_run
+
+    if (
         docker_fallback_enabled
         and fasta_inputs
         and docker.get("available")
@@ -747,6 +1247,20 @@ def main() -> None:
     if tbprofiler_run["status"] == "completed" and tbprofiler_run["output_jsons"]:
         tbprofiler_import = _import_tbprofiler_results(tbprofiler_run["output_jsons"])
 
+    # Run mykrobe via WSL as a secondary engine / fallback when tb-profiler did not complete.
+    if (
+        wsl_fallback_enabled
+        and fasta_inputs
+        and wsl.get("available")
+        and wsl_mykrobe.get("status") == "installed"
+        and tbprofiler_run["status"] in {"skipped", "failed"}
+    ):
+        mykrobe_wsl_run = _run_mykrobe_on_fasta_wsl(fasta_inputs, wsl_env_name)
+        mykrobe_run = mykrobe_wsl_run
+
+    if mykrobe_run["status"] == "completed" and mykrobe_run["output_jsons"]:
+        mykrobe_import = _import_mykrobe_results(mykrobe_run["output_jsons"])
+
     ready_inputs = inputs["fastq_count"] > 0 or inputs["vcf_count"] > 0 or inputs["fasta_count"] > 0
     overall_status = "completed"
     if tbprofiler["status"] not in {"installed", "installed_but_unusable"} and mykrobe["status"] != "installed":
@@ -759,6 +1273,9 @@ def main() -> None:
         overall_status = "failed_tbprofiler_runtime"
 
     if tbprofiler_run["status"] == "completed":
+        overall_status = "completed"
+
+    if mykrobe_run["status"] == "completed" and overall_status != "completed":
         overall_status = "completed"
 
     payload = {
@@ -778,14 +1295,28 @@ def main() -> None:
             "fallback_enabled": docker_fallback_enabled,
             "tbprofiler_image": docker_image,
         },
+        "wsl": {
+            "available": wsl["available"],
+            "status": wsl["status"],
+            "probe": wsl["output"],
+            "details": wsl.get("details", []),
+            "fallback_enabled": wsl_fallback_enabled,
+            "env": wsl_env_name,
+            "tbprofiler": wsl_tbprofiler,
+            "mykrobe": wsl_mykrobe,
+        },
         "inputs": inputs,
         "tbprofiler_run": tbprofiler_run,
         "tbprofiler_local_run": tbprofiler_local_run,
+        "tbprofiler_wsl_run": tbprofiler_wsl_run,
         "tbprofiler_docker_run": tbprofiler_docker_run,
         "db_import": import_result,
         "tbprofiler_db_import": tbprofiler_import,
+        "mykrobe_run": mykrobe_run,
+        "mykrobe_wsl_run": mykrobe_wsl_run,
+        "mykrobe_db_import": mykrobe_import,
         "next_steps": [
-            "Install tb-profiler/mykrobe dependencies (for Windows this is often easiest in WSL2 or Conda).",
+            "Install tb-profiler/mykrobe dependencies (WSL2 micromamba env is supported via TBPROFILER_WSL_FALLBACK=1).",
             "If local dependencies fail, install Docker Desktop and rerun with TBPROFILER_DOCKER_FALLBACK=1.",
             "Place FASTQ/VCF/FASTA inputs in uploads/ (or export pipeline outputs there).",
             "Optionally provide exports/lineage_resistance_calls.csv to hydrate tb_interpretation.",

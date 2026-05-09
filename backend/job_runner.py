@@ -109,6 +109,20 @@ def run_job(job_name):
                         )
                         if mock_result.returncode != 0:
                             raise Exception("Both R and mock generator failed")
+
+                    # Always render a deterministic transmission tree graphic
+                    # from the JSON network artifact so reports include a
+                    # non-blank image even when R plotting backends differ.
+                    tree_render_result = subprocess.run(
+                        [python_exe, "scripts/render_transmission_tree.py"],
+                        stdout=lf,
+                        stderr=subprocess.STDOUT,
+                        cwd=project_root,
+                        timeout=60,
+                        env=child_env,
+                    )
+                    if tree_render_result.returncode != 0:
+                        lf.write("\n--- Warning: transmission tree renderer failed ---\n")
                     
                     # Generate supplementary visualizations without overwriting outbreaker network output.
                     lf.write("\n--- Generating supplementary visualizations ---\n")

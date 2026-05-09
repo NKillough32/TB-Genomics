@@ -443,6 +443,21 @@ def outbreak_report(db: Session = Depends(get_db)):
         except Exception:
             transmission_data = None
 
+    def load_json_artifact(filename: str):
+        path = os.path.join("exports", filename)
+        if not os.path.exists(path):
+            return None
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return None
+
+    lineage_dr_data = load_json_artifact("lineage_dr_validation.json")
+    secondary_validation_data = load_json_artifact("secondary_engine_validation.json")
+    method_comparison_data = load_json_artifact("cluster_method_comparison.json")
+    sequence_summary_data = load_json_artifact("sequence_clustering_summary.json")
+
     kpi_data = None
     try:
         kpi_data = surveillance_kpis(weeks=12, db=db)
@@ -891,6 +906,118 @@ def outbreak_report(db: Session = Depends(get_db)):
         story.append(Paragraph("No cluster action data available.", styles["Normal"]))
 
     story.append(Spacer(1, 0.2 * inch))
+    story.append(Paragraph("Lineage and Drug Resistance Validation", styles["Heading3"]))
+    if lineage_dr_data:
+        lineage_engines = (lineage_dr_data.get("engines") or {})
+        lineage_rows = [
+            ["Overall Status", str(lineage_dr_data.get("status", "unknown"))],
+            ["TB-Profiler", str((lineage_engines.get("tb_profiler") or {}).get("status", "unknown"))],
+            ["Mykrobe", str((lineage_engines.get("mykrobe") or {}).get("status", "unknown"))],
+            ["Docker Fallback", str((lineage_dr_data.get("docker") or {}).get("fallback_enabled", False))],
+            ["Docker Daemon Running", str((lineage_dr_data.get("docker") or {}).get("daemon_running", False))],
+            ["FASTA Inputs", str((lineage_dr_data.get("inputs") or {}).get("fasta_count", 0))],
+        ]
+        lineage_table = Table(lineage_rows, colWidths=[2.8 * inch, 3.0 * inch])
+        lineage_table.setStyle(
+            TableStyle(
+                [
+                    ("BOX", (0, 0), (-1, -1), 0.5, colors.grey),
+                    ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.lightgrey),
+                    ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+                    ("FONTSIZE", (0, 0), (-1, -1), 9),
+                ]
+            )
+        )
+        story.append(lineage_table)
+
+        next_steps = lineage_dr_data.get("next_steps") or []
+        if next_steps:
+            story.append(Spacer(1, 0.08 * inch))
+            story.append(Paragraph("Lineage/DR Next Steps", styles["Heading4"]))
+            for step in next_steps[:4]:
+                story.append(Paragraph(f"- {str(step)}", styles["Normal"]))
+    else:
+        story.append(Paragraph("No lineage/DR validation artifact found.", styles["Normal"]))
+
+    story.append(Spacer(1, 0.2 * inch))
+    story.append(Paragraph("Secondary Transmission Engines", styles["Heading3"]))
+    if secondary_validation_data:
+        secondary_engines = secondary_validation_data.get("engines") or {}
+        transphylo_state = str((secondary_engines.get("transphylo") or {}).get("status", "unknown"))
+        bactdating_state = str((secondary_engines.get("bactdating") or {}).get("status", "unknown"))
+        secondary_rows = [
+            ["Secondary Validation Status", str(secondary_validation_data.get("status", "unknown"))],
+            ["Consensus State", str((secondary_validation_data.get("consensus") or {}).get("status", "unknown"))],
+            ["TransPhylo", transphylo_state],
+            ["BactDating", bactdating_state],
+            ["Tree Input Available", str((secondary_validation_data.get("prerequisites") or {}).get("has_tree_newick", False))],
+            ["Cases Input Available", str((secondary_validation_data.get("prerequisites") or {}).get("has_cases_csv", False))],
+        ]
+        secondary_table = Table(secondary_rows, colWidths=[2.8 * inch, 3.0 * inch])
+        secondary_table.setStyle(
+            TableStyle(
+                [
+                    ("BOX", (0, 0), (-1, -1), 0.5, colors.grey),
+                    ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.lightgrey),
+                    ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+                    ("FONTSIZE", (0, 0), (-1, -1), 9),
+                ]
+            )
+        )
+        story.append(secondary_table)
+    else:
+        story.append(Paragraph("No secondary engine validation artifact found.", styles["Normal"]))
+
+    story.append(Spacer(1, 0.2 * inch))
+    story.append(Paragraph("Cross-Method Clustering Comparison", styles["Heading3"]))
+    if method_comparison_data:
+        coverage = method_comparison_data.get("coverage") or {}
+        agreement = method_comparison_data.get("agreement") or {}
+        comp_rows = [
+            ["Sequence Assigned Cases", str(coverage.get("sequence_assigned_cases", 0))],
+            ["Outbreaker Assigned Cases", str(coverage.get("outbreaker_assigned_cases", 0))],
+            ["Overlap Cases", str(coverage.get("overlap_cases", 0))],
+            ["Pairwise Precision", str(round(float(agreement.get("pairwise_precision_outbreaker_vs_sequence", 0.0)), 3))],
+            ["Pairwise Recall", str(round(float(agreement.get("pairwise_recall_outbreaker_vs_sequence", 0.0)), 3))],
+            ["Pairwise Jaccard", str(round(float(agreement.get("pairwise_jaccard", 0.0)), 3))],
+        ]
+        comp_table = Table(comp_rows, colWidths=[2.8 * inch, 3.0 * inch])
+        comp_table.setStyle(
+            TableStyle(
+                [
+                    ("BOX", (0, 0), (-1, -1), 0.5, colors.grey),
+                    ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.lightgrey),
+                    ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+                    ("FONTSIZE", (0, 0), (-1, -1), 9),
+                ]
+            )
+        )
+        story.append(comp_table)
+    else:
+        story.append(Paragraph("No cluster method comparison artifact found.", styles["Normal"]))
+
+    if sequence_summary_data:
+        story.append(Spacer(1, 0.1 * inch))
+        story.append(Paragraph("Sequence Clustering Snapshot", styles["Heading4"]))
+        seq_rows = []
+        for key in ["total_sequences", "assigned_sequences", "cluster_count", "largest_cluster_size", "singleton_count"]:
+            if key in sequence_summary_data:
+                seq_rows.append([key.replace("_", " ").title(), str(sequence_summary_data.get(key))])
+        if seq_rows:
+            seq_table = Table(seq_rows, colWidths=[2.8 * inch, 3.0 * inch])
+            seq_table.setStyle(
+                TableStyle(
+                    [
+                        ("BOX", (0, 0), (-1, -1), 0.5, colors.grey),
+                        ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.lightgrey),
+                        ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+                        ("FONTSIZE", (0, 0), (-1, -1), 9),
+                    ]
+                )
+            )
+            story.append(seq_table)
+
+    story.append(Spacer(1, 0.2 * inch))
     story.append(Paragraph("Transmission Priority Signals", styles["Heading3"]))
     if transmission_data and transmission_data.get("key_nodes"):
         priority_rows = [["Case", "Region", "Risk", "Out", "In"]]
@@ -945,7 +1072,7 @@ def outbreak_report(db: Session = Depends(get_db)):
     story.append(Paragraph("Data Provenance", styles["Heading3"]))
     story.append(
         Paragraph(
-            "This report combines case tables, cluster assignments, outbreaker summary metrics, surveillance KPIs, and transmission network outputs available at generation time.",
+            "This report combines outbreaker outputs with surveillance KPIs, lineage/DR validation, secondary engine readiness, and cross-method clustering comparison artifacts available at generation time.",
             styles["Normal"],
         )
     )
@@ -953,6 +1080,12 @@ def outbreak_report(db: Session = Depends(get_db)):
         story.append(Paragraph(f"Outbreaker summary timestamp: {summary_data.get('generated_at')}", styles["Normal"]))
     if transmission_data and transmission_data.get("generated_at"):
         story.append(Paragraph(f"Transmission network timestamp: {transmission_data.get('generated_at')}", styles["Normal"]))
+    if lineage_dr_data and lineage_dr_data.get("generated_at"):
+        story.append(Paragraph(f"Lineage/DR validation timestamp: {lineage_dr_data.get('generated_at')}", styles["Normal"]))
+    if secondary_validation_data and secondary_validation_data.get("generated_at"):
+        story.append(Paragraph(f"Secondary engine validation timestamp: {secondary_validation_data.get('generated_at')}", styles["Normal"]))
+    if method_comparison_data and method_comparison_data.get("generated_at"):
+        story.append(Paragraph(f"Method comparison timestamp: {method_comparison_data.get('generated_at')}", styles["Normal"]))
 
     output_path = report_path
     try:

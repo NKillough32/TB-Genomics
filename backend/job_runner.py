@@ -19,6 +19,7 @@ ALLOWED_JOBS = {
     "compare_clustering_methods": [python_exe, "scripts/compare_clustering_methods.py"],
     "run_clustering": [python_exe, "scripts/run_clustering.py"],
     "export_outbreaker": [python_exe, "scripts/export_outbreaker.py"],
+    "run_lineage_dr_validation": [python_exe, "scripts/run_lineage_dr_validation.py"],
     "run_outbreaker2": ["Rscript", "outbreaker2/run_outbreaker2.R"],
     "run_secondary_validation": [python_exe, "scripts/run_secondary_engine_validation.py"],
 }

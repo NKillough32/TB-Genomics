@@ -66,6 +66,7 @@
   <section class="card">
     <h2>Step 3 - Run analysis</h2>
     <p class="hint">Recommended comparison order: derive sequence clusters, generate outbreaker2 inputs, run outbreaker2, then compare methods.</p>
+    <button id="lineageDrBtn" onclick="runJob('run_lineage_dr_validation')">Run lineage/DR validation</button>
     <button id="seqClusterBtn" onclick="runJob('derive_sequence_clusters')">Derive sequence clusters</button>
     <button id="exportBtn" onclick="runJob('export_outbreaker')">Generate outbreaker2 inputs</button>
     <button id="outbreakerBtn" onclick="runJob('run_outbreaker2')">Run outbreaker2</button>
@@ -79,7 +80,9 @@
     <button onclick="loadCases()">View cases</button>
     <pre id="cases" class="log-box"></pre>
     <button onclick="loadOutbreakerResults()">View outbreaker2 summary</button>
+    <button onclick="loadLineageDrValidation()">View lineage/DR validation</button>
     <button onclick="downloadOutbreakReport()">Download outbreak report (PDF)</button>
+    <pre id="lineageDrResults" class="log-box"></pre>
     <pre id="outbreakerResults" class="log-box"></pre>
   </section>
   <section class="card">

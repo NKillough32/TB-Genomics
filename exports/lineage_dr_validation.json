@@ -1,0 +1,41 @@
+{
+  "generated_at": "2026-05-09T07:54:55.837872+00:00",
+  "status": "blocked_no_tools",
+  "scaffold_version": "1.0",
+  "engines": {
+    "tb_profiler": {
+      "status": "not_installed",
+      "executable": null,
+      "version_probe": null,
+      "message": "tb-profiler not found in PATH"
+    },
+    "mykrobe": {
+      "status": "not_installed",
+      "executable": null,
+      "version_probe": null,
+      "message": "mykrobe not found in PATH"
+    }
+  },
+  "inputs": {
+    "fastq_count": 0,
+    "vcf_count": 0,
+    "fasta_count": 1,
+    "fastq_examples": [],
+    "vcf_examples": [],
+    "fasta_examples": [
+      "dna.fasta"
+    ]
+  },
+  "db_import": {
+    "status": "skipped",
+    "message": "No lineage_resistance_calls.csv found in exports/ or uploads/",
+    "imported_rows": 0,
+    "skipped_rows": 0,
+    "warnings": []
+  },
+  "next_steps": [
+    "Install tb-profiler and/or mykrobe in the analysis environment.",
+    "Place FASTQ/VCF/FASTA inputs in uploads/ (or export pipeline outputs there).",
+    "Optionally provide exports/lineage_resistance_calls.csv to hydrate tb_interpretation."
+  ]
+}

@@ -105,6 +105,17 @@ async function loadOutbreakerResults(){
 		box.textContent=`Failed to load analysis: ${e}`;
 	}
 }
+async function loadLineageDrValidation(){
+	const box=document.getElementById('lineageDrResults');
+	box.textContent='Loading lineage/DR validation...';
+	try{
+		const r=await fetch(`${API}/cases/lineage-dr-validation`);
+		const payload=await r.json();
+		box.textContent=JSON.stringify(payload,null,2);
+	}catch(e){
+		box.textContent=`Failed to load lineage/DR validation: ${e}`;
+	}
+}
 function downloadOutbreakReport(){
 	window.open(`${API}/cases/outbreak-report`, '_blank');
 }

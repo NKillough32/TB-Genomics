@@ -378,6 +378,31 @@ def outbreaker_analysis():
     return result
 
 
+@router.get("/lineage-dr-validation")
+def lineage_dr_validation():
+    """Return lineage/drug-resistance integration validation artifact."""
+    path = "exports/lineage_dr_validation.json"
+    if not os.path.exists(path):
+        return {
+            "status": "no_results",
+            "message": "Lineage/DR validation has not been run yet",
+            "artifact_path": path,
+        }
+
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+    except Exception as exc:
+        return {
+            "status": "error",
+            "message": str(exc),
+            "artifact_path": path,
+        }
+
+    payload["artifact_path"] = path
+    return payload
+
+
 @router.get("/outbreak-report")
 def outbreak_report(db: Session = Depends(get_db)):
     """Generate and return a PDF outbreak investigation report."""

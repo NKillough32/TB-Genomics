@@ -140,13 +140,41 @@ tryCatch({
   
   # Generate plots
   cat("Generating diagnostic plots...\n")
+
+  # Build robust diagnostics directly from the posterior chain. This avoids
+  # empty/placeholder images when plot(res, type=...) methods are unavailable
+  # or fragile across outbreaker2 versions.
+  metric_col <- if ("like" %in% names(chain_df)) "like" else if ("post" %in% names(chain_df)) "post" else NA_character_
+  if (!is.na(metric_col)) {
+    metric_vals <- as.numeric(chain_df[[metric_col]])
+  } else {
+    metric_vals <- as.numeric(seq_len(nrow(chain_df)))
+  }
+
   png('exports/outbreaker_trace.png', width=1200, height=800)
-  plot(res, type='trace')
+  plot(
+    metric_vals,
+    type='l',
+    col='#1f77b4',
+    lwd=1.4,
+    xlab='Iteration',
+    ylab=ifelse(is.na(metric_col), 'Iteration Index', toupper(metric_col)),
+    main='Outbreaker2 MCMC Trace'
+  )
+  grid(col='grey85')
   dev.off()
   cat("✓ Trace plot saved\n")
-  
+
   png('exports/outbreaker_hist.png', width=1200, height=800)
-  plot(res, type='hist')
+  hist(
+    metric_vals,
+    breaks=40,
+    col='#60a5fa',
+    border='white',
+    main='Outbreaker2 Posterior Distribution',
+    xlab=ifelse(is.na(metric_col), 'Iteration Index', toupper(metric_col))
+  )
+  grid(col='grey85')
   dev.off()
   cat("✓ Histogram saved\n")  
   # Generate transmission tree
@@ -157,6 +185,10 @@ tryCatch({
     dev.off()
     cat("✓ Transmission tree saved\n")
   }, error=function(e) {
+    try(dev.off(), silent=TRUE)
+    if (file.exists('exports/outbreaker_tree.png')) {
+      file.remove('exports/outbreaker_tree.png')
+    }
     cat("⚠ Could not generate transmission tree plot\n")
   })  
 

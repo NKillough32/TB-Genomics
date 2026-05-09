@@ -1,34 +1,22 @@
 {
   "status": "ok",
-  "generated_at": "2026-05-08T16:04:57.205282+00:00",
-  "total_cases": 250,
-  "clustered_cases": 131,
-  "unclustered_cases": 119,
-  "cluster_count": 6,
+  "generated_at": "2026-05-09T11:06:52.610043+00:00",
+  "total_cases": 24,
+  "clustered_cases": 8,
+  "unclustered_cases": 16,
+  "cluster_count": 3,
   "top_clusters": [
     {
-      "cluster_id": "97c6a3b2-ff0a-5234-9cd1-f5d2f43cc798",
-      "case_count": 27
+      "cluster_id": "1ccae724-79ac-563c-87d4-8c9e67245bdd",
+      "case_count": 4
     },
     {
-      "cluster_id": "8a169590-31c0-59db-9916-2e6ccb42e277",
-      "case_count": 25
+      "cluster_id": "2132bb52-e27a-5d07-b772-6fe4be8741e0",
+      "case_count": 2
     },
     {
-      "cluster_id": "68615065-6088-538c-9aa7-8299a5e25ce6",
-      "case_count": 24
-    },
-    {
-      "cluster_id": "edcc7ea8-f19b-5b1e-9331-ea6f181c95ed",
-      "case_count": 21
-    },
-    {
-      "cluster_id": "1de5c536-90ee-5fb4-a46e-0fab4e9d2893",
-      "case_count": 20
-    },
-    {
-      "cluster_id": "b6d6762f-8955-502a-824c-4cff4026fd6a",
-      "case_count": 14
+      "cluster_id": "415c3603-741f-54c7-ad4b-96e9495f220b",
+      "case_count": 2
     }
   ]
 }

@@ -1,44 +1,29 @@
 {
   "status": "ok",
   "method": "sequence_distance_connected_components",
-  "generated_at": "2026-05-09T10:51:41.397670+00:00",
+  "generated_at": "2026-05-09T11:01:32.610332+00:00",
   "threshold_snp_distance": 25,
   "min_cluster_size": 2,
-  "sequenced_cases": 187,
-  "clustered_cases": 131,
-  "cluster_count": 6,
-  "unclustered_cases": 56,
-  "pairwise_links_under_threshold": 1269,
+  "sequenced_cases": 15,
+  "clustered_cases": 8,
+  "cluster_count": 3,
+  "unclustered_cases": 7,
+  "pairwise_links_under_threshold": 8,
   "clusters": [
     {
       "cluster_label": "SEQ-001",
-      "cluster_id": "3295411e-679b-5928-b527-feb11af55c11",
-      "case_count": 27
+      "cluster_id": "1ccae724-79ac-563c-87d4-8c9e67245bdd",
+      "case_count": 4
     },
     {
       "cluster_label": "SEQ-002",
-      "cluster_id": "3312783e-4b73-551e-b02e-e8aee8a7b864",
-      "case_count": 25
+      "cluster_id": "415c3603-741f-54c7-ad4b-96e9495f220b",
+      "case_count": 2
     },
     {
       "cluster_label": "SEQ-003",
-      "cluster_id": "524b9f42-cef4-5201-86dd-ffd5b93bf30e",
-      "case_count": 24
-    },
-    {
-      "cluster_label": "SEQ-004",
-      "cluster_id": "65d89808-298f-5121-8710-60592007c3cb",
-      "case_count": 21
-    },
-    {
-      "cluster_label": "SEQ-005",
-      "cluster_id": "6dbcc5ee-7f8c-5f40-a37a-27dfbf494c09",
-      "case_count": 20
-    },
-    {
-      "cluster_label": "SEQ-006",
-      "cluster_id": "9ef5d832-e26b-5161-9e62-74d3164fc7e0",
-      "case_count": 14
+      "cluster_id": "2132bb52-e27a-5d07-b772-6fe4be8741e0",
+      "case_count": 2
     }
   ]
 }

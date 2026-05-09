@@ -954,12 +954,21 @@ def outbreak_report(db: Session = Depends(get_db)):
     if transmission_data and transmission_data.get("generated_at"):
         story.append(Paragraph(f"Transmission network timestamp: {transmission_data.get('generated_at')}", styles["Normal"]))
 
-    doc.build(story)
+    output_path = report_path
+    try:
+        doc.build(story)
+    except PermissionError:
+        # If the default report file is open/locked (common on Windows),
+        # generate a timestamped filename so report creation still succeeds.
+        stamped_name = f"outbreaker_investigation_report_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.pdf"
+        output_path = os.path.join("exports", stamped_name)
+        doc = SimpleDocTemplate(output_path, pagesize=A4, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36)
+        doc.build(story)
 
     return FileResponse(
-        report_path,
+        output_path,
         media_type="application/pdf",
-        filename="outbreaker_investigation_report.pdf",
+        filename=os.path.basename(output_path),
     )
 
 

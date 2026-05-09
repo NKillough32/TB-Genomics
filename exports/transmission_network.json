@@ -1,3836 +1,446 @@
 {
-  "generated_at": "2026-05-09T10:50:27Z",
+  "generated_at": "2026-05-09T11:09:24Z",
   "inference_source": "outbreaker2_posterior",
   "provenance": "real",
-  "node_count": 250,
-  "edge_count": 249,
-  "high_confidence_edges": 190,
+  "node_count": 24,
+  "edge_count": 23,
+  "high_confidence_edges": 22,
   "posterior_samples": 1500,
   "all_nodes": [
     {
-      "case_id": "be2ea386",
-      "full_case_id": "be2ea386-16e9-416d-b111-f52d591d84b0",
-      "risk_score": 3.1416,
+      "case_id": "0010059d",
+      "full_case_id": "0010059d-56f7-4129-883b-6c1d9203fa3d",
+      "risk_score": 2.7356,
       "risk_band": "high",
-      "outgoing_links": 5,
+      "outgoing_links": 4,
       "incoming_links": 0
     },
     {
-      "case_id": "16977bec",
-      "full_case_id": "16977bec-0d56-426c-89c8-19c638a14319",
-      "risk_score": 1.4569,
+      "case_id": "c1595385",
+      "full_case_id": "c1595385-0d1c-4030-b530-822926f9249e",
+      "risk_score": 1.6305,
       "risk_band": "high",
       "outgoing_links": 2,
       "incoming_links": 1
     },
     {
-      "case_id": "74b96b79",
-      "full_case_id": "74b96b79-00f5-41e0-8665-24eea2cfed78",
-      "risk_score": 0.6511,
+      "case_id": "5ec510fe",
+      "full_case_id": "5ec510fe-1631-45ee-8373-8d117a646e39",
+      "risk_score": 1,
       "risk_band": "medium",
       "outgoing_links": 1,
       "incoming_links": 1
     },
     {
-      "case_id": "df4ce6d0",
-      "full_case_id": "df4ce6d0-6bcc-4bbb-8f14-a2b426f8711e",
-      "risk_score": 4.6377,
-      "risk_band": "high",
-      "outgoing_links": 7,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "c594c7a5",
-      "full_case_id": "c594c7a5-82d8-4934-aa37-5776f7da22c6",
-      "risk_score": 1.6114,
-      "risk_band": "high",
-      "outgoing_links": 3,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "de76d6af",
-      "full_case_id": "de76d6af-507c-4ccf-9b45-28f2436dc932",
-      "risk_score": 1.4753,
-      "risk_band": "high",
-      "outgoing_links": 2,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "083edd00",
-      "full_case_id": "083edd00-a1c3-4031-91e5-e03155b9cb1a",
-      "risk_score": 1.3355,
-      "risk_band": "high",
-      "outgoing_links": 2,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "dfdba98c",
-      "full_case_id": "dfdba98c-fbdd-4e0b-a749-493079e03f1f",
-      "risk_score": 1.293,
-      "risk_band": "high",
-      "outgoing_links": 2,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "57296b55",
-      "full_case_id": "57296b55-1dda-40f1-8556-d13dfe220d2b",
-      "risk_score": 0.27,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "7f0b843d",
-      "full_case_id": "7f0b843d-7c61-487a-a3b2-c649f50a72a5",
-      "risk_score": 2.4,
-      "risk_band": "high",
-      "outgoing_links": 3,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "ef4b618a",
-      "full_case_id": "ef4b618a-3095-4b9d-a35c-6c20ce274592",
-      "risk_score": 1.5446,
-      "risk_band": "high",
-      "outgoing_links": 2,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "4afa5f8f",
-      "full_case_id": "4afa5f8f-9b35-49d1-a4d7-e58bc81a57cc",
-      "risk_score": 0.2088,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "a6e3b260",
-      "full_case_id": "a6e3b260-ef42-49c6-91f1-154133796dd7",
-      "risk_score": 2.4,
-      "risk_band": "high",
-      "outgoing_links": 3,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "6e2bbaff",
-      "full_case_id": "6e2bbaff-4316-4821-8810-d5ef6db3fdbe",
-      "risk_score": 3.1193,
-      "risk_band": "high",
-      "outgoing_links": 5,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "330f0b9b",
-      "full_case_id": "330f0b9b-d38d-4c77-a33b-24d10da0058a",
-      "risk_score": 1.6526,
-      "risk_band": "high",
-      "outgoing_links": 2,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "d1c65afe",
-      "full_case_id": "d1c65afe-ad1e-490e-8235-94a9509c24d7",
-      "risk_score": 0.2984,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "e83546b9",
-      "full_case_id": "e83546b9-b1bd-4348-a4ee-6fefbc30ccdd",
-      "risk_score": 0.9421,
+      "case_id": "31e27190",
+      "full_case_id": "31e27190-6f5d-4798-a174-524dec7c088a",
+      "risk_score": 0.9724,
       "risk_band": "medium",
       "outgoing_links": 1,
       "incoming_links": 1
     },
     {
-      "case_id": "2127a213",
-      "full_case_id": "2127a213-3eba-425e-8a76-236f1a52c5fa",
+      "case_id": "33670646",
+      "full_case_id": "33670646-89cd-47be-b8a8-5e6cb6efe48c",
+      "risk_score": 1.3323,
+      "risk_band": "high",
+      "outgoing_links": 2,
+      "incoming_links": 1
+    },
+    {
+      "case_id": "a822dd61",
+      "full_case_id": "a822dd61-c312-4408-b96a-9540e52a2fd7",
+      "risk_score": 1,
+      "risk_band": "medium",
+      "outgoing_links": 1,
+      "incoming_links": 1
+    },
+    {
+      "case_id": "b0d81316",
+      "full_case_id": "b0d81316-80f3-464e-9c31-037abc53f50e",
       "risk_score": 0.3,
       "risk_band": "low",
       "outgoing_links": 0,
       "incoming_links": 1
     },
     {
-      "case_id": "0e80ea37",
-      "full_case_id": "0e80ea37-20a1-421b-a7d3-bd6e018dc288",
-      "risk_score": 0.9126,
+      "case_id": "11a01e72",
+      "full_case_id": "11a01e72-218e-4125-9809-312d74a724f6",
+      "risk_score": 0.8796,
       "risk_band": "medium",
       "outgoing_links": 1,
       "incoming_links": 1
     },
     {
-      "case_id": "225ca270",
-      "full_case_id": "225ca270-c313-4577-ab04-17d2e3be1a4e",
-      "risk_score": 2.8909,
-      "risk_band": "high",
-      "outgoing_links": 4,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "1e8fb4ca",
-      "full_case_id": "1e8fb4ca-1817-4cf7-815d-948144f0d532",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "f248b977",
-      "full_case_id": "f248b977-acdd-497e-8778-52b2e32fbf6e",
-      "risk_score": 1.7277,
-      "risk_band": "high",
-      "outgoing_links": 4,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "8844ba8f",
-      "full_case_id": "8844ba8f-2f3e-41f8-88cf-882fad35dbf6",
-      "risk_score": 0.7117,
-      "risk_band": "medium",
-      "outgoing_links": 1,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "4fce460b",
-      "full_case_id": "4fce460b-883f-4422-9b3a-e6fb86f665ff",
-      "risk_score": 0.5742,
-      "risk_band": "medium",
-      "outgoing_links": 1,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "2ffff6b4",
-      "full_case_id": "2ffff6b4-23e1-439a-b8bd-4383fab204a9",
+      "case_id": "93084971",
+      "full_case_id": "93084971-8537-4317-86ca-a6f9c5ced50e",
       "risk_score": 1.7,
       "risk_band": "high",
       "outgoing_links": 2,
       "incoming_links": 1
     },
     {
-      "case_id": "a79b8c4a",
-      "full_case_id": "a79b8c4a-2d21-4187-8565-6cfb43b0403f",
-      "risk_score": 2.1228,
+      "case_id": "1055ac42",
+      "full_case_id": "1055ac42-2b39-425a-ab71-c3de77a6a561",
+      "risk_score": 0.8513,
+      "risk_band": "medium",
+      "outgoing_links": 1,
+      "incoming_links": 1
+    },
+    {
+      "case_id": "d647ff81",
+      "full_case_id": "d647ff81-3a0a-4ddc-9bd3-3415d2a3d3fa",
+      "risk_score": 1,
+      "risk_band": "medium",
+      "outgoing_links": 1,
+      "incoming_links": 1
+    },
+    {
+      "case_id": "86d09f05",
+      "full_case_id": "86d09f05-7b9b-468b-adb5-f3cea29132ae",
+      "risk_score": 0.3,
+      "risk_band": "low",
+      "outgoing_links": 0,
+      "incoming_links": 1
+    },
+    {
+      "case_id": "40f3f4c0",
+      "full_case_id": "40f3f4c0-ae98-43e9-b95d-ec167a06b6f5",
+      "risk_score": 0.3,
+      "risk_band": "low",
+      "outgoing_links": 0,
+      "incoming_links": 1
+    },
+    {
+      "case_id": "982540a6",
+      "full_case_id": "982540a6-9f83-48bc-83c4-ae560a6a1632",
+      "risk_score": 1.6431,
+      "risk_band": "high",
+      "outgoing_links": 2,
+      "incoming_links": 1
+    },
+    {
+      "case_id": "207639ef",
+      "full_case_id": "207639ef-fd25-4e21-8cb7-3ee896b83bdb",
+      "risk_score": 0.9584,
+      "risk_band": "medium",
+      "outgoing_links": 1,
+      "incoming_links": 1
+    },
+    {
+      "case_id": "3951560f",
+      "full_case_id": "3951560f-a2a9-4465-be9f-61f0c2237a87",
+      "risk_score": 2.2298,
       "risk_band": "high",
       "outgoing_links": 3,
       "incoming_links": 1
     },
     {
-      "case_id": "6053c07f",
-      "full_case_id": "6053c07f-99db-4277-8912-96e7dca76279",
-      "risk_score": 0.1812,
+      "case_id": "fd413ac0",
+      "full_case_id": "fd413ac0-855b-4469-9ed7-b6a560faec91",
+      "risk_score": 0.3,
       "risk_band": "low",
       "outgoing_links": 0,
       "incoming_links": 1
     },
     {
-      "case_id": "20823e35",
-      "full_case_id": "20823e35-bc2c-44a0-9fb8-dd01ab098348",
-      "risk_score": 0.636,
+      "case_id": "c64d05cc",
+      "full_case_id": "c64d05cc-cb4b-47b6-9170-fdfc542fa3d5",
+      "risk_score": 0.2844,
+      "risk_band": "low",
+      "outgoing_links": 0,
+      "incoming_links": 1
+    },
+    {
+      "case_id": "bfbfc982",
+      "full_case_id": "bfbfc982-f62a-47c4-8956-6893f941bac1",
+      "risk_score": 0.9913,
       "risk_band": "medium",
       "outgoing_links": 1,
       "incoming_links": 1
     },
     {
-      "case_id": "d56a39cf",
-      "full_case_id": "d56a39cf-d401-4acb-844d-0c31030b6ce6",
-      "risk_score": 2.9933,
-      "risk_band": "high",
-      "outgoing_links": 4,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "475a42b9",
-      "full_case_id": "475a42b9-1e4c-4f4e-9aff-59b45f58c99e",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "850064db",
-      "full_case_id": "850064db-13a9-4215-b531-f3dfdde709af",
-      "risk_score": 0.282,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "c03999bf",
-      "full_case_id": "c03999bf-be11-4576-b83b-591483759c9a",
-      "risk_score": 1.7,
-      "risk_band": "high",
-      "outgoing_links": 2,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "ad62c91f",
-      "full_case_id": "ad62c91f-0159-43f5-bfcb-e6549b628506",
-      "risk_score": 0.9477,
-      "risk_band": "medium",
-      "outgoing_links": 1,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "fa238985",
-      "full_case_id": "fa238985-7994-45f7-8c52-651db67b5a65",
-      "risk_score": 3.5475,
-      "risk_band": "high",
-      "outgoing_links": 5,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "e196e793",
-      "full_case_id": "e196e793-22e2-4422-b01f-6b30419a2c22",
-      "risk_score": 6.7185,
-      "risk_band": "high",
-      "outgoing_links": 10,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "1510e7de",
-      "full_case_id": "1510e7de-3737-4062-b560-06e1adf33e17",
-      "risk_score": 1.5927,
-      "risk_band": "high",
-      "outgoing_links": 2,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "9291123e",
-      "full_case_id": "9291123e-2649-4955-ad5c-036f0f9c81c5",
-      "risk_score": 1.7,
-      "risk_band": "high",
-      "outgoing_links": 2,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "deaafe93",
-      "full_case_id": "deaafe93-1856-4202-a94e-90ed545be03c",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "3bc9b879",
-      "full_case_id": "3bc9b879-3e94-4ce6-a2de-47a33a4fbf51",
-      "risk_score": 0.2918,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "07dc3105",
-      "full_case_id": "07dc3105-321b-48c5-8a17-f816db6740bb",
-      "risk_score": 0.8595,
-      "risk_band": "medium",
-      "outgoing_links": 1,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "e1a01721",
-      "full_case_id": "e1a01721-970a-4d79-8916-2f78ce60c7b1",
-      "risk_score": 0.2342,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "1c395dd4",
-      "full_case_id": "1c395dd4-e7e8-4aaf-973d-e072fe3e0aee",
-      "risk_score": 0.2472,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "91f6afcc",
-      "full_case_id": "91f6afcc-f800-49ec-9ecc-110a6596e57e",
-      "risk_score": 0.2384,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "106ba37b",
-      "full_case_id": "106ba37b-f0c4-47e1-99e7-a915c6dee18d",
-      "risk_score": 0.6061,
-      "risk_band": "medium",
-      "outgoing_links": 1,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "aeb64509",
-      "full_case_id": "aeb64509-a3be-4e2d-8cdf-eca69db85d78",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "83bed0f9",
-      "full_case_id": "83bed0f9-d2a0-4d63-aa97-b5c96f8df692",
-      "risk_score": 7.2586,
-      "risk_band": "high",
-      "outgoing_links": 10,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "4fba5781",
-      "full_case_id": "4fba5781-53f2-4972-b03f-240f528f656d",
-      "risk_score": 0.2766,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "9cdddf4b",
-      "full_case_id": "9cdddf4b-186a-4d04-acc0-0ae8b1e8397b",
-      "risk_score": 0.8908,
-      "risk_band": "medium",
-      "outgoing_links": 1,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "a64012b9",
-      "full_case_id": "a64012b9-42be-43e7-8e76-9d0b1e380d8e",
-      "risk_score": 3.1,
-      "risk_band": "high",
-      "outgoing_links": 4,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "8788fb39",
-      "full_case_id": "8788fb39-09e4-45d8-842d-a4fb6476dc37",
-      "risk_score": 0.144,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "192dcda4",
-      "full_case_id": "192dcda4-3027-4401-8f1c-8989f9ff023c",
-      "risk_score": 0.2094,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "c08597d1",
-      "full_case_id": "c08597d1-52ee-4c12-bafc-0a1661eb139b",
-      "risk_score": 1,
-      "risk_band": "medium",
-      "outgoing_links": 1,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "7029c0a9",
-      "full_case_id": "7029c0a9-9351-40e2-87b3-ab8b5c9f1de2",
-      "risk_score": 0.7242,
-      "risk_band": "medium",
-      "outgoing_links": 1,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "14f09395",
-      "full_case_id": "14f09395-13de-4da5-8953-29146f8d7cf4",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "7f286755",
-      "full_case_id": "7f286755-6e00-433f-a86d-16605925db4f",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "9776615d",
-      "full_case_id": "9776615d-a22e-4859-b975-c986246d493e",
-      "risk_score": 3.1,
-      "risk_band": "high",
-      "outgoing_links": 4,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "0197330c",
-      "full_case_id": "0197330c-0e67-42ec-9f22-d3e5d3dec260",
-      "risk_score": 0.217,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "24b1983e",
-      "full_case_id": "24b1983e-62a6-400b-af69-d8643309f705",
-      "risk_score": 0.6861,
-      "risk_band": "medium",
-      "outgoing_links": 1,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "5146773d",
-      "full_case_id": "5146773d-778f-4210-9444-a1135cc8e634",
-      "risk_score": 4.3301,
-      "risk_band": "high",
-      "outgoing_links": 6,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "f9b5e5f7",
-      "full_case_id": "f9b5e5f7-93a3-424c-b36d-0c5bb3ffc777",
-      "risk_score": 0.8225,
-      "risk_band": "medium",
-      "outgoing_links": 1,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "8df5c9e6",
-      "full_case_id": "8df5c9e6-04a3-4bc3-813a-0897600e9cf0",
-      "risk_score": 3.1,
-      "risk_band": "high",
-      "outgoing_links": 4,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "2be6bd14",
-      "full_case_id": "2be6bd14-543c-475d-b57d-3b25daba31b4",
-      "risk_score": 0.9776,
-      "risk_band": "medium",
-      "outgoing_links": 1,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "ae957b2d",
-      "full_case_id": "ae957b2d-2ad4-4fbb-9a3c-2f5f5aca5177",
-      "risk_score": 1,
-      "risk_band": "medium",
-      "outgoing_links": 1,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "b1e12797",
-      "full_case_id": "b1e12797-3686-487e-b905-333f166fe58a",
-      "risk_score": 1.7,
-      "risk_band": "high",
-      "outgoing_links": 2,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "95be0157",
-      "full_case_id": "95be0157-df5c-4db6-8a09-50032af9dd4f",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "50068b38",
-      "full_case_id": "50068b38-b7a5-4283-a55c-4c91c3edfa5e",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "17698ec1",
-      "full_case_id": "17698ec1-45a1-402d-9b16-dea7063db097",
-      "risk_score": 2.6587,
-      "risk_band": "high",
-      "outgoing_links": 4,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "d4dca2f0",
-      "full_case_id": "d4dca2f0-aaa9-466e-84dc-8cf1e0742641",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "6e5523a5",
-      "full_case_id": "6e5523a5-ac31-440f-95e6-7a409a29b3be",
-      "risk_score": 1.659,
-      "risk_band": "high",
-      "outgoing_links": 2,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "9b0994c9",
-      "full_case_id": "9b0994c9-e42c-40f0-9c6c-73c5de57fb5d",
-      "risk_score": 1.4517,
-      "risk_band": "high",
-      "outgoing_links": 2,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "48f9f9cf",
-      "full_case_id": "48f9f9cf-7844-499a-b6b9-20fecae02604",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "7d8d18f6",
-      "full_case_id": "7d8d18f6-9c8f-4e40-aaf8-7b2ec01a4667",
-      "risk_score": 0.8662,
-      "risk_band": "medium",
-      "outgoing_links": 1,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "fed631af",
-      "full_case_id": "fed631af-d389-4b04-a363-e01e577f54cb",
-      "risk_score": 0.8689,
-      "risk_band": "medium",
-      "outgoing_links": 1,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "208da908",
-      "full_case_id": "208da908-b454-487b-8e5b-caad715cd643",
-      "risk_score": 0.2532,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "70eae65e",
-      "full_case_id": "70eae65e-75c2-4053-ae1d-63aca9486eb0",
-      "risk_score": 1.5063,
-      "risk_band": "high",
-      "outgoing_links": 2,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "f95779ca",
-      "full_case_id": "f95779ca-da67-40bc-be92-82d3d489886c",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "9d373b73",
-      "full_case_id": "9d373b73-54d2-43b5-bf79-4b3a904441f4",
-      "risk_score": 0.2946,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "035ebfa7",
-      "full_case_id": "035ebfa7-a49b-4ec0-a29d-2c1d0b120e2e",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "c1e213d6",
-      "full_case_id": "c1e213d6-d25e-4f72-ad6a-d3e5d8a41443",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "0e4b1636",
-      "full_case_id": "0e4b1636-bc09-4cf5-ab00-6c9d66149e01",
-      "risk_score": 2.363,
-      "risk_band": "high",
-      "outgoing_links": 3,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "df792544",
-      "full_case_id": "df792544-c13e-4ec2-a5e0-a3e935deee84",
-      "risk_score": 1.4293,
-      "risk_band": "high",
-      "outgoing_links": 2,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "d188d906",
-      "full_case_id": "d188d906-5aa9-4d56-8282-9ca0071128d8",
-      "risk_score": 0.2994,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "bd0b395d",
-      "full_case_id": "bd0b395d-046f-4130-870c-13361b522ee8",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "f1a9fdc1",
-      "full_case_id": "f1a9fdc1-d893-4fe7-916f-c3b6c9ca27c8",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "c7fbfaae",
-      "full_case_id": "c7fbfaae-e10f-4445-968c-d66377961950",
-      "risk_score": 1.5052,
-      "risk_band": "high",
-      "outgoing_links": 2,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "718c5049",
-      "full_case_id": "718c5049-3d40-430e-b3e2-a1d43d26ca16",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "646e8fcc",
-      "full_case_id": "646e8fcc-61bc-42a9-9551-a79e47fb821e",
-      "risk_score": 0.2578,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "9db4ff95",
-      "full_case_id": "9db4ff95-7c7c-4585-be6d-3068eed1c2ad",
-      "risk_score": 0.2602,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "800d5419",
-      "full_case_id": "800d5419-31c1-4a2d-9530-713befb1dbe6",
-      "risk_score": 1.7,
-      "risk_band": "high",
-      "outgoing_links": 2,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "2e44f15e",
-      "full_case_id": "2e44f15e-5e4f-48ad-a8d5-96c72a6853a4",
-      "risk_score": 0.917,
-      "risk_band": "medium",
-      "outgoing_links": 1,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "5a924ccf",
-      "full_case_id": "5a924ccf-f38d-43f0-98ca-11e52a390b82",
-      "risk_score": 0.2902,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "a9b15e23",
-      "full_case_id": "a9b15e23-d58c-4cbc-804d-0916004db58a",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "6c467a31",
-      "full_case_id": "6c467a31-26c7-4511-ae6c-cc803e9fd84b",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "7e333999",
-      "full_case_id": "7e333999-b315-40dd-ad58-338c6587c87d",
-      "risk_score": 1,
-      "risk_band": "medium",
-      "outgoing_links": 1,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "e2c785df",
-      "full_case_id": "e2c785df-485f-469a-aadd-5b3d3b3b57d6",
-      "risk_score": 0.9424,
-      "risk_band": "medium",
-      "outgoing_links": 1,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "e4d9d5c6",
-      "full_case_id": "e4d9d5c6-3351-4455-8a6f-b6d07f312ad7",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "f4072b66",
-      "full_case_id": "f4072b66-d1c5-48a0-a0af-f2b6f0086271",
-      "risk_score": 2.1625,
-      "risk_band": "high",
-      "outgoing_links": 3,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "6bd1dbc8",
-      "full_case_id": "6bd1dbc8-e65e-4b2f-a2a7-6533c25b8d3e",
-      "risk_score": 0.151,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "eb410610",
-      "full_case_id": "eb410610-93af-4322-9ab8-77e744324e19",
-      "risk_score": 2.1158,
-      "risk_band": "high",
-      "outgoing_links": 3,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "358d5f92",
-      "full_case_id": "358d5f92-1ee7-455c-a720-45ef0c9be21d",
-      "risk_score": 0.9258,
-      "risk_band": "medium",
-      "outgoing_links": 1,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "1bb5ae07",
-      "full_case_id": "1bb5ae07-7523-4dcf-bc76-b4ab1abcc2fc",
-      "risk_score": 0.8782,
-      "risk_band": "medium",
-      "outgoing_links": 1,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "a9893a44",
-      "full_case_id": "a9893a44-1e38-4986-9246-aff103920e99",
-      "risk_score": 1.5936,
-      "risk_band": "high",
-      "outgoing_links": 2,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "b94ca82f",
-      "full_case_id": "b94ca82f-0204-4b55-8644-d8b6231aa3b8",
-      "risk_score": 0.1636,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "2a9c1b72",
-      "full_case_id": "2a9c1b72-e9b4-4dff-a12b-4dc41f361a07",
-      "risk_score": 1,
-      "risk_band": "medium",
-      "outgoing_links": 1,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "a447242b",
-      "full_case_id": "a447242b-47d6-4804-ac2a-2214b8214c15",
-      "risk_score": 1.8635,
-      "risk_band": "high",
-      "outgoing_links": 3,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "a61b76a1",
-      "full_case_id": "a61b76a1-1f98-4141-888c-6769cecb8f21",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "1f886c96",
-      "full_case_id": "1f886c96-020c-4883-a2fe-ee34bdcc2ca5",
-      "risk_score": 2.9803,
-      "risk_band": "high",
-      "outgoing_links": 4,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "cd71592a",
-      "full_case_id": "cd71592a-ffeb-4698-8c00-7444db72eb99",
-      "risk_score": 1,
-      "risk_band": "medium",
-      "outgoing_links": 1,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "a0150236",
-      "full_case_id": "a0150236-8f93-46ab-b466-2710af408aaf",
-      "risk_score": 0.2446,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "dd1f2056",
-      "full_case_id": "dd1f2056-c428-4d43-b835-52b1b8e15e4e",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "53940d0b",
-      "full_case_id": "53940d0b-8c0a-4963-9474-0040f57d07de",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "6e1f8139",
-      "full_case_id": "6e1f8139-ea31-4176-ac71-8cae192685ff",
-      "risk_score": 1,
-      "risk_band": "medium",
-      "outgoing_links": 1,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "c48f7cca",
-      "full_case_id": "c48f7cca-e328-4537-ba1a-bf9d9b6de555",
-      "risk_score": 0.9746,
-      "risk_band": "medium",
-      "outgoing_links": 1,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "d426aaf3",
-      "full_case_id": "d426aaf3-fe58-48b6-a3d9-1ae146beaa92",
-      "risk_score": 0.2922,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "d43bb47f",
-      "full_case_id": "d43bb47f-ca69-48b6-bdac-f1a453415b12",
-      "risk_score": 1,
-      "risk_band": "medium",
-      "outgoing_links": 1,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "201c3034",
-      "full_case_id": "201c3034-9dff-4103-82c7-06e0d790d975",
-      "risk_score": 0.9258,
-      "risk_band": "medium",
-      "outgoing_links": 1,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "46a025e4",
-      "full_case_id": "46a025e4-60c6-4ea1-ae55-b4e6872a607e",
-      "risk_score": 0.7296,
-      "risk_band": "medium",
-      "outgoing_links": 1,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "5d7ed417",
-      "full_case_id": "5d7ed417-fff5-46be-b4ed-96ec8902e308",
-      "risk_score": 1.4023,
-      "risk_band": "high",
-      "outgoing_links": 2,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "b95f4d13",
-      "full_case_id": "b95f4d13-7a5e-4d2a-a982-3bc70528c1d9",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "9da5043c",
-      "full_case_id": "9da5043c-a36b-4f5f-88a2-6438f32d7369",
-      "risk_score": 0.954,
-      "risk_band": "medium",
-      "outgoing_links": 1,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "09ba74c0",
-      "full_case_id": "09ba74c0-9840-4c64-a1ab-794d5aa59c6b",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "a8ff6008",
-      "full_case_id": "a8ff6008-6d8f-4a1a-a421-884d7c2fb648",
-      "risk_score": 1,
-      "risk_band": "medium",
-      "outgoing_links": 1,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "0c30bbb5",
-      "full_case_id": "0c30bbb5-9748-4b16-a671-11a56f705cc5",
-      "risk_score": 0.2884,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "3a74a188",
-      "full_case_id": "3a74a188-aa09-4fe2-bbb0-6c0edf5eed59",
-      "risk_score": 0.6303,
-      "risk_band": "medium",
-      "outgoing_links": 1,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "036cd6c7",
-      "full_case_id": "036cd6c7-225f-4f2e-a819-7c6ab294a614",
-      "risk_score": 0.2582,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "777c8be4",
-      "full_case_id": "777c8be4-5d32-490d-9884-6aa58f414789",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "22925b03",
-      "full_case_id": "22925b03-e92c-4c51-bd0c-2a25da23a791",
-      "risk_score": 0.7228,
-      "risk_band": "medium",
-      "outgoing_links": 1,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "5f7b8660",
-      "full_case_id": "5f7b8660-d858-4b57-8879-617d44c06255",
-      "risk_score": 1.588,
-      "risk_band": "high",
-      "outgoing_links": 2,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "d37ef81d",
-      "full_case_id": "d37ef81d-dbdb-413e-820a-14a334b57b3e",
-      "risk_score": 1.7,
-      "risk_band": "high",
-      "outgoing_links": 2,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "0dadf2d0",
-      "full_case_id": "0dadf2d0-a6fa-4d2a-b438-d2675d36a466",
-      "risk_score": 0.8047,
-      "risk_band": "medium",
-      "outgoing_links": 1,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "a85115d1",
-      "full_case_id": "a85115d1-4ac4-4ba3-b591-e8f8634c1ae0",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "3a7f8404",
-      "full_case_id": "3a7f8404-aef0-4b29-b748-b9ec1c32c3b8",
-      "risk_score": 0.243,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "64514658",
-      "full_case_id": "64514658-bd47-44e0-962b-db2930fdccb9",
-      "risk_score": 0.1546,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "dc6a1e40",
-      "full_case_id": "dc6a1e40-c0d7-462d-9910-ab49e408f5b0",
-      "risk_score": 7.1427,
-      "risk_band": "high",
-      "outgoing_links": 10,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "185558c3",
-      "full_case_id": "185558c3-c7c6-40e0-9a0a-9ccab67f0943",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "a7d667ab",
-      "full_case_id": "a7d667ab-aa9d-4b52-af16-d65aa90475ac",
-      "risk_score": 1.4205,
-      "risk_band": "high",
-      "outgoing_links": 2,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "e1866f6d",
-      "full_case_id": "e1866f6d-cd5f-4eaf-a434-edeac866ec15",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "fdab7bad",
-      "full_case_id": "fdab7bad-24e0-47fa-bd32-b212645c1fd9",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "d19c0daf",
-      "full_case_id": "d19c0daf-6406-4aca-9b04-df27beb34321",
-      "risk_score": 0.8167,
-      "risk_band": "medium",
-      "outgoing_links": 2,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "9eaa35af",
-      "full_case_id": "9eaa35af-e269-4d78-b307-3e506396759e",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "d394fb3b",
-      "full_case_id": "d394fb3b-2305-4aca-825a-86a5a8a01cb9",
-      "risk_score": 1.6975,
-      "risk_band": "high",
-      "outgoing_links": 2,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "16553e13",
-      "full_case_id": "16553e13-31b7-436c-90fa-4ac6c6df16dd",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "9891bca3",
-      "full_case_id": "9891bca3-8c70-477f-af64-c45e77fb29b1",
-      "risk_score": 1.6515,
-      "risk_band": "high",
-      "outgoing_links": 2,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "c9b08358",
-      "full_case_id": "c9b08358-b58e-40de-bebd-c738ba49fbf2",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "aac22000",
-      "full_case_id": "aac22000-0c23-41bf-ad11-c4db7849f093",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "133000c3",
-      "full_case_id": "133000c3-2d00-4e5b-86f8-d6c59ed158c3",
-      "risk_score": 0.8812,
-      "risk_band": "medium",
-      "outgoing_links": 1,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "ba25f6e4",
-      "full_case_id": "ba25f6e4-b61e-41e3-82b5-dba1a662a208",
-      "risk_score": 0.2892,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "1cfd062e",
-      "full_case_id": "1cfd062e-a14a-4ad6-8166-a74943b423cb",
-      "risk_score": 0.9439,
-      "risk_band": "medium",
-      "outgoing_links": 1,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "26f48e60",
-      "full_case_id": "26f48e60-0bc9-4446-badc-58b28245e33a",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "2b5cbf1c",
-      "full_case_id": "2b5cbf1c-2b13-48f6-9c1d-befb6d0890b9",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "caafc161",
-      "full_case_id": "caafc161-430f-4312-bd4e-287f74c536ff",
-      "risk_score": 1.3254,
-      "risk_band": "high",
-      "outgoing_links": 2,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "d0d5f7b6",
-      "full_case_id": "d0d5f7b6-5ae9-4401-93ad-22e3c5fea982",
-      "risk_score": 7.253,
-      "risk_band": "high",
-      "outgoing_links": 11,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "a3c06c80",
-      "full_case_id": "a3c06c80-c028-4852-9e90-16de69823d50",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "3581806d",
-      "full_case_id": "3581806d-ad94-4750-9e9c-42a3287961d4",
-      "risk_score": 0.6163,
-      "risk_band": "medium",
-      "outgoing_links": 1,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "7a4df830",
-      "full_case_id": "7a4df830-b71e-4426-b58e-79d7d4087ce5",
-      "risk_score": 1.5783,
-      "risk_band": "high",
-      "outgoing_links": 2,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "f9d96d8e",
-      "full_case_id": "f9d96d8e-23e7-4739-891d-0866c2a18496",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "411c7895",
-      "full_case_id": "411c7895-d25f-4cd1-be34-2acce29b555d",
-      "risk_score": 0.2926,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "d3b3ed8c",
-      "full_case_id": "d3b3ed8c-6bbd-475e-8d21-c4438e301b91",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "4752eed4",
-      "full_case_id": "4752eed4-d5a7-4473-9662-956ee40d674a",
-      "risk_score": 0.8665,
-      "risk_band": "medium",
-      "outgoing_links": 1,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "01af63ac",
-      "full_case_id": "01af63ac-5dcf-41a2-b6d5-cb2d1d4be001",
-      "risk_score": 1,
-      "risk_band": "medium",
-      "outgoing_links": 1,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "339ee3fd",
-      "full_case_id": "339ee3fd-244d-4e56-adb8-e5e4eb58511d",
-      "risk_score": 0.2846,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "39757c38",
-      "full_case_id": "39757c38-0e19-4021-bf2e-7bee8356fbd2",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "149fcf6f",
-      "full_case_id": "149fcf6f-93a8-4f0d-98c7-4532234884eb",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "9efea9c9",
-      "full_case_id": "9efea9c9-08b9-4875-8a0b-9a4450ae52db",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "6330c0b1",
-      "full_case_id": "6330c0b1-9463-456e-91f6-6d5802def99c",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "25ca630d",
-      "full_case_id": "25ca630d-b31f-4dd3-b792-217b6c5a913f",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "e0677e0e",
-      "full_case_id": "e0677e0e-eec6-4d6c-9599-b9ad610e3699",
-      "risk_score": 4.066,
-      "risk_band": "high",
-      "outgoing_links": 6,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "d4a25ee6",
-      "full_case_id": "d4a25ee6-bba1-4d69-b8c7-ec1ef63c923c",
-      "risk_score": 0.1194,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "eb3e3182",
-      "full_case_id": "eb3e3182-2224-4461-a815-b641b97570d5",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "306c72d9",
-      "full_case_id": "306c72d9-7943-43ec-a752-9e3eabe3cc0b",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "ce4ba5ba",
-      "full_case_id": "ce4ba5ba-b92d-448f-bceb-a445a69e6e94",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "26fad73c",
-      "full_case_id": "26fad73c-04b7-4fdc-8918-3fd206fc7e24",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "d5c6388f",
-      "full_case_id": "d5c6388f-3810-4651-a59f-eb0802436bb0",
-      "risk_score": 0.2998,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "5d710f38",
-      "full_case_id": "5d710f38-6d39-48bf-ba5b-7f455d529d6e",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "5a9dc928",
-      "full_case_id": "5a9dc928-df7c-48e9-a2d4-509712f73a88",
-      "risk_score": 0.2274,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "23fabcd3",
-      "full_case_id": "23fabcd3-ae75-414e-a4a6-808fd8ee6069",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "3e273b1b",
-      "full_case_id": "3e273b1b-68c9-4c6c-b1bb-0722c2c2766b",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "f105962c",
-      "full_case_id": "f105962c-fb1c-4aa8-9ae7-a6649fcb1bb1",
-      "risk_score": 0.2076,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "3e5fff07",
-      "full_case_id": "3e5fff07-0b87-4619-a147-5d951032be58",
-      "risk_score": 0.6005,
-      "risk_band": "medium",
-      "outgoing_links": 1,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "7e7068e1",
-      "full_case_id": "7e7068e1-e475-4ebd-b3e7-facfc3bb4821",
-      "risk_score": 1,
-      "risk_band": "medium",
-      "outgoing_links": 1,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "da0c5bc2",
-      "full_case_id": "da0c5bc2-6eb8-497e-ae7f-5da05c3d72f4",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "aed968f8",
-      "full_case_id": "aed968f8-bfcd-46af-aac5-f63f328a3b34",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "e5d029dd",
-      "full_case_id": "e5d029dd-a8fd-499d-a95d-d5098a5c707d",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "913df731",
-      "full_case_id": "913df731-5bb6-4709-9055-16ea733ce798",
-      "risk_score": 2.6479,
-      "risk_band": "high",
-      "outgoing_links": 4,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "d7000e75",
-      "full_case_id": "d7000e75-7acb-4c9c-a524-93b23a03ce05",
-      "risk_score": 1.2928,
-      "risk_band": "high",
-      "outgoing_links": 3,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "8272b828",
-      "full_case_id": "8272b828-8af0-4030-a265-782255787959",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "28012bae",
-      "full_case_id": "28012bae-3967-4bcb-82f5-059f1618afcd",
-      "risk_score": 0.2744,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "19cdf739",
-      "full_case_id": "19cdf739-6631-4f04-a5b1-714648eb1250",
-      "risk_score": 1.0957,
-      "risk_band": "medium",
-      "outgoing_links": 3,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "07c16f60",
-      "full_case_id": "07c16f60-3dee-48c4-bb15-7cd97687fadd",
-      "risk_score": 0.5501,
-      "risk_band": "medium",
-      "outgoing_links": 1,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "23ed9180",
-      "full_case_id": "23ed9180-c963-4e07-9aea-aa4970f1ebd1",
-      "risk_score": 0.1206,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "1d824ea1",
-      "full_case_id": "1d824ea1-3f3c-4ef2-b9eb-32f52e7b7d16",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "9499235b",
-      "full_case_id": "9499235b-1fed-4a66-8365-f36caf25c351",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "50e1b1b1",
-      "full_case_id": "50e1b1b1-7fdc-4d25-aa48-a8524ca1f0a6",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "17799c13",
-      "full_case_id": "17799c13-9b4c-48c1-b911-ef4776a8451a",
-      "risk_score": 0.705,
-      "risk_band": "medium",
-      "outgoing_links": 1,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "b10a4ef5",
-      "full_case_id": "b10a4ef5-7937-4bea-a3d6-0ee54f54cf05",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "42f449bd",
-      "full_case_id": "42f449bd-6d99-4b0b-aa66-4ced62fcb22a",
-      "risk_score": 1.557,
-      "risk_band": "high",
-      "outgoing_links": 2,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "c819fa23",
-      "full_case_id": "c819fa23-315a-4f99-8acf-2e72ca1d9591",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "1a56fa39",
-      "full_case_id": "1a56fa39-f327-42fb-b299-a31d79046af7",
-      "risk_score": 0.2446,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "db84c678",
-      "full_case_id": "db84c678-4042-41a0-859f-26b3a0209551",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "1b4b0e21",
-      "full_case_id": "1b4b0e21-1534-4ac3-b04d-c6775d55b7ad",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "d55cc603",
-      "full_case_id": "d55cc603-e48b-47b6-9b9f-07ccd8fe6bdf",
-      "risk_score": 0.2632,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "c7d9b8b8",
-      "full_case_id": "c7d9b8b8-ae1a-4902-9615-75998eb6065d",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "e0fe7886",
-      "full_case_id": "e0fe7886-fd61-423b-a834-188f52b98fdc",
-      "risk_score": 0.284,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "ab1ca688",
-      "full_case_id": "ab1ca688-92db-4918-a744-bfa1be2e1d1e",
-      "risk_score": 0.9866,
-      "risk_band": "medium",
-      "outgoing_links": 1,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "5a89301d",
-      "full_case_id": "5a89301d-48df-4f1e-acff-17d815b775f2",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "94ec0b44",
-      "full_case_id": "94ec0b44-9cb8-4b93-8f94-e7adb4de5318",
-      "risk_score": 0.1802,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "6363ca2f",
-      "full_case_id": "6363ca2f-bb25-4be5-a01e-70dcd47ccbc9",
-      "risk_score": 0.154,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "4f81cffa",
-      "full_case_id": "4f81cffa-e950-43d8-9f9d-6f38978fc2b2",
-      "risk_score": 0.1082,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "396fb5ef",
-      "full_case_id": "396fb5ef-612c-49f8-84ff-2d6bb55e399c",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "97b4bdf8",
-      "full_case_id": "97b4bdf8-9138-419b-8134-aaf39003a393",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "a0958e34",
-      "full_case_id": "a0958e34-aa61-4c47-8242-dafff2ae04b8",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "e656a589",
-      "full_case_id": "e656a589-7a38-400c-b802-adc84daa16da",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "b168515d",
-      "full_case_id": "b168515d-35bb-4c77-8dab-4f1d08dca38f",
-      "risk_score": 0.6852,
-      "risk_band": "medium",
-      "outgoing_links": 1,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "5674e211",
-      "full_case_id": "5674e211-26bf-4af6-b75f-5eef0ed66c5d",
-      "risk_score": 0.1412,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "2a48d341",
-      "full_case_id": "2a48d341-db6f-4060-80c1-47987892836e",
-      "risk_score": 0.182,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "ae425119",
-      "full_case_id": "ae425119-842f-40c8-ad9a-de374a9b1ab4",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "b2fc5017",
-      "full_case_id": "b2fc5017-8053-44e9-9d38-86b257e4e954",
-      "risk_score": 0.1734,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "a02273e3",
-      "full_case_id": "a02273e3-0c6c-41e2-9639-0f25b30c5d19",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "8e0de48f",
-      "full_case_id": "8e0de48f-b9ff-43b3-b130-bdf3fef6b1c5",
-      "risk_score": 0.9467,
-      "risk_band": "medium",
-      "outgoing_links": 1,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "ba0c71bd",
-      "full_case_id": "ba0c71bd-aea1-48c2-bde1-115d21906393",
-      "risk_score": 0.3,
+      "case_id": "6ad701fa",
+      "full_case_id": "6ad701fa-5fb2-42bc-8fa5-8e77c4ddfcb6",
+      "risk_score": 0.2702,
       "risk_band": "low",
       "outgoing_links": 0,
       "incoming_links": 1
     },
     {
-      "case_id": "bbec6533",
-      "full_case_id": "bbec6533-c356-4852-9ce2-59b959211876",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "cb461216",
-      "full_case_id": "cb461216-6d10-4709-9c99-506d585cd875",
-      "risk_score": 0.2024,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "1f1815fb",
-      "full_case_id": "1f1815fb-ef5c-411f-9cdb-e330676a6498",
-      "risk_score": 0.2832,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "8f776e27",
-      "full_case_id": "8f776e27-9ee4-43f7-aad3-813a65f246a8",
-      "risk_score": 0.2878,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "b4e27c8c",
-      "full_case_id": "b4e27c8c-1675-4528-8b85-a1026a4664a4",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "f55e77ae",
-      "full_case_id": "f55e77ae-86fd-4b9b-b23b-13c8698a19d1",
-      "risk_score": 0.1462,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "5ad10b45",
-      "full_case_id": "5ad10b45-f449-467f-a9f4-f1df12374324",
-      "risk_score": 0.9973,
-      "risk_band": "medium",
-      "outgoing_links": 1,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "6864a49f",
-      "full_case_id": "6864a49f-de58-4bee-9441-03a45da1d169",
-      "risk_score": 0.2478,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "382b9d39",
-      "full_case_id": "382b9d39-7092-42d7-b402-6571b39c6aa3",
-      "risk_score": 0.2444,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "268a3933",
-      "full_case_id": "268a3933-0c42-4d26-9cc5-4e2b8b9181c1",
-      "risk_score": 0.1394,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "559b74e9",
-      "full_case_id": "559b74e9-8dc6-4e1b-b436-f2cabb2c050a",
-      "risk_score": 0.252,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "40b38d35",
-      "full_case_id": "40b38d35-717e-4f09-985e-327c570e8454",
-      "risk_score": 0.2314,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "13b9b411",
-      "full_case_id": "13b9b411-48d0-4874-b559-cf6c9cf2226d",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "a71a58f1",
-      "full_case_id": "a71a58f1-8246-4c23-8480-1b4b7d97e203",
-      "risk_score": 0.2962,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "b046286e",
-      "full_case_id": "b046286e-0008-4702-802b-4e51694e0203",
-      "risk_score": 0.1566,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "105d4e72",
-      "full_case_id": "105d4e72-393c-4503-bb5b-3e21c7cbe96b",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "3a9ac2df",
-      "full_case_id": "3a9ac2df-fcec-436b-b0c8-30b88bc7edce",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "d4eed7d3",
-      "full_case_id": "d4eed7d3-83ae-41a1-8a90-48bc68a0c8d4",
-      "risk_score": 0.2472,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "22493189",
-      "full_case_id": "22493189-ddbd-4f77-8eb1-d056c0f3649a",
-      "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "b1d85890",
-      "full_case_id": "b1d85890-863c-42fe-be2b-b42f651d015e",
-      "risk_score": 0.8522,
-      "risk_band": "medium",
-      "outgoing_links": 1,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "3bb523b3",
-      "full_case_id": "3bb523b3-9a78-44d9-b1ba-4b2fe749cf7c",
-      "risk_score": 0.3,
+      "case_id": "c68b7c5a",
+      "full_case_id": "c68b7c5a-fc5e-4bf3-b97c-438cf000ce65",
+      "risk_score": 0.2912,
       "risk_band": "low",
       "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "0883d1bd",
-      "full_case_id": "0883d1bd-abb8-4848-b5be-62a5ae4327fc",
-      "risk_score": 1.2299,
-      "risk_band": "high",
-      "outgoing_links": 2,
       "incoming_links": 1
     },
     {
-      "case_id": "880e98cf",
-      "full_case_id": "880e98cf-0b7c-4e32-8d4c-3ed46e15dcca",
+      "case_id": "b16ff242",
+      "full_case_id": "b16ff242-78e1-44f8-b02a-2c9806fa82ee",
       "risk_score": 0.3,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "bc9e3022",
-      "full_case_id": "bc9e3022-cac2-4683-8470-a8a4ccdaa1b7",
-      "risk_score": 0.215,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "d67700b7",
-      "full_case_id": "d67700b7-cb3b-481a-a802-fad238d348fc",
-      "risk_score": 0.1716,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "80fb9f2f",
-      "full_case_id": "80fb9f2f-1cea-4875-8dd2-965442a908e3",
-      "risk_score": 0.2272,
-      "risk_band": "low",
-      "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "c178c87c",
-      "full_case_id": "c178c87c-83b2-41f1-9e00-339539b064ee",
-      "risk_score": 0.288,
       "risk_band": "low",
       "outgoing_links": 0,
       "incoming_links": 1
     },
     {
-      "case_id": "529260e1",
-      "full_case_id": "529260e1-2621-4e87-8913-b387ca403e30",
-      "risk_score": 0.1872,
+      "case_id": "d784c8ca",
+      "full_case_id": "d784c8ca-2d7f-49fa-bf02-a842212ec490",
+      "risk_score": 0.2986,
       "risk_band": "low",
       "outgoing_links": 0,
       "incoming_links": 1
     },
     {
-      "case_id": "d3285f2a",
-      "full_case_id": "d3285f2a-d563-44bd-9053-ffb5bf180f85",
+      "case_id": "457f1c4f",
+      "full_case_id": "457f1c4f-0664-4149-b14d-d8c9528b4e34",
       "risk_score": 0.3,
       "risk_band": "low",
       "outgoing_links": 0,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "144b45cc",
-      "full_case_id": "144b45cc-22a6-4f29-8aaf-09578cb4a8d5",
-      "risk_score": 0.8009,
-      "risk_band": "medium",
-      "outgoing_links": 1,
       "incoming_links": 1
     }
   ],
   "key_nodes": [
     {
-      "case_id": "83bed0f9",
-      "full_case_id": "83bed0f9-d2a0-4d63-aa97-b5c96f8df692",
-      "risk_score": 7.2586,
+      "case_id": "0010059d",
+      "full_case_id": "0010059d-56f7-4129-883b-6c1d9203fa3d",
+      "risk_score": 2.7356,
       "risk_band": "high",
-      "outgoing_links": 10,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "d0d5f7b6",
-      "full_case_id": "d0d5f7b6-5ae9-4401-93ad-22e3c5fea982",
-      "risk_score": 7.253,
-      "risk_band": "high",
-      "outgoing_links": 11,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "dc6a1e40",
-      "full_case_id": "dc6a1e40-c0d7-462d-9910-ab49e408f5b0",
-      "risk_score": 7.1427,
-      "risk_band": "high",
-      "outgoing_links": 10,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "e196e793",
-      "full_case_id": "e196e793-22e2-4422-b01f-6b30419a2c22",
-      "risk_score": 6.7185,
-      "risk_band": "high",
-      "outgoing_links": 10,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "df4ce6d0",
-      "full_case_id": "df4ce6d0-6bcc-4bbb-8f14-a2b426f8711e",
-      "risk_score": 4.6377,
-      "risk_band": "high",
-      "outgoing_links": 7,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "5146773d",
-      "full_case_id": "5146773d-778f-4210-9444-a1135cc8e634",
-      "risk_score": 4.3301,
-      "risk_band": "high",
-      "outgoing_links": 6,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "e0677e0e",
-      "full_case_id": "e0677e0e-eec6-4d6c-9599-b9ad610e3699",
-      "risk_score": 4.066,
-      "risk_band": "high",
-      "outgoing_links": 6,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "fa238985",
-      "full_case_id": "fa238985-7994-45f7-8c52-651db67b5a65",
-      "risk_score": 3.5475,
-      "risk_band": "high",
-      "outgoing_links": 5,
-      "incoming_links": 1
-    },
-    {
-      "case_id": "be2ea386",
-      "full_case_id": "be2ea386-16e9-416d-b111-f52d591d84b0",
-      "risk_score": 3.1416,
-      "risk_band": "high",
-      "outgoing_links": 5,
+      "outgoing_links": 4,
       "incoming_links": 0
     },
     {
-      "case_id": "6e2bbaff",
-      "full_case_id": "6e2bbaff-4316-4821-8810-d5ef6db3fdbe",
-      "risk_score": 3.1193,
+      "case_id": "3951560f",
+      "full_case_id": "3951560f-a2a9-4465-be9f-61f0c2237a87",
+      "risk_score": 2.2298,
       "risk_band": "high",
-      "outgoing_links": 5,
+      "outgoing_links": 3,
+      "incoming_links": 1
+    },
+    {
+      "case_id": "93084971",
+      "full_case_id": "93084971-8537-4317-86ca-a6f9c5ced50e",
+      "risk_score": 1.7,
+      "risk_band": "high",
+      "outgoing_links": 2,
+      "incoming_links": 1
+    },
+    {
+      "case_id": "982540a6",
+      "full_case_id": "982540a6-9f83-48bc-83c4-ae560a6a1632",
+      "risk_score": 1.6431,
+      "risk_band": "high",
+      "outgoing_links": 2,
+      "incoming_links": 1
+    },
+    {
+      "case_id": "c1595385",
+      "full_case_id": "c1595385-0d1c-4030-b530-822926f9249e",
+      "risk_score": 1.6305,
+      "risk_band": "high",
+      "outgoing_links": 2,
+      "incoming_links": 1
+    },
+    {
+      "case_id": "33670646",
+      "full_case_id": "33670646-89cd-47be-b8a8-5e6cb6efe48c",
+      "risk_score": 1.3323,
+      "risk_band": "high",
+      "outgoing_links": 2,
+      "incoming_links": 1
+    },
+    {
+      "case_id": "5ec510fe",
+      "full_case_id": "5ec510fe-1631-45ee-8373-8d117a646e39",
+      "risk_score": 1,
+      "risk_band": "medium",
+      "outgoing_links": 1,
+      "incoming_links": 1
+    },
+    {
+      "case_id": "a822dd61",
+      "full_case_id": "a822dd61-c312-4408-b96a-9540e52a2fd7",
+      "risk_score": 1,
+      "risk_band": "medium",
+      "outgoing_links": 1,
+      "incoming_links": 1
+    },
+    {
+      "case_id": "d647ff81",
+      "full_case_id": "d647ff81-3a0a-4ddc-9bd3-3415d2a3d3fa",
+      "risk_score": 1,
+      "risk_band": "medium",
+      "outgoing_links": 1,
+      "incoming_links": 1
+    },
+    {
+      "case_id": "bfbfc982",
+      "full_case_id": "bfbfc982-f62a-47c4-8956-6893f941bac1",
+      "risk_score": 0.9913,
+      "risk_band": "medium",
+      "outgoing_links": 1,
       "incoming_links": 1
     }
   ],
   "edges": [
     {
-      "source": "be2ea386-16e9-416d-b111-f52d591d84b0",
-      "target": "16977bec-0d56-426c-89c8-19c638a14319",
+      "source": "0010059d-56f7-4129-883b-6c1d9203fa3d",
+      "target": "c1595385-0d1c-4030-b530-822926f9249e",
       "probability": 1,
       "confidence": "high",
       "inference": "posterior_marginal_mode"
     },
     {
-      "source": "f248b977-acdd-497e-8778-52b2e32fbf6e",
-      "target": "74b96b79-00f5-41e0-8665-24eea2cfed78",
-      "probability": 0.4173,
+      "source": "c1595385-0d1c-4030-b530-822926f9249e",
+      "target": "5ec510fe-1631-45ee-8373-8d117a646e39",
+      "probability": 1,
+      "confidence": "high",
+      "inference": "posterior_marginal_mode"
+    },
+    {
+      "source": "0010059d-56f7-4129-883b-6c1d9203fa3d",
+      "target": "31e27190-6f5d-4798-a174-524dec7c088a",
+      "probability": 0.908,
+      "confidence": "high",
+      "inference": "posterior_marginal_mode"
+    },
+    {
+      "source": "0010059d-56f7-4129-883b-6c1d9203fa3d",
+      "target": "33670646-89cd-47be-b8a8-5e6cb6efe48c",
+      "probability": 1,
+      "confidence": "high",
+      "inference": "posterior_marginal_mode"
+    },
+    {
+      "source": "0010059d-56f7-4129-883b-6c1d9203fa3d",
+      "target": "a822dd61-c312-4408-b96a-9540e52a2fd7",
+      "probability": 1,
+      "confidence": "high",
+      "inference": "posterior_marginal_mode"
+    },
+    {
+      "source": "33670646-89cd-47be-b8a8-5e6cb6efe48c",
+      "target": "b0d81316-80f3-464e-9c31-037abc53f50e",
+      "probability": 1,
+      "confidence": "high",
+      "inference": "posterior_marginal_mode"
+    },
+    {
+      "source": "31e27190-6f5d-4798-a174-524dec7c088a",
+      "target": "11a01e72-218e-4125-9809-312d74a724f6",
+      "probability": 1,
+      "confidence": "high",
+      "inference": "posterior_marginal_mode"
+    },
+    {
+      "source": "5ec510fe-1631-45ee-8373-8d117a646e39",
+      "target": "93084971-8537-4317-86ca-a6f9c5ced50e",
+      "probability": 1,
+      "confidence": "high",
+      "inference": "posterior_marginal_mode"
+    },
+    {
+      "source": "11a01e72-218e-4125-9809-312d74a724f6",
+      "target": "1055ac42-2b39-425a-ab71-c3de77a6a561",
+      "probability": 0.828,
+      "confidence": "high",
+      "inference": "posterior_marginal_mode"
+    },
+    {
+      "source": "a822dd61-c312-4408-b96a-9540e52a2fd7",
+      "target": "d647ff81-3a0a-4ddc-9bd3-3415d2a3d3fa",
+      "probability": 1,
+      "confidence": "high",
+      "inference": "posterior_marginal_mode"
+    },
+    {
+      "source": "93084971-8537-4317-86ca-a6f9c5ced50e",
+      "target": "86d09f05-7b9b-468b-adb5-f3cea29132ae",
+      "probability": 1,
+      "confidence": "high",
+      "inference": "posterior_marginal_mode"
+    },
+    {
+      "source": "d647ff81-3a0a-4ddc-9bd3-3415d2a3d3fa",
+      "target": "40f3f4c0-ae98-43e9-b95d-ec167a06b6f5",
+      "probability": 1,
+      "confidence": "high",
+      "inference": "posterior_marginal_mode"
+    },
+    {
+      "source": "93084971-8537-4317-86ca-a6f9c5ced50e",
+      "target": "982540a6-9f83-48bc-83c4-ae560a6a1632",
+      "probability": 1,
+      "confidence": "high",
+      "inference": "posterior_marginal_mode"
+    },
+    {
+      "source": "1055ac42-2b39-425a-ab71-c3de77a6a561",
+      "target": "207639ef-fd25-4e21-8cb7-3ee896b83bdb",
+      "probability": 0.8613,
+      "confidence": "high",
+      "inference": "posterior_marginal_mode"
+    },
+    {
+      "source": "33670646-89cd-47be-b8a8-5e6cb6efe48c",
+      "target": "3951560f-a2a9-4465-be9f-61f0c2237a87",
+      "probability": 0.4747,
       "confidence": "low",
       "inference": "posterior_marginal_mode"
     },
     {
-      "source": "be2ea386-16e9-416d-b111-f52d591d84b0",
-      "target": "df4ce6d0-6bcc-4bbb-8f14-a2b426f8711e",
+      "source": "3951560f-a2a9-4465-be9f-61f0c2237a87",
+      "target": "fd413ac0-855b-4469-9ed7-b6a560faec91",
       "probability": 1,
       "confidence": "high",
       "inference": "posterior_marginal_mode"
     },
     {
-      "source": "74b96b79-00f5-41e0-8665-24eea2cfed78",
-      "target": "c594c7a5-82d8-4934-aa37-5776f7da22c6",
-      "probability": 0.7513,
-      "confidence": "medium",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "be2ea386-16e9-416d-b111-f52d591d84b0",
-      "target": "de76d6af-507c-4ccf-9b45-28f2436dc932",
-      "probability": 0.8453,
+      "source": "982540a6-9f83-48bc-83c4-ae560a6a1632",
+      "target": "c64d05cc-cb4b-47b6-9170-fdfc542fa3d5",
+      "probability": 0.948,
       "confidence": "high",
       "inference": "posterior_marginal_mode"
     },
     {
-      "source": "dfdba98c-fbdd-4e0b-a749-493079e03f1f",
-      "target": "083edd00-a1c3-4031-91e5-e03155b9cb1a",
-      "probability": 0.846,
+      "source": "3951560f-a2a9-4465-be9f-61f0c2237a87",
+      "target": "bfbfc982-f62a-47c4-8956-6893f941bac1",
+      "probability": 0.982,
       "confidence": "high",
       "inference": "posterior_marginal_mode"
     },
     {
-      "source": "f248b977-acdd-497e-8778-52b2e32fbf6e",
-      "target": "dfdba98c-fbdd-4e0b-a749-493079e03f1f",
-      "probability": 0.5673,
-      "confidence": "low",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "ef4b618a-3095-4b9d-a35c-6c20ce274592",
-      "target": "57296b55-1dda-40f1-8556-d13dfe220d2b",
-      "probability": 0.9,
+      "source": "c1595385-0d1c-4030-b530-822926f9249e",
+      "target": "6ad701fa-5fb2-42bc-8fa5-8e77c4ddfcb6",
+      "probability": 0.9007,
       "confidence": "high",
       "inference": "posterior_marginal_mode"
     },
     {
-      "source": "be2ea386-16e9-416d-b111-f52d591d84b0",
-      "target": "7f0b843d-7c61-487a-a3b2-c649f50a72a5",
+      "source": "982540a6-9f83-48bc-83c4-ae560a6a1632",
+      "target": "c68b7c5a-fc5e-4bf3-b97c-438cf000ce65",
+      "probability": 0.9707,
+      "confidence": "high",
+      "inference": "posterior_marginal_mode"
+    },
+    {
+      "source": "207639ef-fd25-4e21-8cb7-3ee896b83bdb",
+      "target": "b16ff242-78e1-44f8-b02a-2c9806fa82ee",
       "probability": 1,
       "confidence": "high",
       "inference": "posterior_marginal_mode"
     },
     {
-      "source": "de76d6af-507c-4ccf-9b45-28f2436dc932",
-      "target": "ef4b618a-3095-4b9d-a35c-6c20ce274592",
+      "source": "bfbfc982-f62a-47c4-8956-6893f941bac1",
+      "target": "d784c8ca-2d7f-49fa-bf02-a842212ec490",
       "probability": 0.9953,
       "confidence": "high",
       "inference": "posterior_marginal_mode"
     },
     {
-      "source": "6e2bbaff-4316-4821-8810-d5ef6db3fdbe",
-      "target": "4afa5f8f-9b35-49d1-a4d7-e58bc81a57cc",
-      "probability": 0.696,
-      "confidence": "medium",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "7f0b843d-7c61-487a-a3b2-c649f50a72a5",
-      "target": "a6e3b260-ef42-49c6-91f1-154133796dd7",
+      "source": "3951560f-a2a9-4465-be9f-61f0c2237a87",
+      "target": "457f1c4f-0664-4149-b14d-d8c9528b4e34",
       "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "f248b977-acdd-497e-8778-52b2e32fbf6e",
-      "target": "6e2bbaff-4316-4821-8810-d5ef6db3fdbe",
-      "probability": 0.6427,
-      "confidence": "medium",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "d56a39cf-d401-4acb-844d-0c31030b6ce6",
-      "target": "330f0b9b-d38d-4c77-a33b-24d10da0058a",
-      "probability": 0.982,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "df4ce6d0-6bcc-4bbb-8f14-a2b426f8711e",
-      "target": "d1c65afe-ad1e-490e-8235-94a9509c24d7",
-      "probability": 0.9947,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "d56a39cf-d401-4acb-844d-0c31030b6ce6",
-      "target": "e83546b9-b1bd-4348-a4ee-6fefbc30ccdd",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "df4ce6d0-6bcc-4bbb-8f14-a2b426f8711e",
-      "target": "2127a213-3eba-425e-8a76-236f1a52c5fa",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "16977bec-0d56-426c-89c8-19c638a14319",
-      "target": "0e80ea37-20a1-421b-a7d3-bd6e018dc288",
-      "probability": 0.7087,
-      "confidence": "medium",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "16977bec-0d56-426c-89c8-19c638a14319",
-      "target": "225ca270-c313-4577-ab04-17d2e3be1a4e",
-      "probability": 0.944,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "a79b8c4a-2d21-4187-8565-6cfb43b0403f",
-      "target": "1e8fb4ca-1817-4cf7-815d-948144f0d532",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "be2ea386-16e9-416d-b111-f52d591d84b0",
-      "target": "f248b977-acdd-497e-8778-52b2e32fbf6e",
-      "probability": 0.6427,
-      "confidence": "medium",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "6e2bbaff-4316-4821-8810-d5ef6db3fdbe",
-      "target": "8844ba8f-2f3e-41f8-88cf-882fad35dbf6",
-      "probability": 0.9427,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "f248b977-acdd-497e-8778-52b2e32fbf6e",
-      "target": "4fce460b-883f-4422-9b3a-e6fb86f665ff",
-      "probability": 0.5653,
-      "confidence": "low",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "d56a39cf-d401-4acb-844d-0c31030b6ce6",
-      "target": "2ffff6b4-23e1-439a-b8bd-4383fab204a9",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "0e80ea37-20a1-421b-a7d3-bd6e018dc288",
-      "target": "a79b8c4a-2d21-4187-8565-6cfb43b0403f",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "a79b8c4a-2d21-4187-8565-6cfb43b0403f",
-      "target": "6053c07f-99db-4277-8912-96e7dca76279",
-      "probability": 0.604,
-      "confidence": "medium",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "225ca270-c313-4577-ab04-17d2e3be1a4e",
-      "target": "20823e35-bc2c-44a0-9fb8-dd01ab098348",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "de76d6af-507c-4ccf-9b45-28f2436dc932",
-      "target": "d56a39cf-d401-4acb-844d-0c31030b6ce6",
-      "probability": 0.75,
-      "confidence": "medium",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "225ca270-c313-4577-ab04-17d2e3be1a4e",
-      "target": "475a42b9-1e4c-4f4e-9aff-59b45f58c99e",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "330f0b9b-d38d-4c77-a33b-24d10da0058a",
-      "target": "850064db-13a9-4215-b531-f3dfdde709af",
-      "probability": 0.94,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "a6e3b260-ef42-49c6-91f1-154133796dd7",
-      "target": "c03999bf-be11-4576-b83b-591483759c9a",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "330f0b9b-d38d-4c77-a33b-24d10da0058a",
-      "target": "ad62c91f-0159-43f5-bfcb-e6549b628506",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "a6e3b260-ef42-49c6-91f1-154133796dd7",
-      "target": "fa238985-7994-45f7-8c52-651db67b5a65",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "a79b8c4a-2d21-4187-8565-6cfb43b0403f",
-      "target": "e196e793-22e2-4422-b01f-6b30419a2c22",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "6e2bbaff-4316-4821-8810-d5ef6db3fdbe",
-      "target": "1510e7de-3737-4062-b560-06e1adf33e17",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "7f0b843d-7c61-487a-a3b2-c649f50a72a5",
-      "target": "9291123e-2649-4955-ad5c-036f0f9c81c5",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "e196e793-22e2-4422-b01f-6b30419a2c22",
-      "target": "deaafe93-1856-4202-a94e-90ed545be03c",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "d56a39cf-d401-4acb-844d-0c31030b6ce6",
-      "target": "3bc9b879-3e94-4ce6-a2de-47a33a4fbf51",
-      "probability": 0.9727,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "ef4b618a-3095-4b9d-a35c-6c20ce274592",
-      "target": "07dc3105-321b-48c5-8a17-f816db6740bb",
-      "probability": 0.88,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "df4ce6d0-6bcc-4bbb-8f14-a2b426f8711e",
-      "target": "e1a01721-970a-4d79-8916-2f78ce60c7b1",
-      "probability": 0.7807,
-      "confidence": "medium",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "df4ce6d0-6bcc-4bbb-8f14-a2b426f8711e",
-      "target": "1c395dd4-e7e8-4aaf-973d-e072fe3e0aee",
-      "probability": 0.824,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "df4ce6d0-6bcc-4bbb-8f14-a2b426f8711e",
-      "target": "91f6afcc-f800-49ec-9ecc-110a6596e57e",
-      "probability": 0.7947,
-      "confidence": "medium",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "07dc3105-321b-48c5-8a17-f816db6740bb",
-      "target": "106ba37b-f0c4-47e1-99e7-a915c6dee18d",
-      "probability": 0.8507,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "e196e793-22e2-4422-b01f-6b30419a2c22",
-      "target": "aeb64509-a3be-4e2d-8cdf-eca69db85d78",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "225ca270-c313-4577-ab04-17d2e3be1a4e",
-      "target": "83bed0f9-d2a0-4d63-aa97-b5c96f8df692",
-      "probability": 0.862,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "df4ce6d0-6bcc-4bbb-8f14-a2b426f8711e",
-      "target": "4fba5781-53f2-4972-b03f-240f528f656d",
-      "probability": 0.922,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "fa238985-7994-45f7-8c52-651db67b5a65",
-      "target": "9cdddf4b-186a-4d04-acc0-0ae8b1e8397b",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "fa238985-7994-45f7-8c52-651db67b5a65",
-      "target": "a64012b9-42be-43e7-8e76-9d0b1e380d8e",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "20823e35-bc2c-44a0-9fb8-dd01ab098348",
-      "target": "8788fb39-09e4-45d8-842d-a4fb6476dc37",
-      "probability": 0.48,
-      "confidence": "low",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "c594c7a5-82d8-4934-aa37-5776f7da22c6",
-      "target": "192dcda4-3027-4401-8f1c-8989f9ff023c",
-      "probability": 0.698,
-      "confidence": "medium",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "5146773d-778f-4210-9444-a1135cc8e634",
-      "target": "c08597d1-52ee-4c12-bafc-0a1661eb139b",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "083edd00-a1c3-4031-91e5-e03155b9cb1a",
-      "target": "7029c0a9-9351-40e2-87b3-ab8b5c9f1de2",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "e196e793-22e2-4422-b01f-6b30419a2c22",
-      "target": "14f09395-13de-4da5-8953-29146f8d7cf4",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "83bed0f9-d2a0-4d63-aa97-b5c96f8df692",
-      "target": "7f286755-6e00-433f-a86d-16605925db4f",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "5146773d-778f-4210-9444-a1135cc8e634",
-      "target": "9776615d-a22e-4859-b975-c986246d493e",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "c594c7a5-82d8-4934-aa37-5776f7da22c6",
-      "target": "0197330c-0e67-42ec-9f22-d3e5d3dec260",
-      "probability": 0.7233,
-      "confidence": "medium",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "df4ce6d0-6bcc-4bbb-8f14-a2b426f8711e",
-      "target": "24b1983e-62a6-400b-af69-d8643309f705",
-      "probability": 0.8807,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "c03999bf-be11-4576-b83b-591483759c9a",
-      "target": "5146773d-778f-4210-9444-a1135cc8e634",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "7029c0a9-9351-40e2-87b3-ab8b5c9f1de2",
-      "target": "f9b5e5f7-93a3-424c-b36d-0c5bb3ffc777",
-      "probability": 0.606,
-      "confidence": "medium",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "a64012b9-42be-43e7-8e76-9d0b1e380d8e",
-      "target": "8df5c9e6-04a3-4bc3-813a-0897600e9cf0",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "ad62c91f-0159-43f5-bfcb-e6549b628506",
-      "target": "2be6bd14-543c-475d-b57d-3b25daba31b4",
-      "probability": 0.9253,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "9776615d-a22e-4859-b975-c986246d493e",
-      "target": "ae957b2d-2ad4-4fbb-9a3c-2f5f5aca5177",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "2be6bd14-543c-475d-b57d-3b25daba31b4",
-      "target": "b1e12797-3686-487e-b905-333f166fe58a",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "83bed0f9-d2a0-4d63-aa97-b5c96f8df692",
-      "target": "95be0157-df5c-4db6-8a09-50032af9dd4f",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "6e2bbaff-4316-4821-8810-d5ef6db3fdbe",
-      "target": "50068b38-b7a5-4283-a55c-4c91c3edfa5e",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "106ba37b-f0c4-47e1-99e7-a915c6dee18d",
-      "target": "17698ec1-45a1-402d-9b16-dea7063db097",
-      "probability": 0.5013,
-      "confidence": "low",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "83bed0f9-d2a0-4d63-aa97-b5c96f8df692",
-      "target": "d4dca2f0-aaa9-466e-84dc-8cf1e0742641",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "225ca270-c313-4577-ab04-17d2e3be1a4e",
-      "target": "6e5523a5-ac31-440f-95e6-7a409a29b3be",
-      "probability": 0.8633,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "1510e7de-3737-4062-b560-06e1adf33e17",
-      "target": "9b0994c9-e42c-40f0-9c6c-73c5de57fb5d",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "b1e12797-3686-487e-b905-333f166fe58a",
-      "target": "48f9f9cf-7844-499a-b6b9-20fecae02604",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "c594c7a5-82d8-4934-aa37-5776f7da22c6",
-      "target": "7d8d18f6-9c8f-4e40-aaf8-7b2ec01a4667",
-      "probability": 0.5587,
-      "confidence": "low",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "17698ec1-45a1-402d-9b16-dea7063db097",
-      "target": "fed631af-d389-4b04-a363-e01e577f54cb",
-      "probability": 0.8353,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "9cdddf4b-186a-4d04-acc0-0ae8b1e8397b",
-      "target": "208da908-b454-487b-8e5b-caad715cd643",
-      "probability": 0.844,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "6e5523a5-ac31-440f-95e6-7a409a29b3be",
-      "target": "70eae65e-75c2-4053-ae1d-63aca9486eb0",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "e196e793-22e2-4422-b01f-6b30419a2c22",
-      "target": "f95779ca-da67-40bc-be92-82d3d489886c",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "e196e793-22e2-4422-b01f-6b30419a2c22",
-      "target": "9d373b73-54d2-43b5-bf79-4b3a904441f4",
-      "probability": 0.982,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "9776615d-a22e-4859-b975-c986246d493e",
-      "target": "035ebfa7-a49b-4ec0-a29d-2c1d0b120e2e",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "7f0b843d-7c61-487a-a3b2-c649f50a72a5",
-      "target": "c1e213d6-d25e-4f72-ad6a-d3e5d8a41443",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "7d8d18f6-9c8f-4e40-aaf8-7b2ec01a4667",
-      "target": "0e4b1636-bc09-4cf5-ab00-6c9d66149e01",
-      "probability": 0.998,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "8844ba8f-2f3e-41f8-88cf-882fad35dbf6",
-      "target": "df792544-c13e-4ec2-a5e0-a3e935deee84",
-      "probability": 0.6127,
-      "confidence": "medium",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "0e4b1636-bc09-4cf5-ab00-6c9d66149e01",
-      "target": "d188d906-5aa9-4d56-8282-9ca0071128d8",
-      "probability": 0.998,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "83bed0f9-d2a0-4d63-aa97-b5c96f8df692",
-      "target": "bd0b395d-046f-4130-870c-13361b522ee8",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "83bed0f9-d2a0-4d63-aa97-b5c96f8df692",
-      "target": "f1a9fdc1-d893-4fe7-916f-c3b6c9ca27c8",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "e196e793-22e2-4422-b01f-6b30419a2c22",
-      "target": "c7fbfaae-e10f-4445-968c-d66377961950",
-      "probability": 0.99,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "83bed0f9-d2a0-4d63-aa97-b5c96f8df692",
-      "target": "718c5049-3d40-430e-b3e2-a1d43d26ca16",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "e196e793-22e2-4422-b01f-6b30419a2c22",
-      "target": "646e8fcc-61bc-42a9-9551-a79e47fb821e",
-      "probability": 0.8593,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "e196e793-22e2-4422-b01f-6b30419a2c22",
-      "target": "9db4ff95-7c7c-4585-be6d-3068eed1c2ad",
-      "probability": 0.8673,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "b1e12797-3686-487e-b905-333f166fe58a",
-      "target": "800d5419-31c1-4a2d-9530-713befb1dbe6",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "70eae65e-75c2-4053-ae1d-63aca9486eb0",
-      "target": "2e44f15e-5e4f-48ad-a8d5-96c72a6853a4",
-      "probability": 0.7233,
-      "confidence": "medium",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "e196e793-22e2-4422-b01f-6b30419a2c22",
-      "target": "5a924ccf-f38d-43f0-98ca-11e52a390b82",
-      "probability": 0.9673,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "c08597d1-52ee-4c12-bafc-0a1661eb139b",
-      "target": "a9b15e23-d58c-4cbc-804d-0916004db58a",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "a6e3b260-ef42-49c6-91f1-154133796dd7",
-      "target": "6c467a31-26c7-4511-ae6c-cc803e9fd84b",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "8df5c9e6-04a3-4bc3-813a-0897600e9cf0",
-      "target": "7e333999-b315-40dd-ad58-338c6587c87d",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "eb410610-93af-4322-9ab8-77e744324e19",
-      "target": "e2c785df-485f-469a-aadd-5b3d3b3b57d6",
-      "probability": 0.808,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "9291123e-2649-4955-ad5c-036f0f9c81c5",
-      "target": "e4d9d5c6-3351-4455-8a6f-b6d07f312ad7",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "fa238985-7994-45f7-8c52-651db67b5a65",
-      "target": "f4072b66-d1c5-48a0-a0af-f2b6f0086271",
-      "probability": 0.6393,
-      "confidence": "medium",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "e196e793-22e2-4422-b01f-6b30419a2c22",
-      "target": "6bd1dbc8-e65e-4b2f-a2a7-6533c25b8d3e",
-      "probability": 0.5033,
-      "confidence": "low",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "9776615d-a22e-4859-b975-c986246d493e",
-      "target": "eb410610-93af-4322-9ab8-77e744324e19",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "8df5c9e6-04a3-4bc3-813a-0897600e9cf0",
-      "target": "358d5f92-1ee7-455c-a720-45ef0c9be21d",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "a64012b9-42be-43e7-8e76-9d0b1e380d8e",
-      "target": "1bb5ae07-7523-4dcf-bc76-b4ab1abcc2fc",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "9b0994c9-e42c-40f0-9c6c-73c5de57fb5d",
-      "target": "a9893a44-1e38-4986-9246-aff103920e99",
-      "probability": 0.6453,
-      "confidence": "medium",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "083edd00-a1c3-4031-91e5-e03155b9cb1a",
-      "target": "b94ca82f-0204-4b55-8644-d8b6231aa3b8",
-      "probability": 0.5453,
-      "confidence": "low",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "eb410610-93af-4322-9ab8-77e744324e19",
-      "target": "2a9c1b72-e9b4-4dff-a12b-4dc41f361a07",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "eb410610-93af-4322-9ab8-77e744324e19",
-      "target": "a447242b-47d6-4804-ac2a-2214b8214c15",
-      "probability": 0.786,
-      "confidence": "medium",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "70eae65e-75c2-4053-ae1d-63aca9486eb0",
-      "target": "a61b76a1-1f98-4141-888c-6769cecb8f21",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "24b1983e-62a6-400b-af69-d8643309f705",
-      "target": "1f886c96-020c-4883-a2fe-ee34bdcc2ca5",
-      "probability": 0.6027,
-      "confidence": "medium",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "6e5523a5-ac31-440f-95e6-7a409a29b3be",
-      "target": "cd71592a-ffeb-4698-8c00-7444db72eb99",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "f4072b66-d1c5-48a0-a0af-f2b6f0086271",
-      "target": "a0150236-8f93-46ab-b466-2710af408aaf",
-      "probability": 0.8153,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "17698ec1-45a1-402d-9b16-dea7063db097",
-      "target": "dd1f2056-c428-4d43-b835-52b1b8e15e4e",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "83bed0f9-d2a0-4d63-aa97-b5c96f8df692",
-      "target": "53940d0b-8c0a-4963-9474-0040f57d07de",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "fa238985-7994-45f7-8c52-651db67b5a65",
-      "target": "6e1f8139-ea31-4176-ac71-8cae192685ff",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "f9b5e5f7-93a3-424c-b36d-0c5bb3ffc777",
-      "target": "c48f7cca-e328-4537-ba1a-bf9d9b6de555",
-      "probability": 0.9153,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "c7fbfaae-e10f-4445-968c-d66377961950",
-      "target": "d426aaf3-fe58-48b6-a3d9-1ae146beaa92",
-      "probability": 0.974,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "a64012b9-42be-43e7-8e76-9d0b1e380d8e",
-      "target": "d43bb47f-ca69-48b6-bdac-f1a453415b12",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "fed631af-d389-4b04-a363-e01e577f54cb",
-      "target": "201c3034-9dff-4103-82c7-06e0d790d975",
-      "probability": 0.8833,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "c7fbfaae-e10f-4445-968c-d66377961950",
-      "target": "46a025e4-60c6-4ea1-ae55-b4e6872a607e",
-      "probability": 0.752,
-      "confidence": "medium",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "83bed0f9-d2a0-4d63-aa97-b5c96f8df692",
-      "target": "5d7ed417-fff5-46be-b4ed-96ec8902e308",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "83bed0f9-d2a0-4d63-aa97-b5c96f8df692",
-      "target": "b95f4d13-7a5e-4d2a-a982-3bc70528c1d9",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "1510e7de-3737-4062-b560-06e1adf33e17",
-      "target": "9da5043c-a36b-4f5f-88a2-6438f32d7369",
-      "probability": 0.8467,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "83bed0f9-d2a0-4d63-aa97-b5c96f8df692",
-      "target": "09ba74c0-9840-4c64-a1ab-794d5aa59c6b",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "a9893a44-1e38-4986-9246-aff103920e99",
-      "target": "a8ff6008-6d8f-4a1a-a421-884d7c2fb648",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "17698ec1-45a1-402d-9b16-dea7063db097",
-      "target": "0c30bbb5-9748-4b16-a671-11a56f705cc5",
-      "probability": 0.9613,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "17698ec1-45a1-402d-9b16-dea7063db097",
-      "target": "3a74a188-aa09-4fe2-bbb0-6c0edf5eed59",
-      "probability": 0.7867,
-      "confidence": "medium",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "5d7ed417-fff5-46be-b4ed-96ec8902e308",
-      "target": "036cd6c7-225f-4f2e-a819-7c6ab294a614",
-      "probability": 0.8607,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "1f886c96-020c-4883-a2fe-ee34bdcc2ca5",
-      "target": "777c8be4-5d32-490d-9884-6aa58f414789",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "f4072b66-d1c5-48a0-a0af-f2b6f0086271",
-      "target": "22925b03-e92c-4c51-bd0c-2a25da23a791",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "f4072b66-d1c5-48a0-a0af-f2b6f0086271",
-      "target": "5f7b8660-d858-4b57-8879-617d44c06255",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "5146773d-778f-4210-9444-a1135cc8e634",
-      "target": "d37ef81d-dbdb-413e-820a-14a334b57b3e",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "6e2bbaff-4316-4821-8810-d5ef6db3fdbe",
-      "target": "0dadf2d0-a6fa-4d2a-b438-d2675d36a466",
-      "probability": 0.542,
-      "confidence": "low",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "800d5419-31c1-4a2d-9530-713befb1dbe6",
-      "target": "a85115d1-4ac4-4ba3-b591-e8f8634c1ae0",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "a447242b-47d6-4804-ac2a-2214b8214c15",
-      "target": "3a7f8404-aef0-4b29-b748-b9ec1c32c3b8",
-      "probability": 0.81,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "a447242b-47d6-4804-ac2a-2214b8214c15",
-      "target": "64514658-bd47-44e0-962b-db2930fdccb9",
-      "probability": 0.5153,
-      "confidence": "low",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "800d5419-31c1-4a2d-9530-713befb1dbe6",
-      "target": "dc6a1e40-c0d7-462d-9910-ab49e408f5b0",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "1f886c96-020c-4883-a2fe-ee34bdcc2ca5",
-      "target": "185558c3-c7c6-40e0-9a0a-9ccab67f0943",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "8df5c9e6-04a3-4bc3-813a-0897600e9cf0",
-      "target": "a7d667ab-aa9d-4b52-af16-d65aa90475ac",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "2ffff6b4-23e1-439a-b8bd-4383fab204a9",
-      "target": "e1866f6d-cd5f-4eaf-a434-edeac866ec15",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "dc6a1e40-c0d7-462d-9910-ab49e408f5b0",
-      "target": "fdab7bad-24e0-47fa-bd32-b212645c1fd9",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "0e4b1636-bc09-4cf5-ab00-6c9d66149e01",
-      "target": "d19c0daf-6406-4aca-9b04-df27beb34321",
-      "probability": 0.952,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "ae957b2d-2ad4-4fbb-9a3c-2f5f5aca5177",
-      "target": "9eaa35af-e269-4d78-b307-3e506396759e",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "0e4b1636-bc09-4cf5-ab00-6c9d66149e01",
-      "target": "d394fb3b-2305-4aca-825a-86a5a8a01cb9",
-      "probability": 0.998,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "2ffff6b4-23e1-439a-b8bd-4383fab204a9",
-      "target": "16553e13-31b7-436c-90fa-4ac6c6df16dd",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "c03999bf-be11-4576-b83b-591483759c9a",
-      "target": "9891bca3-8c70-477f-af64-c45e77fb29b1",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "dc6a1e40-c0d7-462d-9910-ab49e408f5b0",
-      "target": "c9b08358-b58e-40de-bebd-c738ba49fbf2",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "1f886c96-020c-4883-a2fe-ee34bdcc2ca5",
-      "target": "aac22000-0c23-41bf-ad11-c4db7849f093",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "22925b03-e92c-4c51-bd0c-2a25da23a791",
-      "target": "133000c3-2d00-4e5b-86f8-d6c59ed158c3",
-      "probability": 0.604,
-      "confidence": "medium",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "df792544-c13e-4ec2-a5e0-a3e935deee84",
-      "target": "ba25f6e4-b61e-41e3-82b5-dba1a662a208",
-      "probability": 0.964,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "e83546b9-b1bd-4348-a4ee-6fefbc30ccdd",
-      "target": "1cfd062e-a14a-4ad6-8166-a74943b423cb",
-      "probability": 0.9173,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "dc6a1e40-c0d7-462d-9910-ab49e408f5b0",
-      "target": "26f48e60-0bc9-4446-badc-58b28245e33a",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "2e44f15e-5e4f-48ad-a8d5-96c72a6853a4",
-      "target": "2b5cbf1c-2b13-48f6-9c1d-befb6d0890b9",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "9891bca3-8c70-477f-af64-c45e77fb29b1",
-      "target": "caafc161-430f-4312-bd4e-287f74c536ff",
-      "probability": 0.9553,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "3a74a188-aa09-4fe2-bbb0-6c0edf5eed59",
-      "target": "d0d5f7b6-5ae9-4401-93ad-22e3c5fea982",
-      "probability": 0.5633,
-      "confidence": "low",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "d0d5f7b6-5ae9-4401-93ad-22e3c5fea982",
-      "target": "a3c06c80-c028-4852-9e90-16de69823d50",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "0dadf2d0-a6fa-4d2a-b438-d2675d36a466",
-      "target": "3581806d-ad94-4750-9e9c-42a3287961d4",
-      "probability": 0.9173,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "5d7ed417-fff5-46be-b4ed-96ec8902e308",
-      "target": "7a4df830-b71e-4426-b58e-79d7d4087ce5",
-      "probability": 0.714,
-      "confidence": "medium",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "dc6a1e40-c0d7-462d-9910-ab49e408f5b0",
-      "target": "f9d96d8e-23e7-4739-891d-0866c2a18496",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "9891bca3-8c70-477f-af64-c45e77fb29b1",
-      "target": "411c7895-d25f-4cd1-be34-2acce29b555d",
-      "probability": 0.9753,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "d0d5f7b6-5ae9-4401-93ad-22e3c5fea982",
-      "target": "d3b3ed8c-6bbd-475e-8d21-c4438e301b91",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "d0d5f7b6-5ae9-4401-93ad-22e3c5fea982",
-      "target": "4752eed4-d5a7-4473-9662-956ee40d674a",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "d43bb47f-ca69-48b6-bdac-f1a453415b12",
-      "target": "01af63ac-5dcf-41a2-b6d5-cb2d1d4be001",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "7a4df830-b71e-4426-b58e-79d7d4087ce5",
-      "target": "339ee3fd-244d-4e56-adb8-e5e4eb58511d",
-      "probability": 0.9487,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "d0d5f7b6-5ae9-4401-93ad-22e3c5fea982",
-      "target": "39757c38-0e19-4021-bf2e-7bee8356fbd2",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "e2c785df-485f-469a-aadd-5b3d3b3b57d6",
-      "target": "149fcf6f-93a8-4f0d-98c7-4532234884eb",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "9776615d-a22e-4859-b975-c986246d493e",
-      "target": "9efea9c9-08b9-4875-8a0b-9a4450ae52db",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "d0d5f7b6-5ae9-4401-93ad-22e3c5fea982",
-      "target": "6330c0b1-9463-456e-91f6-6d5802def99c",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "d394fb3b-2305-4aca-825a-86a5a8a01cb9",
-      "target": "25ca630d-b31f-4dd3-b792-217b6c5a913f",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "7a4df830-b71e-4426-b58e-79d7d4087ce5",
-      "target": "e0677e0e-eec6-4d6c-9599-b9ad610e3699",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "d19c0daf-6406-4aca-9b04-df27beb34321",
-      "target": "d4a25ee6-bba1-4d69-b8c7-ec1ef63c923c",
-      "probability": 0.398,
-      "confidence": "low",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "d0d5f7b6-5ae9-4401-93ad-22e3c5fea982",
-      "target": "eb3e3182-2224-4461-a815-b641b97570d5",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "dc6a1e40-c0d7-462d-9910-ab49e408f5b0",
-      "target": "306c72d9-7943-43ec-a752-9e3eabe3cc0b",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "c48f7cca-e328-4537-ba1a-bf9d9b6de555",
-      "target": "ce4ba5ba-b92d-448f-bceb-a445a69e6e94",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "7e333999-b315-40dd-ad58-338c6587c87d",
-      "target": "26fad73c-04b7-4fdc-8918-3fd206fc7e24",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "1f886c96-020c-4883-a2fe-ee34bdcc2ca5",
-      "target": "d5c6388f-3810-4651-a59f-eb0802436bb0",
-      "probability": 0.9993,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "dc6a1e40-c0d7-462d-9910-ab49e408f5b0",
-      "target": "5d710f38-6d39-48bf-ba5b-7f455d529d6e",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "dfdba98c-fbdd-4e0b-a749-493079e03f1f",
-      "target": "5a9dc928-df7c-48e9-a2d4-509712f73a88",
-      "probability": 0.758,
-      "confidence": "medium",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "d0d5f7b6-5ae9-4401-93ad-22e3c5fea982",
-      "target": "23fabcd3-ae75-414e-a4a6-808fd8ee6069",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "d37ef81d-dbdb-413e-820a-14a334b57b3e",
-      "target": "3e273b1b-68c9-4c6c-b1bb-0722c2c2766b",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "d0d5f7b6-5ae9-4401-93ad-22e3c5fea982",
-      "target": "f105962c-fb1c-4aa8-9ae7-a6649fcb1bb1",
-      "probability": 0.692,
-      "confidence": "medium",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "46a025e4-60c6-4ea1-ae55-b4e6872a607e",
-      "target": "3e5fff07-0b87-4619-a147-5d951032be58",
-      "probability": 0.72,
-      "confidence": "medium",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "a9893a44-1e38-4986-9246-aff103920e99",
-      "target": "7e7068e1-e475-4ebd-b3e7-facfc3bb4821",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "d0d5f7b6-5ae9-4401-93ad-22e3c5fea982",
-      "target": "da0c5bc2-6eb8-497e-ae7f-5da05c3d72f4",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "fa238985-7994-45f7-8c52-651db67b5a65",
-      "target": "aed968f8-bfcd-46af-aac5-f63f328a3b34",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "5146773d-778f-4210-9444-a1135cc8e634",
-      "target": "e5d029dd-a8fd-499d-a95d-d5098a5c707d",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "3e5fff07-0b87-4619-a147-5d951032be58",
-      "target": "913df731-5bb6-4709-9055-16ea733ce798",
-      "probability": 0.5493,
-      "confidence": "low",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "4752eed4-d5a7-4473-9662-956ee40d674a",
-      "target": "d7000e75-7acb-4c9c-a524-93b23a03ce05",
-      "probability": 0.8093,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "a8ff6008-6d8f-4a1a-a421-884d7c2fb648",
-      "target": "8272b828-8af0-4030-a265-782255787959",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "d0d5f7b6-5ae9-4401-93ad-22e3c5fea982",
-      "target": "28012bae-3967-4bcb-82f5-059f1618afcd",
-      "probability": 0.9147,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "07c16f60-3dee-48c4-bb15-7cd97687fadd",
-      "target": "19cdf739-6631-4f04-a5b1-714648eb1250",
-      "probability": 0.6267,
-      "confidence": "medium",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "19cdf739-6631-4f04-a5b1-714648eb1250",
-      "target": "07c16f60-3dee-48c4-bb15-7cd97687fadd",
-      "probability": 0.3713,
-      "confidence": "low",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "19cdf739-6631-4f04-a5b1-714648eb1250",
-      "target": "23ed9180-c963-4e07-9aea-aa4970f1ebd1",
-      "probability": 0.402,
-      "confidence": "low",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "e0677e0e-eec6-4d6c-9599-b9ad610e3699",
-      "target": "1d824ea1-3f3c-4ef2-b9eb-32f52e7b7d16",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "a64012b9-42be-43e7-8e76-9d0b1e380d8e",
-      "target": "9499235b-1fed-4a66-8365-f36caf25c351",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "a7d667ab-aa9d-4b52-af16-d65aa90475ac",
-      "target": "50e1b1b1-7fdc-4d25-aa48-a8524ca1f0a6",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "358d5f92-1ee7-455c-a720-45ef0c9be21d",
-      "target": "17799c13-9b4c-48c1-b911-ef4776a8451a",
-      "probability": 0.894,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "2a9c1b72-e9b4-4dff-a12b-4dc41f361a07",
-      "target": "b10a4ef5-7937-4bea-a3d6-0ee54f54cf05",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "19cdf739-6631-4f04-a5b1-714648eb1250",
-      "target": "42f449bd-6d99-4b0b-aa66-4ced62fcb22a",
-      "probability": 0.5233,
-      "confidence": "low",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "cd71592a-ffeb-4698-8c00-7444db72eb99",
-      "target": "c819fa23-315a-4f99-8acf-2e72ca1d9591",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "df792544-c13e-4ec2-a5e0-a3e935deee84",
-      "target": "1a56fa39-f327-42fb-b299-a31d79046af7",
-      "probability": 0.8153,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "7e7068e1-e475-4ebd-b3e7-facfc3bb4821",
-      "target": "db84c678-4042-41a0-859f-26b3a0209551",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "5f7b8660-d858-4b57-8879-617d44c06255",
-      "target": "1b4b0e21-1534-4ac3-b04d-c6775d55b7ad",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "caafc161-430f-4312-bd4e-287f74c536ff",
-      "target": "d55cc603-e48b-47b6-9b9f-07ccd8fe6bdf",
-      "probability": 0.8773,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "dc6a1e40-c0d7-462d-9910-ab49e408f5b0",
-      "target": "c7d9b8b8-ae1a-4902-9615-75998eb6065d",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "8e0de48f-b9ff-43b3-b130-bdf3fef6b1c5",
-      "target": "e0fe7886-fd61-423b-a834-188f52b98fdc",
-      "probability": 0.9467,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "1cfd062e-a14a-4ad6-8166-a74943b423cb",
-      "target": "ab1ca688-92db-4918-a744-bfa1be2e1d1e",
-      "probability": 0.9553,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "e0677e0e-eec6-4d6c-9599-b9ad610e3699",
-      "target": "5a89301d-48df-4f1e-acff-17d815b775f2",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "a7d667ab-aa9d-4b52-af16-d65aa90475ac",
-      "target": "94ec0b44-9cb8-4b93-8f94-e7adb4de5318",
-      "probability": 0.6007,
-      "confidence": "medium",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "d0d5f7b6-5ae9-4401-93ad-22e3c5fea982",
-      "target": "6363ca2f-bb25-4be5-a01e-70dcd47ccbc9",
-      "probability": 0.5133,
-      "confidence": "low",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "d19c0daf-6406-4aca-9b04-df27beb34321",
-      "target": "4f81cffa-e950-43d8-9f9d-6f38978fc2b2",
-      "probability": 0.3607,
-      "confidence": "low",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "9291123e-2649-4955-ad5c-036f0f9c81c5",
-      "target": "396fb5ef-612c-49f8-84ff-2d6bb55e399c",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "133000c3-2d00-4e5b-86f8-d6c59ed158c3",
-      "target": "97b4bdf8-9138-419b-8134-aaf39003a393",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "9da5043c-a36b-4f5f-88a2-6438f32d7369",
-      "target": "a0958e34-aa61-4c47-8242-dafff2ae04b8",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "42f449bd-6d99-4b0b-aa66-4ced62fcb22a",
-      "target": "e656a589-7a38-400c-b802-adc84daa16da",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "913df731-5bb6-4709-9055-16ea733ce798",
-      "target": "b168515d-35bb-4c77-8dab-4f1d08dca38f",
-      "probability": 0.9493,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "d7000e75-7acb-4c9c-a524-93b23a03ce05",
-      "target": "5674e211-26bf-4af6-b75f-5eef0ed66c5d",
-      "probability": 0.4707,
-      "confidence": "low",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "caafc161-430f-4312-bd4e-287f74c536ff",
-      "target": "2a48d341-db6f-4060-80c1-47987892836e",
-      "probability": 0.6067,
-      "confidence": "medium",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "8df5c9e6-04a3-4bc3-813a-0897600e9cf0",
-      "target": "ae425119-842f-40c8-ad9a-de374a9b1ab4",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "4fce460b-883f-4422-9b3a-e6fb86f665ff",
-      "target": "b2fc5017-8053-44e9-9d38-86b257e4e954",
-      "probability": 0.578,
-      "confidence": "low",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "ab1ca688-92db-4918-a744-bfa1be2e1d1e",
-      "target": "a02273e3-0c6c-41e2-9639-0f25b30c5d19",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "e0677e0e-eec6-4d6c-9599-b9ad610e3699",
-      "target": "8e0de48f-b9ff-43b3-b130-bdf3fef6b1c5",
-      "probability": 0.9467,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "dc6a1e40-c0d7-462d-9910-ab49e408f5b0",
-      "target": "ba0c71bd-aea1-48c2-bde1-115d21906393",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "d37ef81d-dbdb-413e-820a-14a334b57b3e",
-      "target": "bbec6533-c356-4852-9ce2-59b959211876",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "e0677e0e-eec6-4d6c-9599-b9ad610e3699",
-      "target": "cb461216-6d10-4709-9c99-506d585cd875",
-      "probability": 0.6747,
-      "confidence": "medium",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "201c3034-9dff-4103-82c7-06e0d790d975",
-      "target": "1f1815fb-ef5c-411f-9cdb-e330676a6498",
-      "probability": 0.944,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "913df731-5bb6-4709-9055-16ea733ce798",
-      "target": "8f776e27-9ee4-43f7-aad3-813a65f246a8",
-      "probability": 0.9593,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "a447242b-47d6-4804-ac2a-2214b8214c15",
-      "target": "b4e27c8c-1675-4528-8b85-a1026a4664a4",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "3581806d-ad94-4750-9e9c-42a3287961d4",
-      "target": "f55e77ae-86fd-4b9b-b23b-13c8698a19d1",
-      "probability": 0.4873,
-      "confidence": "low",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "d394fb3b-2305-4aca-825a-86a5a8a01cb9",
-      "target": "5ad10b45-f449-467f-a9f4-f1df12374324",
-      "probability": 0.9973,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "1bb5ae07-7523-4dcf-bc76-b4ab1abcc2fc",
-      "target": "6864a49f-de58-4bee-9441-03a45da1d169",
-      "probability": 0.826,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "913df731-5bb6-4709-9055-16ea733ce798",
-      "target": "382b9d39-7092-42d7-b402-6571b39c6aa3",
-      "probability": 0.8147,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "0883d1bd-abb8-4848-b5be-62a5ae4327fc",
-      "target": "268a3933-0c42-4d26-9cc5-4e2b8b9181c1",
-      "probability": 0.4647,
-      "confidence": "low",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "5f7b8660-d858-4b57-8879-617d44c06255",
-      "target": "559b74e9-8dc6-4e1b-b436-f2cabb2c050a",
-      "probability": 0.84,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "e0677e0e-eec6-4d6c-9599-b9ad610e3699",
-      "target": "40b38d35-717e-4f09-985e-327c570e8454",
-      "probability": 0.7713,
-      "confidence": "medium",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "01af63ac-5dcf-41a2-b6d5-cb2d1d4be001",
-      "target": "13b9b411-48d0-4874-b559-cf6c9cf2226d",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "e0677e0e-eec6-4d6c-9599-b9ad610e3699",
-      "target": "a71a58f1-8246-4c23-8480-1b4b7d97e203",
-      "probability": 0.9873,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "d7000e75-7acb-4c9c-a524-93b23a03ce05",
-      "target": "b046286e-0008-4702-802b-4e51694e0203",
-      "probability": 0.522,
-      "confidence": "low",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "5146773d-778f-4210-9444-a1135cc8e634",
-      "target": "105d4e72-393c-4503-bb5b-3e21c7cbe96b",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "6e1f8139-ea31-4176-ac71-8cae192685ff",
-      "target": "3a9ac2df-fcec-436b-b0c8-30b88bc7edce",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "913df731-5bb6-4709-9055-16ea733ce798",
-      "target": "d4eed7d3-83ae-41a1-8a90-48bc68a0c8d4",
-      "probability": 0.824,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "b1d85890-863c-42fe-be2b-b42f651d015e",
-      "target": "22493189-ddbd-4f77-8eb1-d056c0f3649a",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "d7000e75-7acb-4c9c-a524-93b23a03ce05",
-      "target": "b1d85890-863c-42fe-be2b-b42f651d015e",
-      "probability": 0.5073,
-      "confidence": "low",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "9b0994c9-e42c-40f0-9c6c-73c5de57fb5d",
-      "target": "3bb523b3-9a78-44d9-b1ba-4b2fe749cf7c",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "dc6a1e40-c0d7-462d-9910-ab49e408f5b0",
-      "target": "0883d1bd-abb8-4848-b5be-62a5ae4327fc",
-      "probability": 0.7753,
-      "confidence": "medium",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "dc6a1e40-c0d7-462d-9910-ab49e408f5b0",
-      "target": "880e98cf-0b7c-4e32-8d4c-3ed46e15dcca",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "144b45cc-22a6-4f29-8aaf-09578cb4a8d5",
-      "target": "bc9e3022-cac2-4683-8470-a8a4ccdaa1b7",
-      "probability": 0.7167,
-      "confidence": "medium",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "b168515d-35bb-4c77-8dab-4f1d08dca38f",
-      "target": "d67700b7-cb3b-481a-a802-fad238d348fc",
-      "probability": 0.572,
-      "confidence": "low",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "5146773d-778f-4210-9444-a1135cc8e634",
-      "target": "80fb9f2f-1cea-4875-8dd2-965442a908e3",
-      "probability": 0.7573,
-      "confidence": "medium",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "0883d1bd-abb8-4848-b5be-62a5ae4327fc",
-      "target": "c178c87c-83b2-41f1-9e00-339539b064ee",
-      "probability": 0.96,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "17799c13-9b4c-48c1-b911-ef4776a8451a",
-      "target": "529260e1-2621-4e87-8913-b387ca403e30",
-      "probability": 0.624,
-      "confidence": "medium",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "42f449bd-6d99-4b0b-aa66-4ced62fcb22a",
-      "target": "d3285f2a-d563-44bd-9053-ffb5bf180f85",
-      "probability": 1,
-      "confidence": "high",
-      "inference": "posterior_marginal_mode"
-    },
-    {
-      "source": "5ad10b45-f449-467f-a9f4-f1df12374324",
-      "target": "144b45cc-22a6-4f29-8aaf-09578cb4a8d5",
-      "probability": 0.9973,
       "confidence": "high",
       "inference": "posterior_marginal_mode"
     }

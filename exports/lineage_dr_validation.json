@@ -1,13 +1,16 @@
 {
-  "generated_at": "2026-05-09T07:54:55.837872+00:00",
-  "status": "blocked_no_tools",
+  "generated_at": "2026-05-09T08:25:42.416257+00:00",
+  "status": "blocked_tool_dependencies",
   "scaffold_version": "1.0",
   "engines": {
     "tb_profiler": {
-      "status": "not_installed",
-      "executable": null,
-      "version_probe": null,
-      "message": "tb-profiler not found in PATH"
+      "status": "installed_but_unusable",
+      "executable": "C:\\Users\\Nicho\\Desktop\\TB-Genomics-main\\.venv\\Scripts\\tb-profiler",
+      "version_probe": {
+        "status": "error",
+        "output": "Traceback (most recent call last): | ModuleNotFoundError: No module named 'pysam'"
+      },
+      "message": "tb-profiler executable found but version probe failed"
     },
     "mykrobe": {
       "status": "not_installed",
@@ -15,6 +18,15 @@
       "version_probe": null,
       "message": "mykrobe not found in PATH"
     }
+  },
+  "docker": {
+    "available": true,
+    "status": "ok",
+    "probe": "Docker version 28.1.1, build 4eba377",
+    "daemon_running": false,
+    "daemon_probe": "Client:",
+    "fallback_enabled": true,
+    "tbprofiler_image": "quay.io/jodyphelan/tbprofiler:latest"
   },
   "inputs": {
     "fastq_count": 0,
@@ -26,6 +38,36 @@
       "dna.fasta"
     ]
   },
+  "tbprofiler_run": {
+    "status": "skipped",
+    "message": "tb-profiler not ready to run",
+    "runner": "none",
+    "attempted_samples": 0,
+    "successful_samples": 0,
+    "failed_samples": 0,
+    "output_jsons": [],
+    "failures": []
+  },
+  "tbprofiler_local_run": {
+    "status": "failed",
+    "runner": "local",
+    "message": "Local tb-profiler executable is present but failed version probe",
+    "attempted_samples": 0,
+    "successful_samples": 0,
+    "failed_samples": 0,
+    "output_jsons": [],
+    "failures": []
+  },
+  "tbprofiler_docker_run": {
+    "status": "skipped",
+    "runner": "docker",
+    "message": "Docker tb-profiler execution not attempted",
+    "attempted_samples": 0,
+    "successful_samples": 0,
+    "failed_samples": 0,
+    "output_jsons": [],
+    "failures": []
+  },
   "db_import": {
     "status": "skipped",
     "message": "No lineage_resistance_calls.csv found in exports/ or uploads/",
@@ -33,8 +75,16 @@
     "skipped_rows": 0,
     "warnings": []
   },
+  "tbprofiler_db_import": {
+    "status": "skipped",
+    "message": "No tb-profiler result JSON files imported",
+    "imported_rows": 0,
+    "skipped_rows": 0,
+    "warnings": []
+  },
   "next_steps": [
-    "Install tb-profiler and/or mykrobe in the analysis environment.",
+    "Install tb-profiler/mykrobe dependencies (for Windows this is often easiest in WSL2 or Conda).",
+    "If local dependencies fail, install Docker Desktop and rerun with TBPROFILER_DOCKER_FALLBACK=1.",
     "Place FASTQ/VCF/FASTA inputs in uploads/ (or export pipeline outputs there).",
     "Optionally provide exports/lineage_resistance_calls.csv to hydrate tb_interpretation."
   ]

@@ -53,6 +53,16 @@ Quick start:
 	python -m http.server 8081
 8) Open http://localhost:8081
 
+One-click Windows launchers:
+- Double-click `Start-Backend.bat` to run only the backend.
+- Double-click `Start-Platform.bat` to run backend + GUI and open the browser.
+- Double-click `Setup-And-Start-Platform.bat` for first-time setup (creates `.venv`, installs dependencies, then starts backend + GUI).
+
+Notes:
+- These launchers expect `.venv` to already exist with dependencies installed.
+- If `DATABASE_URL` is not set, the scripts default to:
+	`postgresql://tb:tb@localhost/tb_surveillance`
+
 Windows notes:
 - If `CREATE USER tb` reports `role "tb" already exists`, that means the user is already present and you can continue.
 - If `CREATE DATABASE tb_surveillance` reports `database "tb_surveillance" already exists`, that means the database is already present and you can continue.

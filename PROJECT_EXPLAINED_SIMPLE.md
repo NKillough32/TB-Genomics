@@ -57,6 +57,28 @@ This means you can automate data flow from sequencing infrastructure into report
 - It depends on data quality and completeness from upstream systems.
 - It is a surveillance and operational intelligence tool, not a full LIMS.
 
+## Demo data vs real operational data
+
+The platform supports synthetic data for training and demonstration, but now enforces
+a safety split between demo use and operational use.
+
+- Demo mode: synthetic data can be generated and used to show end-to-end workflows.
+- Operational mode: sensitive actions are blocked if synthetic/demo signals are present.
+
+What is blocked in non-operational mode:
+- Full analysis pipeline
+- Outbreak investigation PDF generation
+- Bulk export download
+
+How teams should use this in practice:
+1. Use demo mode for onboarding, workshops, and testing.
+2. Before operational use, disable demo flags and ingest real programme data.
+3. Check `/cases/data-safety` and confirm `operational_safe = true` before running public-health actions.
+
+Environment switches:
+- `TB_ENABLE_SYNTHETIC_SEEDING=1` enables synthetic seeding.
+- `TB_ALLOW_NON_OPERATIONAL_ACTIONS=1` allows analysis/report actions on synthetic data (demo only).
+
 ## Short summary in one sentence
 
 This project is a TB genomic surveillance platform that ingests sequencing-linked data, analyses cluster and transmission patterns, tracks programme performance, and produces actionable reports for public health teams.

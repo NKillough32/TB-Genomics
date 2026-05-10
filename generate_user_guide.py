@@ -156,6 +156,21 @@ story.append(Paragraph("With the virtual environment active, install required pa
 story.append(Paragraph("<font face='Courier' size='9' color='#333333'>pip install -r backend/requirements.txt</font>", code_style))
 story.append(Paragraph("This installs FastAPI, SQLAlchemy, matplotlib, networkx, scipy, reportlab, and other dependencies.", step_style))
 
+story.append(Spacer(1, 0.2*inch))
+story.append(Paragraph("<b>Step 2.5: Preferred Startup Method (One-Click .bat Files)</b>", styles['Heading3']))
+story.append(Spacer(1, 0.1*inch))
+story.append(Paragraph(
+    "For most users, the easiest and recommended startup method is the provided Windows batch files:",
+    step_style
+))
+story.append(Paragraph("<font face='Courier' size='9' color='#333333'>Setup-And-Start-Platform.bat</font>", code_style))
+story.append(Paragraph("First-time setup: creates .venv (if needed), installs dependencies, starts backend + GUI.", step_style))
+story.append(Paragraph("<font face='Courier' size='9' color='#333333'>Start-Platform.bat</font>", code_style))
+story.append(Paragraph("Normal use: starts backend + GUI.", step_style))
+story.append(Paragraph("<font face='Courier' size='9' color='#333333'>Start-Backend.bat</font>", code_style))
+story.append(Paragraph("Backend-only mode for API testing or separate GUI hosting.", step_style))
+story.append(Paragraph("Sections 4 and 5 below describe manual startup commands if batch launch is not available.", step_style))
+
 story.append(PageBreak())
 
 # Section 3: Database Configuration
@@ -204,6 +219,7 @@ story.append(PageBreak())
 # Section 4: Backend Server
 story.append(Paragraph("4. BACKEND SERVER CONFIGURATION", heading_style))
 story.append(Spacer(1, 0.15*inch))
+story.append(Paragraph("If you started the platform via Start-Platform.bat or Start-Backend.bat, you can skip this section.", step_style))
 
 story.append(Paragraph("<b>Step 4.1: Start Backend Server</b>", styles['Heading3']))
 story.append(Spacer(1, 0.1*inch))
@@ -232,6 +248,7 @@ story.append(PageBreak())
 # Section 5: Frontend Server
 story.append(Paragraph("5. FRONTEND SERVER SETUP", heading_style))
 story.append(Spacer(1, 0.15*inch))
+story.append(Paragraph("If you started the platform via Start-Platform.bat, the GUI is already running and this section can be skipped.", step_style))
 
 story.append(Paragraph("<b>Step 5.1: Navigate to GUI Directory</b>", styles['Heading3']))
 story.append(Spacer(1, 0.1*inch))
@@ -268,6 +285,13 @@ story.append(PageBreak())
 # Section 6: Synthetic Data
 story.append(Paragraph("6. GENERATING SYNTHETIC DATA", heading_style))
 story.append(Spacer(1, 0.15*inch))
+
+story.append(Paragraph("<b>Safety note:</b> synthetic seeding is disabled by default to protect operational use.", styles['Heading3']))
+story.append(Paragraph("To enable demonstration mode in the backend PowerShell session, set:", step_style))
+story.append(Paragraph("<font face='Courier' size='9' color='#333333'>$env:TB_ENABLE_SYNTHETIC_SEEDING=\"1\"</font>", code_style))
+story.append(Paragraph("If you also need to run full analysis/reporting on synthetic data, set:", step_style))
+story.append(Paragraph("<font face='Courier' size='9' color='#333333'>$env:TB_ALLOW_NON_OPERATIONAL_ACTIONS=\"1\"</font>", code_style))
+story.append(Paragraph("For real operational use, leave these variables unset.", step_style))
 
 story.append(Paragraph("<b>Step 6.1: Using the Web Interface</b>", styles['Heading3']))
 story.append(Spacer(1, 0.1*inch))

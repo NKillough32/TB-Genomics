@@ -94,6 +94,52 @@ Notes:
 - Country weighting is based on latest online incidence values.
 - If the online fetch fails, the seeder uses embedded fallback incidence values.
 
+Data safety policy: demo mode vs operational mode
+-------------------------------------------------
+
+To prevent accidental use of synthetic/demo records for real public-health action,
+the platform now applies safety gates by default.
+
+Default behavior:
+- Synthetic seeding endpoint is disabled.
+- Full pipeline execution is blocked when synthetic/demo records are detected.
+- Outbreak report generation and bulk export are blocked when dataset is non-operational.
+
+Demo mode (for training/presentations only):
+1) Enable synthetic seeding:
+	$env:TB_ENABLE_SYNTHETIC_SEEDING="1"
+2) If you need to run full analysis/reporting on synthetic data, enable override:
+	$env:TB_ALLOW_NON_OPERATIONAL_ACTIONS="1"
+
+Operational mode (real programme use):
+- Do not set `TB_ALLOW_NON_OPERATIONAL_ACTIONS`.
+- Keep synthetic seeding disabled (`TB_ENABLE_SYNTHETIC_SEEDING` unset or `0`).
+- Confirm dataset safety before running actions:
+	GET /cases/data-safety
+
+Expected status values:
+- `operational_safe: true` means actions are allowed.
+- `operational_safe: false` means synthetic/demo signals were detected and sensitive actions are blocked.
+
+Recommended startup profiles
+----------------------------
+
+Operational profile (production-like):
+1) Ensure these are NOT enabled:
+	Remove-Item Env:TB_ENABLE_SYNTHETIC_SEEDING -ErrorAction SilentlyContinue
+	Remove-Item Env:TB_ALLOW_NON_OPERATIONAL_ACTIONS -ErrorAction SilentlyContinue
+2) Start backend and GUI.
+3) Verify:
+	GET http://localhost:8000/cases/data-safety
+
+Demonstration profile:
+1) Set explicit demo flags:
+	$env:TB_ENABLE_SYNTHETIC_SEEDING="1"
+	$env:TB_ALLOW_NON_OPERATIONAL_ACTIONS="1"
+2) Seed synthetic dataset from UI or API.
+3) Run pipeline and generate reports for demonstration.
+4) Clear demo flags before any operational run.
+
 Azure VM sequencing integration
 -------------------------------
 

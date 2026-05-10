@@ -85,6 +85,27 @@ function downloadAllExports(){
 	window.open(`${API}/jobs/download-all-exports`, '_blank');
 }
 
+async function loadDataSafety(){
+	const statusEl = document.getElementById('status');
+	if(!statusEl) return;
+	try{
+		const r = await fetch(`${API}/cases/data-safety`);
+		if(!r.ok) return;
+		const d = await r.json();
+		const existing = document.getElementById('dataSafetyStatus');
+		const html = d.operational_safe
+			? `✅ Dataset mode: OPERATIONAL (${d.total_cases} cases)`
+			: `⚠️ Dataset mode: NON-OPERATIONAL (synthetic/demo detected: ${d.synthetic_case_count} synthetic cases, ${d.synthetic_seed_events} seed events)`;
+		if(existing){
+			existing.textContent = html;
+		}else{
+			statusEl.innerHTML = `${statusEl.innerHTML}<li id="dataSafetyStatus">${html}</li>`;
+		}
+	}catch(_e){
+		// no-op; keep existing status text
+	}
+}
+
 async function uploadFile(){const f=document.getElementById('fileInput').files[0];if(!f)return;const fd=new FormData();fd.append('file',f);const r=await fetch(`${API}/ingest/file`,{method:'POST',body:fd});document.getElementById('uploadResult').textContent=JSON.stringify(await r.json());}
 async function seedSyntheticData(){
 	const caseCount=Number(document.getElementById('seedCaseCount').value||250);
@@ -101,8 +122,10 @@ async function seedSyntheticData(){
 		resultBox.textContent=JSON.stringify(payload,null,2);
 		// Refresh region dropdown after seeding
 		loadRegions();
+		loadDataSafety();
 	}catch(e){
 		resultBox.textContent=`Failed to generate synthetic data: ${e}`;
+		loadDataSafety();
 	}
 }
 async function runJob(job){
@@ -298,4 +321,4 @@ async function loadRegions(){
 		// Backend unavailable — leave placeholder only
 	}
 }
-(async()=>{try{await fetch(`${API}/`);document.getElementById('status').innerHTML='<li>✅ Backend running</li>';}catch{document.getElementById('status').innerHTML='<li>❌ Backend unavailable</li>';}loadRegions();loadKPIBanner();})();
+(async()=>{try{await fetch(`${API}/`);document.getElementById('status').innerHTML='<li>✅ Backend running</li>';}catch{document.getElementById('status').innerHTML='<li>❌ Backend unavailable</li>';}loadRegions();loadKPIBanner();loadDataSafety();})();

@@ -2,12 +2,12 @@
   "n_generations": 2000,
   "burnin": 500,
   "n_samples": 1500,
-  "case_count": 24,
-  "likelihood_mean": -25346.2359,
-  "likelihood_sd": 5506.3819,
-  "transmission_edges": 23,
+  "case_count": 250,
+  "likelihood_mean": -171692.6037,
+  "likelihood_sd": 28932.9535,
+  "transmission_edges": 249,
   "posterior_samples": 1500,
   "data_provenance": "real",
   "analysis_engine": "outbreaker2",
-  "generated_at": "2026-05-09T12:00:45Z"
+  "generated_at": "2026-05-10T11:00:34Z"
 }

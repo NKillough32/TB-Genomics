@@ -9,6 +9,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 from backend.database import SessionLocal
 from backend.models import Case
+from backend.data_safety import enforce_operational_dataset, get_data_safety_status
 
 router = APIRouter(prefix="/cases", tags=["cases"])
 
@@ -36,6 +37,11 @@ def summary(db: Session = Depends(get_db)):
         "unclustered_cases": int(total_cases) - int(clustered_cases),
         "open_clusters": int(open_clusters),
     }
+
+
+@router.get("/data-safety")
+def data_safety(db: Session = Depends(get_db)):
+    return get_data_safety_status(db)
 
 
 @router.get("/surveillance-kpis")
@@ -406,6 +412,8 @@ def lineage_dr_validation():
 @router.get("/outbreak-report")
 def outbreak_report(db: Session = Depends(get_db)):
     """Generate and return a PDF outbreak investigation report."""
+    enforce_operational_dataset(db, "cases/outbreak-report")
+
     try:
         from reportlab.lib import colors
         from reportlab.lib.pagesizes import A4

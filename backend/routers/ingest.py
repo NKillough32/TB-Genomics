@@ -50,6 +50,16 @@ def seed_synthetic(
     ),
     _auth: None = Depends(_require_ingest_api_key),
 ):
+    if os.getenv("TB_ENABLE_SYNTHETIC_SEEDING", "0") != "1":
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "synthetic_seeding_disabled",
+                "message": "Synthetic data seeding is disabled by policy.",
+                "enable_env": "TB_ENABLE_SYNTHETIC_SEEDING=1",
+            },
+        )
+
     country_list = [c.strip() for c in countries.split(",") if c.strip()] if countries else None
     return seed_synthetic_dataset(
         case_count=case_count, reset=reset, seed=seed, countries=country_list

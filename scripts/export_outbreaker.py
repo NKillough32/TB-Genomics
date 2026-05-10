@@ -10,6 +10,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from sqlalchemy import text
 
 from backend.database import SessionLocal
+from backend.data_safety import get_data_safety_status
 
 
 def generate_consensus_sequence(case_id: str, length: int = 2000) -> str:
@@ -29,6 +30,13 @@ def main() -> None:
 
     db = SessionLocal()
     try:
+        safety = get_data_safety_status(db)
+        if (not safety["operational_safe"]) and os.getenv("TB_ALLOW_NON_OPERATIONAL_ACTIONS", "0") != "1":
+            print("Blocked export_outbreaker: synthetic/demo dataset detected.")
+            print(f"Data safety status: {safety}")
+            print("Set TB_ALLOW_NON_OPERATIONAL_ACTIONS=1 to override for testing only.")
+            sys.exit(2)
+
         rows = db.execute(
             text(
                 """

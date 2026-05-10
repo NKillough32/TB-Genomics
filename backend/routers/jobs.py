@@ -1,7 +1,10 @@
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi.responses import FileResponse, StreamingResponse
 from backend.job_runner import run_job, run_pipeline, JOBS, PIPELINE_STEPS
+from backend.database import SessionLocal
+from backend.data_safety import enforce_operational_dataset, get_data_safety_status
+from sqlalchemy.orm import Session
 import os
 import glob
 import zipfile
@@ -9,17 +12,46 @@ import io
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+PUBLIC_HEALTH_ACTION_JOBS = {
+    "run_lineage_dr_validation",
+    "derive_sequence_clusters",
+    "export_outbreaker",
+    "run_outbreaker2",
+    "compare_clustering_methods",
+    "run_clustering",
+    "run_secondary_validation",
+}
+
 @router.post("/run/{job_name}")
-def run(job_name: str):
+def run(job_name: str, db: Session = Depends(get_db)):
+    if job_name in PUBLIC_HEALTH_ACTION_JOBS:
+        enforce_operational_dataset(db, f"jobs/run/{job_name}")
+
     job_id = run_job(job_name)
     if not job_id:
         return {"error": "Job not allowed"}
     return {"job_id": job_id}
 
 @router.post("/run-pipeline")
-def run_full_pipeline():
+def run_full_pipeline(db: Session = Depends(get_db)):
+    enforce_operational_dataset(db, "jobs/run-pipeline")
+
     pipeline_id = run_pipeline()
     return {"job_id": pipeline_id, "steps": PIPELINE_STEPS}
+
+
+@router.get("/data-safety")
+def jobs_data_safety(db: Session = Depends(get_db)):
+    return get_data_safety_status(db)
 
 @router.get("/status/{job_id}")
 def status(job_id: str):
@@ -52,8 +84,10 @@ def last_run_times():
     return result
 
 @router.get("/download-all-exports")
-def download_all_exports():
+def download_all_exports(db: Session = Depends(get_db)):
     """Stream a ZIP of all files in the exports/ directory."""
+    enforce_operational_dataset(db, "jobs/download-all-exports")
+
     exports_dir = "exports"
     if not os.path.isdir(exports_dir):
         return {"error": "exports directory not found"}

@@ -72,20 +72,33 @@ def run_job(job_name):
                             rscript_path = candidates[0]
                     use_mock_fallback = False
                     allow_mock_fallback = os.getenv("TB_ALLOW_MOCK_OUTBREAKER", "0") == "1"
+                    outbreaker_timeout = int(os.getenv("TB_OUTBREAKER_TIMEOUT_SEC", "1200"))
                     child_env = os.environ.copy()
                     child_env["PYTHONIOENCODING"] = "utf-8"
                     child_env["R_LIBS_USER"] = os.path.join(project_root, "R_libs")
 
                     if rscript_path:
-                        result = subprocess.run(
-                            [rscript_path, "outbreaker2/run_outbreaker2.R"],
-                            stdout=lf,
-                            stderr=subprocess.STDOUT,
-                            cwd=project_root,
-                            timeout=300,
-                            env=child_env,
-                        )
-                        if result.returncode != 0:
+                        result = None
+                        try:
+                            result = subprocess.run(
+                                [rscript_path, "outbreaker2/run_outbreaker2.R"],
+                                stdout=lf,
+                                stderr=subprocess.STDOUT,
+                                cwd=project_root,
+                                timeout=outbreaker_timeout,
+                                env=child_env,
+                            )
+                        except subprocess.TimeoutExpired:
+                            if allow_mock_fallback:
+                                use_mock_fallback = True
+                                lf.write(
+                                    f"\n--- R execution timed out after {outbreaker_timeout}s, using mock report generator ---\n"
+                                )
+                            else:
+                                raise Exception(
+                                    f"R outbreaker2 execution timed out after {outbreaker_timeout}s and mock fallback is disabled"
+                                )
+                        if result is not None and result.returncode != 0:
                             if allow_mock_fallback:
                                 use_mock_fallback = True
                                 lf.write("\n--- R execution failed, using mock report generator ---\n")

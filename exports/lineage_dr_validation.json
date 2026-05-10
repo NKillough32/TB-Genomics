@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-09T12:19:02.056486+00:00",
+  "generated_at": "2026-05-10T10:54:53.960099+00:00",
   "status": "completed",
   "scaffold_version": "1.0",
   "engines": {
@@ -140,7 +140,45 @@
   "tbprofiler_db_import": {
     "status": "imported",
     "message": "tb-profiler results imported into tb_interpretation",
-    "imported_rows": 10,
+    "imported_rows": 0,
+    "skipped_rows": 10,
+    "warnings": [
+      "sample_id not found in cases (87ef58ef-b5c4-4944-8542-b885eeb52c9d)",
+      "sample_id not found in cases (66c038c2-bb16-4cbf-b661-ec6413f10019)",
+      "sample_id not found in cases (08eea384-5d0d-48ba-9e75-f53f0dcca0db)",
+      "sample_id not found in cases (e29ce654-222d-4264-b7b7-7f43c5a088e2)",
+      "sample_id not found in cases (5c2b5eba-1eca-4ebd-9c0d-3f58491b77e7)",
+      "sample_id not found in cases (aed8a068-bfbf-4ebd-b02d-758f5c7968cf)",
+      "sample_id not found in cases (d6dbe72f-0e81-4c58-a2db-f5e64e37714e)",
+      "sample_id not found in cases (1d370e23-a6b3-4b5b-b8c4-91d7deca638f)",
+      "sample_id not found in cases (8a3f5b4d-3423-4ce7-ac7f-94923d67038d)",
+      "sample_id not found in cases (bebd0a04-24e0-41c5-8c57-26e0b73fafa4)"
+    ]
+  },
+  "mykrobe_run": {
+    "status": "skipped",
+    "message": "mykrobe not ready to run",
+    "runner": "none",
+    "attempted_samples": 0,
+    "successful_samples": 0,
+    "failed_samples": 0,
+    "output_jsons": [],
+    "failures": []
+  },
+  "mykrobe_wsl_run": {
+    "status": "skipped",
+    "runner": "wsl",
+    "message": "WSL mykrobe execution not attempted",
+    "attempted_samples": 0,
+    "successful_samples": 0,
+    "failed_samples": 0,
+    "output_jsons": [],
+    "failures": []
+  },
+  "mykrobe_db_import": {
+    "status": "skipped",
+    "message": "No mykrobe result JSON files imported",
+    "imported_rows": 0,
     "skipped_rows": 0,
     "warnings": []
   },

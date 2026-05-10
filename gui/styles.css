@@ -406,6 +406,85 @@ footer {
 	}
 }
 
+/* ── KPI Banner ─────────────────────────────────────────────────────────── */
+.kpi-banner-card { background: linear-gradient(135deg, #eef8f6 0%, #e6f0fb 100%); }
+
+.kpi-banner {
+	display: flex;
+	gap: 1rem;
+	flex-wrap: wrap;
+	margin: 0.6rem 0 0.4rem;
+}
+.kpi-tile {
+	flex: 1 1 120px;
+	background: #fff;
+	border: 1px solid #cae6df;
+	border-radius: 10px;
+	padding: 0.7rem 1rem;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+}
+.kpi-num {
+	font-size: 2rem;
+	font-weight: 800;
+	color: #1a5c4a;
+	line-height: 1.1;
+}
+.kpi-label {
+	font-size: 0.72rem;
+	color: #4a7a6e;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	margin-top: 0.15rem;
+}
+.kpi-ts {
+	font-size: 0.72rem;
+	color: #8fa9b8;
+	font-weight: 400;
+	margin-left: 0.5rem;
+}
+.kpi-lastrun {
+	font-size: 0.75rem;
+	color: #5a7a8a;
+	margin-top: 0.2rem;
+}
+
+/* ── Pipeline button ────────────────────────────────────────────────────── */
+.btn-primary {
+	background: #1a5c4a;
+	color: #fff;
+	font-weight: 700;
+	border: none;
+	border-radius: 8px;
+	padding: 0.6rem 1.2rem;
+	cursor: pointer;
+	font-size: 0.95rem;
+	margin-bottom: 0.6rem;
+	transition: background 0.2s;
+}
+.btn-primary:hover { background: #144838; }
+.btn-primary:disabled { background: #8fada6; cursor: not-allowed; }
+
+.individual-steps { margin: 0.5rem 0 0.3rem; }
+.individual-steps summary { cursor: pointer; color: #4a6a7a; font-size: 0.85rem; }
+.individual-steps-inner { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.5rem; }
+
+/* ── ZIP export button ──────────────────────────────────────────────────── */
+.btn-export-zip {
+	background: #2a5080;
+	color: #fff;
+	font-weight: 600;
+	border: none;
+	border-radius: 8px;
+	padding: 0.5rem 1rem;
+	cursor: pointer;
+	font-size: 0.88rem;
+	transition: background 0.2s;
+}
+.btn-export-zip:hover { background: #1d3a5e; }
+
+
 @keyframes fadeRise {
 	from {
 		opacity: 0;

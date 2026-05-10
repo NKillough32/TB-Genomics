@@ -20,6 +20,16 @@
   </div>
 </header>
 <main class="dashboard">
+  <section class="card kpi-banner-card">
+    <h2>Programme overview <span id="kpiBannerTimestamp" class="kpi-ts"></span></h2>
+    <div id="kpiBanner" class="kpi-banner">
+      <div class="kpi-tile" id="kpiTotalCases"><span class="kpi-num">—</span><span class="kpi-label">Total cases</span></div>
+      <div class="kpi-tile" id="kpiClustered"><span class="kpi-num">—</span><span class="kpi-label">Clustered</span></div>
+      <div class="kpi-tile" id="kpiUnclustered"><span class="kpi-num">—</span><span class="kpi-label">Unclustered</span></div>
+      <div class="kpi-tile" id="kpiOpenClusters"><span class="kpi-num">—</span><span class="kpi-label">Open clusters</span></div>
+    </div>
+    <div id="kpiLastRun" class="kpi-lastrun"></div>
+  </section>
   <section class="card">
     <h2>Step 1 - System status</h2>
     <ul id="status" class="status-list"><li>Checking…</li></ul>
@@ -66,23 +76,31 @@
   <section class="card">
     <h2>Step 3 - Run analysis</h2>
     <p class="hint">Recommended comparison order: derive sequence clusters, generate outbreaker2 inputs, run outbreaker2, then compare methods.</p>
-    <button id="lineageDrBtn" onclick="runJob('run_lineage_dr_validation')">Run lineage/DR validation</button>
-    <button id="seqClusterBtn" onclick="runJob('derive_sequence_clusters')">Derive sequence clusters</button>
-    <button id="exportBtn" onclick="runJob('export_outbreaker')">Generate outbreaker2 inputs</button>
-    <button id="outbreakerBtn" onclick="runJob('run_outbreaker2')">Run outbreaker2</button>
-    <button id="compareBtn" onclick="runJob('compare_clustering_methods')">Compare clustering methods</button>
-    <button id="clusterBtn" onclick="runJob('run_clustering')">Run clustering summary (optional)</button>
+    <button id="runPipelineBtn" class="btn-primary" onclick="runFullPipeline()">&#9654; Run full pipeline (all steps)</button>
+    <details class="individual-steps">
+      <summary class="hint">Or run individual steps…</summary>
+      <div class="individual-steps-inner">
+        <button id="lineageDrBtn" onclick="runJob('run_lineage_dr_validation')">Run lineage/DR validation</button>
+        <button id="seqClusterBtn" onclick="runJob('derive_sequence_clusters')">Derive sequence clusters</button>
+        <button id="exportBtn" onclick="runJob('export_outbreaker')">Generate outbreaker2 inputs</button>
+        <button id="outbreakerBtn" onclick="runJob('run_outbreaker2')">Run outbreaker2</button>
+        <button id="compareBtn" onclick="runJob('compare_clustering_methods')">Compare clustering methods</button>
+        <button id="clusterBtn" onclick="runJob('run_clustering')">Run clustering summary (optional)</button>
+      </div>
+    </details>
     <div class="progress-container"><div id="progressBar" class="progress-bar">0%</div></div>
+    <div id="pipelineStepLabel" class="hint"></div>
     <pre id="jobStatus" class="log-box">Idle</pre>
   </section>
   <section class="card">
     <h2>Step 4 - Results</h2>
     <button onclick="loadCases()">View cases</button>
-    <pre id="cases" class="log-box"></pre>
     <button onclick="loadOutbreakerResults()">View outbreaker2 summary</button>
     <button onclick="loadLineageDrValidation()">View lineage/DR validation</button>
     <button onclick="downloadOutbreakReport()">Download outbreak report (PDF)</button>
+    <button class="btn-export-zip" onclick="downloadAllExports()">&#11015; Download all results (ZIP)</button>
     <pre id="lineageDrResults" class="log-box"></pre>
+    <pre id="cases" class="log-box"></pre>
     <pre id="outbreakerResults" class="log-box"></pre>
   </section>
   <section class="card">

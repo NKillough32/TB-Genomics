@@ -163,3 +163,70 @@ def run_job(job_name):
 
     threading.Thread(target=task).start()
     return job_id
+
+
+# Ordered steps for the full pipeline
+PIPELINE_STEPS = [
+    "run_lineage_dr_validation",
+    "derive_sequence_clusters",
+    "export_outbreaker",
+    "run_outbreaker2",
+    "compare_clustering_methods",
+]
+
+
+def run_pipeline():
+    """Run all analysis steps sequentially under a single pipeline job ID."""
+    pipeline_id = str(uuid.uuid4())
+    log = f"logs/{pipeline_id}.log"
+    JOBS[pipeline_id] = {
+        "job": "full_pipeline",
+        "status": "running",
+        "progress": 0,
+        "logfile": log,
+        "pipeline_step": 0,
+        "pipeline_total": len(PIPELINE_STEPS),
+    }
+
+    def _task():
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        _log_to_audit("pipeline_started", "system", {"pipeline_id": pipeline_id, "steps": PIPELINE_STEPS})
+
+        with open(log, "w", encoding="utf-8") as lf:
+            total = len(PIPELINE_STEPS)
+            for idx, step in enumerate(PIPELINE_STEPS):
+                JOBS[pipeline_id]["pipeline_step"] = idx + 1
+                JOBS[pipeline_id]["progress"] = int((idx / total) * 95)
+                lf.write(f"\n{'='*60}\nPIPELINE STEP {idx+1}/{total}: {step}\n{'='*60}\n")
+                lf.flush()
+
+                # Re-use existing run_job logic by launching the step as a child job
+                # and blocking until it finishes.
+                child_id = run_job(step)
+                if child_id is None:
+                    JOBS[pipeline_id]["status"] = "failed"
+                    lf.write(f"Step {step} is not allowed — aborting pipeline.\n")
+                    _log_to_audit("pipeline_failed", "system", {"pipeline_id": pipeline_id, "failed_step": step})
+                    return
+
+                # Poll until child completes
+                while True:
+                    child = JOBS.get(child_id, {})
+                    if child.get("status") in ("completed", "failed"):
+                        break
+                    threading.Event().wait(0.5)
+
+                if JOBS.get(child_id, {}).get("status") == "failed":
+                    JOBS[pipeline_id]["status"] = "failed"
+                    lf.write(f"Step {step} failed — aborting pipeline.\n")
+                    _log_to_audit("pipeline_failed", "system", {"pipeline_id": pipeline_id, "failed_step": step})
+                    return
+
+                lf.write(f"Step {step} completed OK.\n")
+
+            JOBS[pipeline_id]["progress"] = 100
+            JOBS[pipeline_id]["status"] = "completed"
+            _log_to_audit("pipeline_completed", "system", {"pipeline_id": pipeline_id})
+
+    threading.Thread(target=_task).start()
+    return pipeline_id

@@ -1,5 +1,90 @@
 
 let API='http://localhost:8000';const API_FALLBACK='http://127.0.0.1:8010';let activeJob=null;
+
+// ── KPI Banner ──────────────────────────────────────────────────────────────
+async function loadKPIBanner(){
+	try{
+		const [summaryResp, lastRunResp] = await Promise.all([
+			fetch(`${API}/cases/summary`),
+			fetch(`${API}/jobs/last-run-times`),
+		]);
+		if(summaryResp.ok){
+			const s = await summaryResp.json();
+			document.querySelector('#kpiTotalCases .kpi-num').textContent = s.total_cases ?? '—';
+			document.querySelector('#kpiClustered .kpi-num').textContent = s.clustered_cases ?? '—';
+			document.querySelector('#kpiUnclustered .kpi-num').textContent = s.unclustered_cases ?? '—';
+			document.querySelector('#kpiOpenClusters .kpi-num').textContent = s.open_clusters ?? '—';
+			document.getElementById('kpiBannerTimestamp').textContent = 'refreshed ' + new Date().toLocaleTimeString();
+		}
+		if(lastRunResp.ok){
+			const lr = await lastRunResp.json();
+			const fmt = iso => iso ? new Date(iso).toLocaleString() : 'never';
+			const lines = [
+				`Lineage/DR: ${fmt(lr.lineage_dr_validation)}`,
+				`Seq clusters: ${fmt(lr.sequence_clusters)}`,
+				`Outbreaker2: ${fmt(lr.outbreaker2)}`,
+				`Comparison: ${fmt(lr.cluster_comparison)}`,
+			];
+			document.getElementById('kpiLastRun').textContent = 'Last run — ' + lines.join(' · ');
+		}
+	}catch(e){
+		// silently fail — banner is informational only
+	}
+}
+
+// ── Full Pipeline ────────────────────────────────────────────────────────────
+async function runFullPipeline(){
+	const btn = document.getElementById('runPipelineBtn');
+	btn.disabled = true;
+	btn.textContent = '⏳ Pipeline running…';
+	document.getElementById('jobStatus').textContent = 'Starting full pipeline…';
+	document.getElementById('pipelineStepLabel').textContent = '';
+	try{
+		const r = await fetch(`${API}/jobs/run-pipeline`, {method:'POST'});
+		const d = await r.json();
+		if(!d.job_id){
+			document.getElementById('jobStatus').textContent = JSON.stringify(d, null, 2);
+			btn.disabled = false;
+			btn.textContent = '▶ Run full pipeline (all steps)';
+			return;
+		}
+		activeJob = d.job_id;
+		pollPipeline(d.steps || []);
+	}catch(e){
+		document.getElementById('jobStatus').textContent = `Pipeline start failed: ${e}`;
+		btn.disabled = false;
+		btn.textContent = '▶ Run full pipeline (all steps)';
+	}
+}
+async function pollPipeline(steps){
+	if(!activeJob) return;
+	const r = await fetch(`${API}/jobs/status/${activeJob}`);
+	const d = await r.json();
+	const bar = document.getElementById('progressBar');
+	bar.style.width = (d.progress||0)+'%';
+	bar.textContent = (d.progress||0)+'%';
+	const stepIdx = d.pipeline_step || 0;
+	const total = d.pipeline_total || steps.length;
+	if(stepIdx > 0 && stepIdx <= steps.length){
+		document.getElementById('pipelineStepLabel').textContent =
+			`Step ${stepIdx} of ${total}: ${steps[stepIdx-1]}`;
+	}
+	document.getElementById('jobStatus').textContent = JSON.stringify(d, null, 2);
+	if(d.status !== 'completed' && d.status !== 'failed'){
+		setTimeout(()=>pollPipeline(steps), 1500);
+	} else {
+		const btn = document.getElementById('runPipelineBtn');
+		btn.disabled = false;
+		btn.textContent = '▶ Run full pipeline (all steps)';
+		if(d.status === 'completed') loadKPIBanner();
+	}
+}
+
+// ── Bulk Export ──────────────────────────────────────────────────────────────
+function downloadAllExports(){
+	window.open(`${API}/jobs/download-all-exports`, '_blank');
+}
+
 async function uploadFile(){const f=document.getElementById('fileInput').files[0];if(!f)return;const fd=new FormData();fd.append('file',f);const r=await fetch(`${API}/ingest/file`,{method:'POST',body:fd});document.getElementById('uploadResult').textContent=JSON.stringify(await r.json());}
 async function seedSyntheticData(){
 	const caseCount=Number(document.getElementById('seedCaseCount').value||250);
@@ -213,4 +298,4 @@ async function loadRegions(){
 		// Backend unavailable — leave placeholder only
 	}
 }
-(async()=>{try{await fetch(`${API}/`);document.getElementById('status').innerHTML='<li>✅ Backend running</li>';}catch{document.getElementById('status').innerHTML='<li>❌ Backend unavailable</li>';}loadRegions();})();
+(async()=>{try{await fetch(`${API}/`);document.getElementById('status').innerHTML='<li>✅ Backend running</li>';}catch{document.getElementById('status').innerHTML='<li>❌ Backend unavailable</li>';}loadRegions();loadKPIBanner();})();

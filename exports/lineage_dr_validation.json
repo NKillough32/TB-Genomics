@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-10T10:54:53.960099+00:00",
+  "generated_at": "2026-05-10T11:45:44.589335+00:00",
   "status": "completed",
   "scaffold_version": "1.0",
   "engines": {
@@ -75,16 +75,16 @@
     "successful_samples": 10,
     "failed_samples": 0,
     "output_jsons": [
-      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/87ef58ef-b5c4-4944-8542-b885eeb52c9d.results.json",
-      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/66c038c2-bb16-4cbf-b661-ec6413f10019.results.json",
-      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/08eea384-5d0d-48ba-9e75-f53f0dcca0db.results.json",
-      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/e29ce654-222d-4264-b7b7-7f43c5a088e2.results.json",
-      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/5c2b5eba-1eca-4ebd-9c0d-3f58491b77e7.results.json",
-      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/aed8a068-bfbf-4ebd-b02d-758f5c7968cf.results.json",
-      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/d6dbe72f-0e81-4c58-a2db-f5e64e37714e.results.json",
-      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/1d370e23-a6b3-4b5b-b8c4-91d7deca638f.results.json",
-      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/8a3f5b4d-3423-4ce7-ac7f-94923d67038d.results.json",
-      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/bebd0a04-24e0-41c5-8c57-26e0b73fafa4.results.json"
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/aa626f15-f1f9-463c-8b65-07030d05c1fa.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/c26f0239-dac5-4775-b623-5993c46ebda8.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/5c6a7f5f-69c8-44ef-9780-d9b39a744465.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/69be70ef-2160-41c3-82d2-c05925da9355.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/9571d5f8-ffc8-410f-b406-91025093f4c0.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/8c81ec07-89e8-4b28-af66-b20f9caec275.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/8e4fa53f-6c0e-46e0-a710-028aaa6a3eec.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/4200ac56-be9d-4343-83fc-e413eb03c2e5.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/62dee1c1-9c8b-4a69-a7f9-e4d85de5cf29.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/b6cbe580-c9a5-4268-8d91-5a0298fa9952.results.json"
     ],
     "failures": []
   },
@@ -107,16 +107,16 @@
     "successful_samples": 10,
     "failed_samples": 0,
     "output_jsons": [
-      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/87ef58ef-b5c4-4944-8542-b885eeb52c9d.results.json",
-      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/66c038c2-bb16-4cbf-b661-ec6413f10019.results.json",
-      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/08eea384-5d0d-48ba-9e75-f53f0dcca0db.results.json",
-      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/e29ce654-222d-4264-b7b7-7f43c5a088e2.results.json",
-      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/5c2b5eba-1eca-4ebd-9c0d-3f58491b77e7.results.json",
-      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/aed8a068-bfbf-4ebd-b02d-758f5c7968cf.results.json",
-      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/d6dbe72f-0e81-4c58-a2db-f5e64e37714e.results.json",
-      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/1d370e23-a6b3-4b5b-b8c4-91d7deca638f.results.json",
-      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/8a3f5b4d-3423-4ce7-ac7f-94923d67038d.results.json",
-      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/bebd0a04-24e0-41c5-8c57-26e0b73fafa4.results.json"
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/aa626f15-f1f9-463c-8b65-07030d05c1fa.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/c26f0239-dac5-4775-b623-5993c46ebda8.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/5c6a7f5f-69c8-44ef-9780-d9b39a744465.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/69be70ef-2160-41c3-82d2-c05925da9355.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/9571d5f8-ffc8-410f-b406-91025093f4c0.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/8c81ec07-89e8-4b28-af66-b20f9caec275.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/8e4fa53f-6c0e-46e0-a710-028aaa6a3eec.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/4200ac56-be9d-4343-83fc-e413eb03c2e5.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/62dee1c1-9c8b-4a69-a7f9-e4d85de5cf29.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/b6cbe580-c9a5-4268-8d91-5a0298fa9952.results.json"
     ],
     "failures": []
   },
@@ -143,16 +143,16 @@
     "imported_rows": 0,
     "skipped_rows": 10,
     "warnings": [
-      "sample_id not found in cases (87ef58ef-b5c4-4944-8542-b885eeb52c9d)",
-      "sample_id not found in cases (66c038c2-bb16-4cbf-b661-ec6413f10019)",
-      "sample_id not found in cases (08eea384-5d0d-48ba-9e75-f53f0dcca0db)",
-      "sample_id not found in cases (e29ce654-222d-4264-b7b7-7f43c5a088e2)",
-      "sample_id not found in cases (5c2b5eba-1eca-4ebd-9c0d-3f58491b77e7)",
-      "sample_id not found in cases (aed8a068-bfbf-4ebd-b02d-758f5c7968cf)",
-      "sample_id not found in cases (d6dbe72f-0e81-4c58-a2db-f5e64e37714e)",
-      "sample_id not found in cases (1d370e23-a6b3-4b5b-b8c4-91d7deca638f)",
-      "sample_id not found in cases (8a3f5b4d-3423-4ce7-ac7f-94923d67038d)",
-      "sample_id not found in cases (bebd0a04-24e0-41c5-8c57-26e0b73fafa4)"
+      "sample_id not found in cases (aa626f15-f1f9-463c-8b65-07030d05c1fa)",
+      "sample_id not found in cases (c26f0239-dac5-4775-b623-5993c46ebda8)",
+      "sample_id not found in cases (5c6a7f5f-69c8-44ef-9780-d9b39a744465)",
+      "sample_id not found in cases (69be70ef-2160-41c3-82d2-c05925da9355)",
+      "sample_id not found in cases (9571d5f8-ffc8-410f-b406-91025093f4c0)",
+      "sample_id not found in cases (8c81ec07-89e8-4b28-af66-b20f9caec275)",
+      "sample_id not found in cases (8e4fa53f-6c0e-46e0-a710-028aaa6a3eec)",
+      "sample_id not found in cases (4200ac56-be9d-4343-83fc-e413eb03c2e5)",
+      "sample_id not found in cases (62dee1c1-9c8b-4a69-a7f9-e4d85de5cf29)",
+      "sample_id not found in cases (b6cbe580-c9a5-4268-8d91-5a0298fa9952)"
     ]
   },
   "mykrobe_run": {

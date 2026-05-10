@@ -57,11 +57,14 @@ One-click Windows launchers:
 - Double-click `Start-Backend.bat` to run only the backend.
 - Double-click `Start-Platform.bat` to run backend + GUI and open the browser.
 - Double-click `Setup-And-Start-Platform.bat` for first-time setup (creates `.venv`, installs dependencies, then starts backend + GUI).
+- Double-click `Start-Backend-Demo.bat` for backend in demo mode (requires typing DEMO confirmation).
+- Double-click `Start-Platform-Demo.bat` for backend + GUI in demo mode (requires typing DEMO confirmation).
 
 Notes:
 - These launchers expect `.venv` to already exist with dependencies installed.
 - If `DATABASE_URL` is not set, the scripts default to:
 	`postgresql://tb:tb@localhost/tb_surveillance`
+- Demo launchers set `TB_ENABLE_SYNTHETIC_SEEDING=1` and `TB_ALLOW_NON_OPERATIONAL_ACTIONS=1` for that session only.
 
 Windows notes:
 - If `CREATE USER tb` reports `role "tb" already exists`, that means the user is already present and you can continue.

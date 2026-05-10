@@ -711,6 +711,32 @@ def outbreak_report(db: Session = Depends(get_db)):
         leading=12,
         spaceAfter=6,
     )
+    cell_hdr_style = ParagraphStyle(
+        "CellHdr",
+        parent=styles["Normal"],
+        fontSize=8,
+        textColor=colors.white,
+        fontName="Helvetica-Bold",
+        leading=11,
+        spaceAfter=0,
+    )
+    cell_body_style = ParagraphStyle(
+        "CellBody",
+        parent=styles["Normal"],
+        fontSize=7.5,
+        textColor=colors.HexColor("#2d3a4a"),
+        leading=10,
+        spaceAfter=0,
+    )
+    cell_bold_style = ParagraphStyle(
+        "CellBold",
+        parent=styles["Normal"],
+        fontSize=7.5,
+        fontName="Helvetica-Bold",
+        textColor=colors.HexColor("#2d3a4a"),
+        leading=10,
+        spaceAfter=0,
+    )
 
     story = []
 
@@ -734,45 +760,39 @@ def outbreak_report(db: Session = Depends(get_db)):
     # ── TB Genomics Background ─────────────────────────────────────────────────
     story.append(Paragraph("TB Genomics — Key Concepts", styles["Heading3"]))
     bg_rows = [
-        ["Concept", "Explanation"],
-        ["Whole-Genome Sequencing (WGS)",
-         "Reads the complete ~4.4 Mb genome of M. tuberculosis. More informative than conventional typing (MIRU, spoligotyping)."],
-        ["SNP (single nucleotide polymorphism)",
-         "A single base-pair difference in the genome. Closely related strains share very few SNPs. Used as a genetic 'distance' metric."],
-        ["SNP threshold for transmission",
-         "Strains with ≤12 SNPs are considered potentially linked (UK NICE guidance). ≤5 SNPs suggests recent direct transmission. "
-         ">50 SNPs effectively rules out recent shared transmission."],
-        ["Lineage",
-         "M. tuberculosis is classified into 7+ major lineages (L1–L7) reflecting global evolutionary history. Lineage influences "
-         "drug-resistance patterns and may correlate with transmissibility."],
-        ["Cluster",
-         "A group of cases whose sequences are genetically similar (within the SNP threshold). A cluster does not prove "
-         "direct person-to-person transmission — epidemiological linkage is required to confirm transmission routes."],
-        ["outbreaker2",
-         "A Bayesian MCMC method that combines SNP distances with collection dates and an assumed generation time to probabilistically "
-         "infer who-infected-whom. Output posterior probabilities indicate the likelihood of a direct transmission event between any pair of cases."],
-        ["Generation time",
-         "The average time between one person being infected and the next person they infect being detected. "
-         "For TB, this is typically 1–3 years (range 0.5–5 years) due to the long latency period."],
-        ["MCMC convergence",
-         "Markov Chain Monte Carlo simulations must reach a stable state ('converge'). A convergence diagnostic near 1.0 "
-         "indicates reliable estimates. Values >1.1 suggest the chain has not fully mixed and results should be interpreted cautiously."],
-        ["Drug resistance",
-         "Genomic mutations predict resistance to first-line drugs (isoniazid, rifampicin, etc.) and define MDR-TB (multi-drug resistant) "
-         "and XDR-TB (extensively drug resistant). Genomic DR prediction is used alongside phenotypic DST."],
-        ["Transmission network",
-         "A directed graph where arrows indicate the most probable direction of transmission. High-confidence links (posterior probability >0.70) "
-         "warrant immediate epidemiological follow-up to confirm exposure history."],
+        [Paragraph("Concept", cell_hdr_style), Paragraph("Explanation", cell_hdr_style)],
+        [Paragraph("Whole-Genome Sequencing (WGS)", cell_bold_style),
+         Paragraph("Reads the complete ~4.4 Mb genome of M. tuberculosis. More informative than conventional typing (MIRU, spoligotyping).", cell_body_style)],
+        [Paragraph("SNP (single nucleotide polymorphism)", cell_bold_style),
+         Paragraph("A single base-pair difference in the genome. Closely related strains share very few SNPs. Used as a genetic \u2018distance\u2019 metric.", cell_body_style)],
+        [Paragraph("SNP threshold for transmission", cell_bold_style),
+         Paragraph("Strains with \u226412 SNPs are considered potentially linked (UK NICE guidance). \u22645 SNPs suggests recent direct transmission. "
+                   ">50 SNPs effectively rules out recent shared transmission.", cell_body_style)],
+        [Paragraph("Lineage", cell_bold_style),
+         Paragraph("M. tuberculosis is classified into 7+ major lineages (L1\u2013L7) reflecting global evolutionary history. Lineage influences "
+                   "drug-resistance patterns and may correlate with transmissibility.", cell_body_style)],
+        [Paragraph("Cluster", cell_bold_style),
+         Paragraph("A group of cases whose sequences are genetically similar (within the SNP threshold). A cluster does not prove "
+                   "direct person-to-person transmission \u2014 epidemiological linkage is required to confirm transmission routes.", cell_body_style)],
+        [Paragraph("outbreaker2", cell_bold_style),
+         Paragraph("A Bayesian MCMC method that combines SNP distances with collection dates and an assumed generation time to probabilistically "
+                   "infer who-infected-whom. Output posterior probabilities indicate the likelihood of a direct transmission event between any pair of cases.", cell_body_style)],
+        [Paragraph("Generation time", cell_bold_style),
+         Paragraph("The average time between one person being infected and the next person they infect being detected. "
+                   "For TB, this is typically 1\u20133 years (range 0.5\u20135 years) due to the long latency period.", cell_body_style)],
+        [Paragraph("MCMC convergence", cell_bold_style),
+         Paragraph("Markov Chain Monte Carlo simulations must reach a stable state (\u2018converge\u2019). A convergence diagnostic near 1.0 "
+                   "indicates reliable estimates. Values >1.1 suggest the chain has not fully mixed and results should be interpreted cautiously.", cell_body_style)],
+        [Paragraph("Drug resistance", cell_bold_style),
+         Paragraph("Genomic mutations predict resistance to first-line drugs (isoniazid, rifampicin, etc.) and define MDR-TB (multi-drug resistant) "
+                   "and XDR-TB (extensively drug resistant). Genomic DR prediction is used alongside phenotypic DST.", cell_body_style)],
+        [Paragraph("Transmission network", cell_bold_style),
+         Paragraph("A directed graph where arrows indicate the most probable direction of transmission. High-confidence links (posterior probability >0.70) "
+                   "warrant immediate epidemiological follow-up to confirm exposure history.", cell_body_style)],
     ]
     bg_table = Table(bg_rows, colWidths=[1.8 * inch, 5.0 * inch])
     bg_table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1a5c4a")),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 0), (-1, 0), 9),
-        ("FONTNAME", (0, 1), (0, -1), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 1), (-1, -1), 8),
-        ("BACKGROUND", (0, 1), (-1, -1), colors.white),
         ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f4faf8")]),
         ("BOX", (0, 0), (-1, -1), 0.6, colors.HexColor("#7ec9b8")),
         ("INNERGRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#cce8e0")),
@@ -1239,30 +1259,27 @@ def outbreak_report(db: Session = Depends(get_db)):
         interp_style,
     ))
     routes_rows = [
-        ["Genomic Signal", "SNP Range", "Transmission Implication", "Recommended Action"],
-        ["Highly probable direct transmission", "0–5 SNPs",
-         "Strong genomic evidence of recent direct person-to-person transmission. Strain has had little time to evolve.",
-         "Immediate contact tracing; identify shared setting (household, workplace, healthcare)."],
-        ["Possible direct or near-direct transmission", "6–12 SNPs",
-         "Genetically close; consistent with transmission within the last 1–3 years or via an undetected intermediate.",
-         "Epidemiological linkage investigation; check whether cases share contacts or settings."],
-        ["Within extended cluster — indirect link likely", "13–50 SNPs",
-         "Genetically related but too diverged for recent direct transmission. Likely share a common ancestor strain.",
-         "Review cluster history; may represent reactivation from the same source years earlier."],
-        ["Unrelated strains", ">50 SNPs",
-         "No plausible genomic link. Coincident diagnoses are likely due to independent exposure or reactivation.",
-         "No cluster-based action; manage as separate cases."],
-        ["Mixed-lineage / contamination", "N/A",
-         "Two or more distinct strain signals in a single sample. May indicate laboratory cross-contamination or mixed infection.",
-         "Flag for repeat sequencing; do not use in cluster assignments until resolved."],
+        [Paragraph("Genomic Signal", cell_hdr_style), Paragraph("SNP Range", cell_hdr_style),
+         Paragraph("Transmission Implication", cell_hdr_style), Paragraph("Recommended Action", cell_hdr_style)],
+        [Paragraph("Highly probable direct transmission", cell_bold_style), Paragraph("0\u20135 SNPs", cell_body_style),
+         Paragraph("Strong genomic evidence of recent direct person-to-person transmission. Strain has had little time to evolve.", cell_body_style),
+         Paragraph("Immediate contact tracing; identify shared setting (household, workplace, healthcare).", cell_body_style)],
+        [Paragraph("Possible direct or near-direct transmission", cell_bold_style), Paragraph("6\u201312 SNPs", cell_body_style),
+         Paragraph("Genetically close; consistent with transmission within the last 1\u20133 years or via an undetected intermediate.", cell_body_style),
+         Paragraph("Epidemiological linkage investigation; check whether cases share contacts or settings.", cell_body_style)],
+        [Paragraph("Within extended cluster \u2014 indirect link likely", cell_bold_style), Paragraph("13\u201350 SNPs", cell_body_style),
+         Paragraph("Genetically related but too diverged for recent direct transmission. Likely share a common ancestor strain.", cell_body_style),
+         Paragraph("Review cluster history; may represent reactivation from the same source years earlier.", cell_body_style)],
+        [Paragraph("Unrelated strains", cell_bold_style), Paragraph(">50 SNPs", cell_body_style),
+         Paragraph("No plausible genomic link. Coincident diagnoses are likely due to independent exposure or reactivation.", cell_body_style),
+         Paragraph("No cluster-based action; manage as separate cases.", cell_body_style)],
+        [Paragraph("Mixed-lineage / contamination", cell_bold_style), Paragraph("N/A", cell_body_style),
+         Paragraph("Two or more distinct strain signals in a single sample. May indicate laboratory cross-contamination or mixed infection.", cell_body_style),
+         Paragraph("Flag for repeat sequencing; do not use in cluster assignments until resolved.", cell_body_style)],
     ]
     routes_table = Table(routes_rows, colWidths=[1.55 * inch, 0.8 * inch, 2.3 * inch, 2.15 * inch])
     routes_table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2a5080")),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 0), (-1, 0), 8),
-        ("FONTSIZE", (0, 1), (-1, -1), 7.5),
         ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f0f4fa")]),
         ("BOX", (0, 0), (-1, -1), 0.6, colors.HexColor("#8aaad8")),
         ("INNERGRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#c8d8ec")),
@@ -1401,39 +1418,37 @@ def outbreak_report(db: Session = Depends(get_db)):
         interp_style,
     ))
     lineage_ref_rows = [
-        ["Lineage", "Name / Origin", "DR Association", "NI Relevance", "Notes"],
-        ["L1", "East-African-Indian / Indo-Oceanic",
-         "Lower MDR-TB frequency",
-         "Cases linked to South Asia, Horn of Africa",
-         "Commonly found in Bangladeshi, Indian, Somali communities."],
-        ["L2", "East-Asian (Beijing lineage)",
-         "High MDR/XDR-TB risk; associated with resistance acquisition",
-         "Sporadic importation; watch for resistance",
-         "Beijing strains have shown high transmissibility in some outbreak settings."],
-        ["L3", "East-African-Indian (Delhi/CAS)",
-         "Moderate DR frequency",
-         "Cases linked to Pakistan, Afghanistan, India",
-         "Common in large urban TB programmes in the UK."],
-        ["L4", "Euro-American",
-         "Generally lower DR; but historical MDR clusters exist",
-         "Dominant UK-born strain type",
-         "Most legacy UK TB is L4. Reactivation common in older cohorts."],
-        ["L5 / L6", "West-African (Mycobacterium africanum)",
-         "Lower overall DR",
-         "Cases linked to West Africa",
-         "Slower growth, may present with atypical features."],
-        ["L7", "Ethiopian",
-         "Limited data",
-         "Rare in NI",
-         "Emerging lineage classification; limited clinical guidance available."],
+        [Paragraph("Lineage", cell_hdr_style), Paragraph("Name / Origin", cell_hdr_style),
+         Paragraph("DR Association", cell_hdr_style), Paragraph("NI Relevance", cell_hdr_style),
+         Paragraph("Notes", cell_hdr_style)],
+        [Paragraph("L1", cell_bold_style), Paragraph("East-African-Indian / Indo-Oceanic", cell_body_style),
+         Paragraph("Lower MDR-TB frequency", cell_body_style),
+         Paragraph("Cases linked to South Asia, Horn of Africa", cell_body_style),
+         Paragraph("Commonly found in Bangladeshi, Indian, Somali communities.", cell_body_style)],
+        [Paragraph("L2", cell_bold_style), Paragraph("East-Asian (Beijing lineage)", cell_body_style),
+         Paragraph("High MDR/XDR-TB risk; associated with resistance acquisition", cell_body_style),
+         Paragraph("Sporadic importation; watch for resistance", cell_body_style),
+         Paragraph("Beijing strains have shown high transmissibility in some outbreak settings.", cell_body_style)],
+        [Paragraph("L3", cell_bold_style), Paragraph("East-African-Indian (Delhi/CAS)", cell_body_style),
+         Paragraph("Moderate DR frequency", cell_body_style),
+         Paragraph("Cases linked to Pakistan, Afghanistan, India", cell_body_style),
+         Paragraph("Common in large urban TB programmes in the UK.", cell_body_style)],
+        [Paragraph("L4", cell_bold_style), Paragraph("Euro-American", cell_body_style),
+         Paragraph("Generally lower DR; but historical MDR clusters exist", cell_body_style),
+         Paragraph("Dominant UK-born strain type", cell_body_style),
+         Paragraph("Most legacy UK TB is L4. Reactivation common in older cohorts.", cell_body_style)],
+        [Paragraph("L5 / L6", cell_bold_style), Paragraph("West-African (Mycobacterium africanum)", cell_body_style),
+         Paragraph("Lower overall DR", cell_body_style),
+         Paragraph("Cases linked to West Africa", cell_body_style),
+         Paragraph("Slower growth, may present with atypical features.", cell_body_style)],
+        [Paragraph("L7", cell_bold_style), Paragraph("Ethiopian", cell_body_style),
+         Paragraph("Limited data", cell_body_style),
+         Paragraph("Rare in NI", cell_body_style),
+         Paragraph("Emerging lineage classification; limited clinical guidance available.", cell_body_style)],
     ]
     lin_table = Table(lineage_ref_rows, colWidths=[0.55 * inch, 1.35 * inch, 1.3 * inch, 1.4 * inch, 2.2 * inch])
     lin_table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1a5c4a")),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 0), (-1, 0), 8),
-        ("FONTSIZE", (0, 1), (-1, -1), 7.5),
         ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f4faf8")]),
         ("BOX", (0, 0), (-1, -1), 0.6, colors.HexColor("#7ec9b8")),
         ("INNERGRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#cce8e0")),
@@ -1460,43 +1475,40 @@ def outbreak_report(db: Session = Depends(get_db)):
         interp_style,
     ))
     action_ref_rows = [
-        ["Finding", "Recommended Action", "Urgency"],
-        ["New case links to an existing open cluster (≤12 SNPs)",
-         "Notify cluster lead; extend contact tracing to include new case contacts; "
-         "review whether the cluster source has been identified.",
-         "Within 5 working days"],
-        ["High-confidence transmission link identified (posterior >0.70)",
-         "Epidemiological review of both cases; document shared exposure if found; "
-         "update cluster investigation record.",
-         "Within 5 working days"],
-        ["New cluster opened (≥2 cases genetically linked, no prior cluster)",
-         "Open investigation; notify public health; assign epidemiologist; "
-         "initiate contact tracing for all cases.",
-         "Within 2 working days"],
-        ["MDR-TB predicted by genomics",
-         "Confirm with phenotypic DST; notify MDR-TB specialist centre; "
-         "initiate enhanced infection control if hospitalised.",
-         "Immediately on result"],
-        ["Sequencing coverage <80% for a region",
-         "Review specimen submission and transport processes for that region; "
-         "identify cases that did not receive WGS and arrange retrospective sequencing if available.",
-         "Monthly programme review"],
-        ["MCMC convergence diagnostic >1.1",
-         "Do not rely on posterior transmission probabilities from this run. "
-         "Increase MCMC iterations and re-run outbreaker2. Check input data completeness.",
-         "Before using results"],
-        ["Contamination flag on a sample",
-         "Exclude sample from cluster assignments; arrange repeat sequencing from original culture. "
-         "Investigate laboratory process if multiple consecutive contamination flags.",
-         "Within 10 working days"],
+        [Paragraph("Finding", cell_hdr_style), Paragraph("Recommended Action", cell_hdr_style),
+         Paragraph("Urgency", cell_hdr_style)],
+        [Paragraph("New case links to an existing open cluster (\u226412 SNPs)", cell_bold_style),
+         Paragraph("Notify cluster lead; extend contact tracing to include new case contacts; "
+                   "review whether the cluster source has been identified.", cell_body_style),
+         Paragraph("Within 5 working days", cell_body_style)],
+        [Paragraph("High-confidence transmission link identified (posterior >0.70)", cell_bold_style),
+         Paragraph("Epidemiological review of both cases; document shared exposure if found; "
+                   "update cluster investigation record.", cell_body_style),
+         Paragraph("Within 5 working days", cell_body_style)],
+        [Paragraph("New cluster opened (\u22652 cases genetically linked, no prior cluster)", cell_bold_style),
+         Paragraph("Open investigation; notify public health; assign epidemiologist; "
+                   "initiate contact tracing for all cases.", cell_body_style),
+         Paragraph("Within 2 working days", cell_body_style)],
+        [Paragraph("MDR-TB predicted by genomics", cell_bold_style),
+         Paragraph("Confirm with phenotypic DST; notify MDR-TB specialist centre; "
+                   "initiate enhanced infection control if hospitalised.", cell_body_style),
+         Paragraph("Immediately on result", cell_body_style)],
+        [Paragraph("Sequencing coverage <80% for a region", cell_bold_style),
+         Paragraph("Review specimen submission and transport processes for that region; "
+                   "identify cases that did not receive WGS and arrange retrospective sequencing if available.", cell_body_style),
+         Paragraph("Monthly programme review", cell_body_style)],
+        [Paragraph("MCMC convergence diagnostic >1.1", cell_bold_style),
+         Paragraph("Do not rely on posterior transmission probabilities from this run. "
+                   "Increase MCMC iterations and re-run outbreaker2. Check input data completeness.", cell_body_style),
+         Paragraph("Before using results", cell_body_style)],
+        [Paragraph("Contamination flag on a sample", cell_bold_style),
+         Paragraph("Exclude sample from cluster assignments; arrange repeat sequencing from original culture. "
+                   "Investigate laboratory process if multiple consecutive contamination flags.", cell_body_style),
+         Paragraph("Within 10 working days", cell_body_style)],
     ]
     act_table = Table(action_ref_rows, colWidths=[2.0 * inch, 3.8 * inch, 1.0 * inch])
     act_table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2a5080")),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 0), (-1, 0), 8),
-        ("FONTSIZE", (0, 1), (-1, -1), 7.5),
         ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f0f4fa")]),
         ("BOX", (0, 0), (-1, -1), 0.6, colors.HexColor("#8aaad8")),
         ("INNERGRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#c8d8ec")),

@@ -1,7 +1,7 @@
 {
   "status": "ok",
   "method": "sequence_distance_connected_components",
-  "generated_at": "2026-05-10T10:54:54.870464+00:00",
+  "generated_at": "2026-05-10T11:45:45.822216+00:00",
   "threshold_snp_distance": 25,
   "min_cluster_size": 2,
   "sequenced_cases": 187,
@@ -12,32 +12,32 @@
   "clusters": [
     {
       "cluster_label": "SEQ-001",
-      "cluster_id": "72d12743-c1cc-5ef9-9903-ecd6e177784f",
+      "cluster_id": "0cd6321d-8b39-5e38-8e68-567b151d4042",
       "case_count": 27
     },
     {
       "cluster_label": "SEQ-002",
-      "cluster_id": "49e11768-3202-5558-8593-30e8e0a15203",
+      "cluster_id": "8a0a5195-d260-5ce0-9797-37ff68a71807",
       "case_count": 25
     },
     {
       "cluster_label": "SEQ-003",
-      "cluster_id": "b64ded9b-4e4c-5313-a58d-46c3954fc21d",
+      "cluster_id": "0fb1ba30-7433-5dfe-976f-e08aa8091e26",
       "case_count": 24
     },
     {
       "cluster_label": "SEQ-004",
-      "cluster_id": "acaa1700-f44f-5d7e-be3a-00adf2c9a09d",
+      "cluster_id": "b9bdab14-cb80-59b0-89cc-5713f1ae57e1",
       "case_count": 21
     },
     {
       "cluster_label": "SEQ-005",
-      "cluster_id": "718714a7-3838-5d54-872f-ccff08d7aed4",
+      "cluster_id": "941d8d04-f044-553e-9f6f-b43911cf576b",
       "case_count": 20
     },
     {
       "cluster_label": "SEQ-006",
-      "cluster_id": "b472470c-0acf-5b7e-9c84-59bc4504b80c",
+      "cluster_id": "218d446f-9e9c-5301-9cd7-5da4932e8e5b",
       "case_count": 14
     }
   ]

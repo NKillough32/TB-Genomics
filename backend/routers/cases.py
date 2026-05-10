@@ -648,11 +648,136 @@ def outbreak_report(db: Session = Depends(get_db)):
 
     doc = SimpleDocTemplate(report_path, pagesize=A4, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36)
     styles = getSampleStyleSheet()
+
+    # ── Custom styles ──────────────────────────────────────────────────────────
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_JUSTIFY
+
+    caption_style = ParagraphStyle(
+        "Caption",
+        parent=styles["Normal"],
+        fontSize=8,
+        textColor=colors.HexColor("#4a6a7a"),
+        leading=11,
+        spaceAfter=4,
+        italic=True,
+    )
+    callout_style = ParagraphStyle(
+        "Callout",
+        parent=styles["Normal"],
+        fontSize=9,
+        textColor=colors.HexColor("#184e44"),
+        backColor=colors.HexColor("#eef8f6"),
+        borderColor=colors.HexColor("#7ec9b8"),
+        borderWidth=0.8,
+        borderPadding=(5, 7, 5, 7),
+        leading=13,
+        spaceAfter=6,
+    )
+    interp_style = ParagraphStyle(
+        "Interp",
+        parent=styles["Normal"],
+        fontSize=8.5,
+        textColor=colors.HexColor("#2d3a4a"),
+        leading=12,
+        spaceAfter=4,
+        alignment=TA_JUSTIFY,
+    )
+    small_style = ParagraphStyle(
+        "Small",
+        parent=styles["Normal"],
+        fontSize=7.5,
+        textColor=colors.HexColor("#5a7a8a"),
+        leading=10,
+        spaceAfter=3,
+    )
+    section_note_style = ParagraphStyle(
+        "SectionNote",
+        parent=styles["Normal"],
+        fontSize=8,
+        textColor=colors.HexColor("#1a4060"),
+        backColor=colors.HexColor("#e8f0fb"),
+        borderColor=colors.HexColor("#8aaad8"),
+        borderWidth=0.8,
+        borderPadding=(4, 6, 4, 6),
+        leading=12,
+        spaceAfter=6,
+    )
+
     story = []
 
     story.append(Paragraph("NI TB Genomic Surveillance", styles["Title"]))
     story.append(Paragraph("Outbreak Investigation Report", styles["Heading2"]))
     story.append(Paragraph(f"Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC", styles["Normal"]))
+    story.append(Spacer(1, 0.18 * inch))
+
+    # ── About This Report ──────────────────────────────────────────────────────
+    story.append(Paragraph("About This Report", styles["Heading3"]))
+    story.append(Paragraph(
+        "This report is produced by the Northern Ireland TB Genomic Surveillance platform using whole-genome sequencing (WGS) "
+        "data and epidemiological case records. It is intended to support TB programme staff and public health investigators "
+        "by providing genomic evidence for transmission clusters, drug-resistance profiles, and programme performance metrics. "
+        "<b>This is a decision-support tool only — all findings must be reviewed and acted on by a qualified clinician or "
+        "public health professional. No automated decisions are made.</b>",
+        interp_style,
+    ))
+    story.append(Spacer(1, 0.1 * inch))
+
+    # ── TB Genomics Background ─────────────────────────────────────────────────
+    story.append(Paragraph("TB Genomics — Key Concepts", styles["Heading3"]))
+    bg_rows = [
+        ["Concept", "Explanation"],
+        ["Whole-Genome Sequencing (WGS)",
+         "Reads the complete ~4.4 Mb genome of M. tuberculosis. More informative than conventional typing (MIRU, spoligotyping)."],
+        ["SNP (single nucleotide polymorphism)",
+         "A single base-pair difference in the genome. Closely related strains share very few SNPs. Used as a genetic 'distance' metric."],
+        ["SNP threshold for transmission",
+         "Strains with ≤12 SNPs are considered potentially linked (UK NICE guidance). ≤5 SNPs suggests recent direct transmission. "
+         ">50 SNPs effectively rules out recent shared transmission."],
+        ["Lineage",
+         "M. tuberculosis is classified into 7+ major lineages (L1–L7) reflecting global evolutionary history. Lineage influences "
+         "drug-resistance patterns and may correlate with transmissibility."],
+        ["Cluster",
+         "A group of cases whose sequences are genetically similar (within the SNP threshold). A cluster does not prove "
+         "direct person-to-person transmission — epidemiological linkage is required to confirm transmission routes."],
+        ["outbreaker2",
+         "A Bayesian MCMC method that combines SNP distances with collection dates and an assumed generation time to probabilistically "
+         "infer who-infected-whom. Output posterior probabilities indicate the likelihood of a direct transmission event between any pair of cases."],
+        ["Generation time",
+         "The average time between one person being infected and the next person they infect being detected. "
+         "For TB, this is typically 1–3 years (range 0.5–5 years) due to the long latency period."],
+        ["MCMC convergence",
+         "Markov Chain Monte Carlo simulations must reach a stable state ('converge'). A convergence diagnostic near 1.0 "
+         "indicates reliable estimates. Values >1.1 suggest the chain has not fully mixed and results should be interpreted cautiously."],
+        ["Drug resistance",
+         "Genomic mutations predict resistance to first-line drugs (isoniazid, rifampicin, etc.) and define MDR-TB (multi-drug resistant) "
+         "and XDR-TB (extensively drug resistant). Genomic DR prediction is used alongside phenotypic DST."],
+        ["Transmission network",
+         "A directed graph where arrows indicate the most probable direction of transmission. High-confidence links (posterior probability >0.70) "
+         "warrant immediate epidemiological follow-up to confirm exposure history."],
+    ]
+    bg_table = Table(bg_rows, colWidths=[1.8 * inch, 5.0 * inch])
+    bg_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1a5c4a")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, 0), 9),
+        ("FONTNAME", (0, 1), (0, -1), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 1), (-1, -1), 8),
+        ("BACKGROUND", (0, 1), (-1, -1), colors.white),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f4faf8")]),
+        ("BOX", (0, 0), (-1, -1), 0.6, colors.HexColor("#7ec9b8")),
+        ("INNERGRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#cce8e0")),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ("LEFTPADDING", (0, 0), (-1, -1), 5),
+    ]))
+    story.append(bg_table)
+    story.append(Paragraph(
+        "Table 1. TB genomics reference — key terms used throughout this report.",
+        caption_style,
+    ))
     story.append(Spacer(1, 0.2 * inch))
 
     story.append(Paragraph("Case Summary", styles["Heading3"]))
@@ -675,7 +800,13 @@ def outbreak_report(db: Session = Depends(get_db)):
         )
     )
     story.append(summary_table)
-    story.append(Spacer(1, 0.2 * inch))
+    story.append(Paragraph(
+        "Table 2. Programme case count summary. Clustered cases are those linked by genomic similarity to at least one other case. "
+        "Unclustered (singleton) cases may represent imported strains, sporadic transmission, or reactivation of latent disease. "
+        "Open clusters are active genomic transmission clusters with ongoing epidemiological investigation.",
+        caption_style,
+    ))
+    story.append(Spacer(1, 0.15 * inch))
 
     interpretation_flags = []
     if kpi_data:
@@ -773,6 +904,24 @@ def outbreak_report(db: Session = Depends(get_db)):
     else:
         story.append(Paragraph("No outbreak summary JSON found.", styles["Normal"]))
 
+    story.append(Paragraph(
+        "Table 3. outbreaker2 Bayesian MCMC analysis parameters. "
+        "<b>Posterior Samples</b> is the number of accepted MCMC draws used to compute estimates — higher values give more stable posteriors. "
+        "<b>Mean Log-Likelihood</b> reflects model fit; values closer to zero (less negative) indicate better fit. "
+        "<b>Transmission Probability</b> is the average posterior probability that any given case-pair represents a direct transmission event. "
+        "<b>Generation Time</b> is the modelled average interval (in days) between infection events in a transmission chain. "
+        "<b>Convergence Diagnostic</b> near 1.0 confirms the MCMC chain has stabilised; values >1.1 indicate cautious interpretation is needed.",
+        caption_style,
+    ))
+    story.append(Paragraph(
+        "<b>How to interpret outbreaker2 results:</b> outbreaker2 reconstructs the most probable transmission tree using "
+        "both genetic distance (SNPs) and timing (collection dates). Pairs with high posterior transmission probability "
+        "(>0.5) represent genomically and temporally plausible direct transmission events. These are candidates for "
+        "epidemiological investigation to identify shared exposure. Lower probability pairs may still be linked "
+        "within the same cluster but through one or more undetected intermediate cases.",
+        section_note_style,
+    ))
+
     story.append(Spacer(1, 0.2 * inch))
     story.append(Paragraph("Programme Surveillance KPIs (Last 12 Weeks)", styles["Heading3"]))
     if kpi_data:
@@ -804,6 +953,16 @@ def outbreak_report(db: Session = Depends(get_db)):
             story.append(Spacer(1, 0.1 * inch))
             story.append(Paragraph(f"KPI Warning: {kpi_data['warning']}", styles["Italic"]))
 
+        story.append(Paragraph(
+            "Table 4. Programme surveillance KPIs over the reporting window. "
+            "<b>Sequencing Coverage</b> is the percentage of eligible TB culture-confirmed cases that have received whole-genome sequencing. "
+            "The UK target is ≥80%. "
+            "<b>QC Pass Rate</b> is the percentage of sequenced samples that meet quality thresholds (e.g. ≥95% genome coverage at ≥10×). "
+            "Low pass rates may indicate DNA quality issues, contamination, or laboratory process variation. "
+            "<b>Contamination Flags</b> indicate samples where a mixed-strain signal suggests cross-contamination requiring repeat or rejection.",
+            caption_style,
+        ))
+
         representativeness = kpi_data.get("representativeness_by_region") or []
         if representativeness:
             story.append(Spacer(1, 0.15 * inch))
@@ -832,6 +991,12 @@ def outbreak_report(db: Session = Depends(get_db)):
     else:
         story.append(Paragraph("Surveillance KPIs unavailable.", styles["Normal"]))
 
+    story.append(Paragraph(
+        "Table 5. Regional sequencing representativeness. Regions with coverage <80% may introduce ascertainment bias — "
+        "clusters in under-sequenced regions may be underdetected. Where persistent regional gaps exist, "
+        "review laboratory submission pathways and specimen transport processes.",
+        caption_style,
+    ))
     story.append(Spacer(1, 0.2 * inch))
     story.append(Paragraph("Weekly Surveillance Trends (12 Weeks)", styles["Heading3"]))
     if weekly_trends:
@@ -867,6 +1032,12 @@ def outbreak_report(db: Session = Depends(get_db)):
     else:
         story.append(Paragraph("Weekly trends unavailable.", styles["Normal"]))
 
+    story.append(Paragraph(
+        "Table 6. Weekly sequencing coverage and QC pass rates over the last 12 weeks. "
+        "Figure 1 (below) plots coverage and QC trends — a declining trend may indicate emerging laboratory issues. "
+        "Weeks with zero eligible cases may reflect reporting lags rather than true absence of TB.",
+        caption_style,
+    ))
     story.append(Spacer(1, 0.2 * inch))
     story.append(Paragraph("Cluster Action Prioritization", styles["Heading3"]))
     if cluster_action_rows:
@@ -896,12 +1067,19 @@ def outbreak_report(db: Session = Depends(get_db)):
         )
         story.append(action_table)
         story.append(Spacer(1, 0.08 * inch))
-        story.append(
-            Paragraph(
-                "Priority score combines cluster size, cross-region spread, specimen recency, and open investigation status.",
-                styles["Normal"],
-            )
-        )
+        story.append(Paragraph(
+            "Table 7. Clusters ranked by investigation priority score. Score is composite: cluster size (×2), "
+            "cross-region spread (×3), specimen recency within 14/30/60 days (×3/2/1), open investigation status (×3). "
+            "Higher scores indicate clusters warranting urgent epidemiological follow-up. "
+            "<b>Status 'open'</b> means an active field investigation is ongoing or recommended.",
+            caption_style,
+        ))
+        story.append(Paragraph(
+            "<b>Recommended action:</b> For clusters with priority score >10 and status 'open', ensure field epidemiology is "
+            "actively investigating shared exposure (household contacts, healthcare settings, social networks). "
+            "Cross-region clusters may indicate transmission events during travel or care-seeking across NHS trust boundaries.",
+            section_note_style,
+        ))
     else:
         story.append(Paragraph("No cluster action data available.", styles["Normal"]))
 
@@ -930,6 +1108,13 @@ def outbreak_report(db: Session = Depends(get_db)):
         )
         story.append(lineage_table)
 
+        story.append(Paragraph(
+            "Table 8. Lineage and drug-resistance validation status. TB-Profiler and Mykrobe are bioinformatic pipelines "
+            "that classify M. tuberculosis lineage and predict drug resistance from WGS reads. "
+            "'Available' means the tool executed successfully; 'unavailable' may indicate missing software, Docker daemon issues, or insufficient FASTA inputs. "
+            "FASTA inputs refers to the number of consensus genome sequences submitted for analysis.",
+            caption_style,
+        ))
         next_steps = lineage_dr_data.get("next_steps") or []
         if next_steps:
             story.append(Spacer(1, 0.08 * inch))
@@ -965,6 +1150,13 @@ def outbreak_report(db: Session = Depends(get_db)):
             )
         )
         story.append(secondary_table)
+        story.append(Paragraph(
+            "Table 9. Secondary engine validation. TransPhylo uses a phylogenetic tree and sampling dates to reconstruct "
+            "transmission under a within-host evolutionary model. BactDating estimates dated ancestral phylogenies to calibrate "
+            "transmission timelines. Both require a Newick-format phylogenetic tree as input. "
+            "Where tools are unavailable, outbreaker2 results remain the primary genomic evidence.",
+            caption_style,
+        ))
     else:
         story.append(Paragraph("No secondary engine validation artifact found.", styles["Normal"]))
 
@@ -996,6 +1188,16 @@ def outbreak_report(db: Session = Depends(get_db)):
     else:
         story.append(Paragraph("No cluster method comparison artifact found.", styles["Normal"]))
 
+    story.append(Paragraph(
+        "Table 10. Agreement between SNP-threshold sequence clustering and outbreaker2 probabilistic clustering. "
+        "<b>Precision</b>: of pairs grouped together by outbreaker2, the fraction also grouped by sequence clusters. "
+        "<b>Recall</b>: of pairs grouped by sequence clusters, the fraction also grouped by outbreaker2. "
+        "<b>Jaccard</b>: overall overlap index (0=no agreement, 1=perfect agreement). "
+        "Discordant pairs — grouped by one method but not the other — may represent cases where temporal data "
+        "(outbreaker2) overrides genomic distance alone, or where the SNP threshold is set differently.",
+        caption_style,
+    ))
+
     if sequence_summary_data:
         story.append(Spacer(1, 0.1 * inch))
         story.append(Paragraph("Sequence Clustering Snapshot", styles["Heading4"]))
@@ -1018,6 +1220,59 @@ def outbreak_report(db: Session = Depends(get_db)):
             story.append(seq_table)
 
     story.append(Spacer(1, 0.2 * inch))
+    story.append(Paragraph("Transmission Priority Signals", styles["Heading3"]))
+    # ── TB Transmission Routes — Background ───────────────────────────────────
+    story.append(Paragraph("Understanding TB Transmission Routes from WGS", styles["Heading3"]))
+    story.append(Paragraph(
+        "Whole-genome sequencing identifies genomic relatedness but does not directly observe contact events. "
+        "Combining genomic clusters with epidemiological data (contact tracing, shared locations, timeline of "
+        "diagnosis) allows investigators to build a plausible transmission chain. The table below summarises "
+        "the genomic signals and their transmission implications.",
+        interp_style,
+    ))
+    routes_rows = [
+        ["Genomic Signal", "SNP Range", "Transmission Implication", "Recommended Action"],
+        ["Highly probable direct transmission", "0–5 SNPs",
+         "Strong genomic evidence of recent direct person-to-person transmission. Strain has had little time to evolve.",
+         "Immediate contact tracing; identify shared setting (household, workplace, healthcare)."],
+        ["Possible direct or near-direct transmission", "6–12 SNPs",
+         "Genetically close; consistent with transmission within the last 1–3 years or via an undetected intermediate.",
+         "Epidemiological linkage investigation; check whether cases share contacts or settings."],
+        ["Within extended cluster — indirect link likely", "13–50 SNPs",
+         "Genetically related but too diverged for recent direct transmission. Likely share a common ancestor strain.",
+         "Review cluster history; may represent reactivation from the same source years earlier."],
+        ["Unrelated strains", ">50 SNPs",
+         "No plausible genomic link. Coincident diagnoses are likely due to independent exposure or reactivation.",
+         "No cluster-based action; manage as separate cases."],
+        ["Mixed-lineage / contamination", "N/A",
+         "Two or more distinct strain signals in a single sample. May indicate laboratory cross-contamination or mixed infection.",
+         "Flag for repeat sequencing; do not use in cluster assignments until resolved."],
+    ]
+    routes_table = Table(routes_rows, colWidths=[1.55 * inch, 0.8 * inch, 2.3 * inch, 2.15 * inch])
+    routes_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2a5080")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, 0), 8),
+        ("FONTSIZE", (0, 1), (-1, -1), 7.5),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f0f4fa")]),
+        ("BOX", (0, 0), (-1, -1), 0.6, colors.HexColor("#8aaad8")),
+        ("INNERGRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#c8d8ec")),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("TOPPADDING", (0, 0), (-1, -1), 3),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+    ]))
+    story.append(routes_table)
+    story.append(Paragraph(
+        "Table 11. TB transmission route classification by SNP distance (M. tuberculosis whole-genome comparison). "
+        "SNP thresholds follow UK NICE guideline NG33 and published literature (Walker et al. 2013, Meehan et al. 2019). "
+        "The generation time assumed in outbreaker2 modelling is set at programme configuration and affects when "
+        "a given SNP distance is interpreted as consistent with direct vs indirect transmission.",
+        caption_style,
+    ))
+    story.append(Spacer(1, 0.18 * inch))
+
     story.append(Paragraph("Transmission Priority Signals", styles["Heading3"]))
     if transmission_data and transmission_data.get("key_nodes"):
         priority_rows = [["Case", "Region", "Risk", "Out", "In"]]
@@ -1043,30 +1298,219 @@ def outbreak_report(db: Session = Depends(get_db)):
         )
         story.append(priority_table)
 
-        story.append(Spacer(1, 0.1 * inch))
-        story.append(
-            Paragraph(
-                (
-                    f"Network snapshot: nodes={transmission_data.get('node_count', 0)}, "
-                    f"edges={transmission_data.get('edge_count', 0)}, "
-                    f"high-confidence links={transmission_data.get('high_confidence_edges', 0)}"
-                ),
-                styles["Normal"],
-            )
-        )
+        story.append(Paragraph(
+            f"Table 12. Top-priority cases by network centrality. "
+            f"Network snapshot: {transmission_data.get('node_count', 0)} nodes, "
+            f"{transmission_data.get('edge_count', 0)} directed links, "
+            f"{transmission_data.get('high_confidence_edges', 0)} high-confidence links (posterior >0.70). "
+            "<b>Out</b> = outgoing transmission links (potential sources); <b>In</b> = incoming links (potential recipients). "
+            "Cases with multiple outgoing high-confidence links ('superspreaders') should be prioritised for epidemiological investigation.",
+            caption_style,
+        ))
+        story.append(Paragraph(
+            "<b>High-confidence transmission links</b> (posterior probability >0.70) represent the strongest genomic evidence "
+            "of direct transmission between a pair of cases. Investigators should review the contact history for all such pairs. "
+            "Where epidemiological linkage can be confirmed, the direction of transmission (source → recipient) inferred by "
+            "outbreaker2 can inform contact prioritisation for LTBI screening.",
+            section_note_style,
+        ))
     else:
         story.append(Paragraph("No transmission priority data found.", styles["Normal"]))
 
     story.append(Spacer(1, 0.2 * inch))
     story.append(Paragraph("Diagnostic Graphics", styles["Heading3"]))
+    story.append(Paragraph(
+        "The following plots are generated by outbreaker2 and the platform's supplementary visualisation pipeline. "
+        "Each figure caption explains the content and how to interpret the output.",
+        interp_style,
+    ))
+    story.append(Spacer(1, 0.08 * inch))
+
+    FIGURE_CAPTIONS = {
+        "outbreaker_trace.png": (
+            "Figure 2. MCMC trace plot — log-posterior probability over iterations. "
+            "A well-mixed chain shows stable fluctuation around a mean value (no upward/downward drift). "
+            "If the trace shows a long burn-in slope or multiple plateaux, the chain may not have converged; "
+            "consider increasing iterations or checking input data quality."
+        ),
+        "outbreaker_hist.png": (
+            "Figure 3. Posterior distribution histograms — marginal distributions of key model parameters "
+            "(transmission probability, sampling probability, generation time). "
+            "Narrow, symmetric peaks indicate well-determined parameters. Broad or multi-modal distributions "
+            "suggest parameter uncertainty, which should be reflected in cautious interpretation of individual "
+            "transmission links."
+        ),
+        "outbreaker_tree.png": (
+            "Figure 4. Inferred transmission tree (most probable who-infected-whom). "
+            "Each node is a case; arrows indicate the direction of inferred transmission from source (tail) "
+            "to recipient (head). Arrow thickness or colour (where shown) reflects posterior probability. "
+            "Dashed or thin arrows indicate lower-confidence links. Cases with no incoming arrow are "
+            "probable index cases or represent undetected importation events."
+        ),
+        "outbreaker_phylo.png": (
+            "Figure 5. Phylogenetic context — a midpoint-rooted maximum parsimony or neighbour-joining tree "
+            "of sequenced cases, coloured by cluster or region. "
+            "Branch length represents SNP distance. Cases on short branches with few SNPs between them "
+            "form tight clades consistent with recent transmission. Well-separated clades indicate "
+            "genetically distinct strain lineages circulating concurrently."
+        ),
+        "outbreaker_resistance.png": (
+            "Figure 6. Drug resistance profile summary — frequency of predicted resistance mutations across "
+            "the sequenced cohort. "
+            "Bars represent the proportion of cases with predicted resistance to each antibiotic class. "
+            "Rifampicin + isoniazid co-resistance defines MDR-TB. High frequencies of any first-line "
+            "resistance warrant urgent review of empirical treatment protocols."
+        ),
+        "outbreaker_weekly_trends.png": (
+            "Figure 1. 12-week surveillance trend — sequencing coverage (%) and QC pass rate (%) by "
+            "calendar week. Coverage is the proportion of eligible culture-confirmed TB cases that received WGS. "
+            "Declining coverage weeks may reflect specimen submission delays, laboratory capacity issues, "
+            "or data processing backlogs. QC pass rate below 90% in consecutive weeks warrants a "
+            "laboratory review."
+        ),
+    }
+
     if existing_graphics:
-        for name in existing_graphics:
-            story.append(Paragraph(name.replace("outbreaker_", "").replace(".png", "").title(), styles["Heading4"]))
+        for fig_num, name in enumerate(existing_graphics, start=2):
             image_path = os.path.join("exports", name)
             story.append(build_report_image(image_path))
-            story.append(Spacer(1, 0.12 * inch))
+            caption_text = FIGURE_CAPTIONS.get(name)
+            if not caption_text:
+                label = name.replace("outbreaker_", "").replace(".png", "").replace("_", " ").title()
+                caption_text = f"Figure. {label} — generated by the outbreaker2 analysis pipeline."
+            story.append(Paragraph(caption_text, caption_style))
+            story.append(Spacer(1, 0.15 * inch))
     else:
         story.append(Paragraph("No outbreak graphics found in exports/.", styles["Normal"]))
+
+    # ── Lineage Clinical Reference ─────────────────────────────────────────────
+    story.append(Spacer(1, 0.2 * inch))
+    story.append(Paragraph("M. tuberculosis Lineage Reference", styles["Heading3"]))
+    story.append(Paragraph(
+        "Lineage classification places a strain within the global phylogeny of M. tuberculosis. Lineage influences "
+        "drug-resistance acquisition patterns and geographic origin. The following table provides clinical and "
+        "epidemiological context for lineages commonly observed in Northern Ireland.",
+        interp_style,
+    ))
+    lineage_ref_rows = [
+        ["Lineage", "Name / Origin", "DR Association", "NI Relevance", "Notes"],
+        ["L1", "East-African-Indian / Indo-Oceanic",
+         "Lower MDR-TB frequency",
+         "Cases linked to South Asia, Horn of Africa",
+         "Commonly found in Bangladeshi, Indian, Somali communities."],
+        ["L2", "East-Asian (Beijing lineage)",
+         "High MDR/XDR-TB risk; associated with resistance acquisition",
+         "Sporadic importation; watch for resistance",
+         "Beijing strains have shown high transmissibility in some outbreak settings."],
+        ["L3", "East-African-Indian (Delhi/CAS)",
+         "Moderate DR frequency",
+         "Cases linked to Pakistan, Afghanistan, India",
+         "Common in large urban TB programmes in the UK."],
+        ["L4", "Euro-American",
+         "Generally lower DR; but historical MDR clusters exist",
+         "Dominant UK-born strain type",
+         "Most legacy UK TB is L4. Reactivation common in older cohorts."],
+        ["L5 / L6", "West-African (Mycobacterium africanum)",
+         "Lower overall DR",
+         "Cases linked to West Africa",
+         "Slower growth, may present with atypical features."],
+        ["L7", "Ethiopian",
+         "Limited data",
+         "Rare in NI",
+         "Emerging lineage classification; limited clinical guidance available."],
+    ]
+    lin_table = Table(lineage_ref_rows, colWidths=[0.55 * inch, 1.35 * inch, 1.3 * inch, 1.4 * inch, 2.2 * inch])
+    lin_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1a5c4a")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, 0), 8),
+        ("FONTSIZE", (0, 1), (-1, -1), 7.5),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f4faf8")]),
+        ("BOX", (0, 0), (-1, -1), 0.6, colors.HexColor("#7ec9b8")),
+        ("INNERGRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#cce8e0")),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("TOPPADDING", (0, 0), (-1, -1), 3),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+    ]))
+    story.append(lin_table)
+    story.append(Paragraph(
+        "Table 13. M. tuberculosis lineage reference for clinical and epidemiological context. "
+        "DR = drug resistance; MDR = multidrug-resistant; XDR = extensively drug-resistant. "
+        "Lineage assignment should be combined with phenotypic DST and clinical judgment. "
+        "Source: Coll et al. (2014) Nature Genetics; WHO Global TB Report 2023.",
+        caption_style,
+    ))
+
+    # ── Clinical Action Summary ────────────────────────────────────────────────
+    story.append(Spacer(1, 0.2 * inch))
+    story.append(Paragraph("Clinical and Public Health Action Summary", styles["Heading3"]))
+    story.append(Paragraph(
+        "The table below maps genomic findings to recommended clinical and public health actions. "
+        "All actions must be confirmed by the responsible clinician and public health team.",
+        interp_style,
+    ))
+    action_ref_rows = [
+        ["Finding", "Recommended Action", "Urgency"],
+        ["New case links to an existing open cluster (≤12 SNPs)",
+         "Notify cluster lead; extend contact tracing to include new case contacts; "
+         "review whether the cluster source has been identified.",
+         "Within 5 working days"],
+        ["High-confidence transmission link identified (posterior >0.70)",
+         "Epidemiological review of both cases; document shared exposure if found; "
+         "update cluster investigation record.",
+         "Within 5 working days"],
+        ["New cluster opened (≥2 cases genetically linked, no prior cluster)",
+         "Open investigation; notify public health; assign epidemiologist; "
+         "initiate contact tracing for all cases.",
+         "Within 2 working days"],
+        ["MDR-TB predicted by genomics",
+         "Confirm with phenotypic DST; notify MDR-TB specialist centre; "
+         "initiate enhanced infection control if hospitalised.",
+         "Immediately on result"],
+        ["Sequencing coverage <80% for a region",
+         "Review specimen submission and transport processes for that region; "
+         "identify cases that did not receive WGS and arrange retrospective sequencing if available.",
+         "Monthly programme review"],
+        ["MCMC convergence diagnostic >1.1",
+         "Do not rely on posterior transmission probabilities from this run. "
+         "Increase MCMC iterations and re-run outbreaker2. Check input data completeness.",
+         "Before using results"],
+        ["Contamination flag on a sample",
+         "Exclude sample from cluster assignments; arrange repeat sequencing from original culture. "
+         "Investigate laboratory process if multiple consecutive contamination flags.",
+         "Within 10 working days"],
+    ]
+    act_table = Table(action_ref_rows, colWidths=[2.0 * inch, 3.8 * inch, 1.0 * inch])
+    act_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2a5080")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, 0), 8),
+        ("FONTSIZE", (0, 1), (-1, -1), 7.5),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f0f4fa")]),
+        ("BOX", (0, 0), (-1, -1), 0.6, colors.HexColor("#8aaad8")),
+        ("INNERGRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#c8d8ec")),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("TOPPADDING", (0, 0), (-1, -1), 3),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+    ]))
+    story.append(act_table)
+    story.append(Paragraph(
+        "Table 14. Recommended clinical and public health actions mapped to genomic findings. "
+        "Urgency thresholds align with PHE/PHA TB operational guidance. "
+        "All genomic findings must be reviewed in conjunction with clinical history, contact tracing records, "
+        "and microbiological DST before action is taken.",
+        caption_style,
+    ))
+    story.append(Paragraph(
+        "<b>Disclaimer:</b> Genomic cluster assignments and transmission inferences are probabilistic estimates "
+        "based on mathematical models. They supplement but do not replace epidemiological investigation. "
+        "Do not use genomic evidence alone to assign legal or clinical liability for transmission.",
+        small_style,
+    ))
 
     story.append(Spacer(1, 0.16 * inch))
     story.append(Paragraph("Data Provenance", styles["Heading3"]))

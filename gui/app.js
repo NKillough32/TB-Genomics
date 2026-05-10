@@ -1,5 +1,43 @@
 
 let API='http://localhost:8000';const API_FALLBACK='http://127.0.0.1:8010';let activeJob=null;
+let demoModeActive=sessionStorage.getItem('tb_demo_mode_active')==='1';
+
+function refreshDemoModeStatus(){
+	const status=document.getElementById('demoModeStatus');
+	if(!status) return;
+	status.textContent=demoModeActive?'Demo mode: ON (session only)':'Demo mode: OFF';
+	status.className=demoModeActive?'demo-mode-status on':'demo-mode-status';
+}
+
+function openDemoModeDialog(){
+	const modal=document.getElementById('demoModeModal');
+	const input=document.getElementById('demoModeConfirmInput');
+	if(!modal||!input) return;
+	input.value='';
+	modal.classList.add('open');
+	modal.setAttribute('aria-hidden','false');
+	setTimeout(()=>input.focus(),0);
+}
+
+function closeDemoModeDialog(){
+	const modal=document.getElementById('demoModeModal');
+	if(!modal) return;
+	modal.classList.remove('open');
+	modal.setAttribute('aria-hidden','true');
+}
+
+function confirmDemoMode(){
+	const input=document.getElementById('demoModeConfirmInput');
+	const value=(input?.value||'').trim().toUpperCase();
+	if(value!=='DEMO'){
+		alert('Please type DEMO exactly to activate demo mode.');
+		return;
+	}
+	demoModeActive=true;
+	sessionStorage.setItem('tb_demo_mode_active','1');
+	refreshDemoModeStatus();
+	closeDemoModeDialog();
+}
 
 // ── KPI Banner ──────────────────────────────────────────────────────────────
 async function loadKPIBanner(){
@@ -108,6 +146,10 @@ async function loadDataSafety(){
 
 async function uploadFile(){const f=document.getElementById('fileInput').files[0];if(!f)return;const fd=new FormData();fd.append('file',f);const r=await fetch(`${API}/ingest/file`,{method:'POST',body:fd});document.getElementById('uploadResult').textContent=JSON.stringify(await r.json());}
 async function seedSyntheticData(){
+	if(!demoModeActive){
+		openDemoModeDialog();
+		return;
+	}
 	const caseCount=Number(document.getElementById('seedCaseCount').value||250);
 	const seed=Number(document.getElementById('seedValue').value||42);
 	const reset=document.getElementById('seedReset').checked;
@@ -119,6 +161,15 @@ async function seedSyntheticData(){
 		if(selectedCountries.length>0) url+=`&countries=${encodeURIComponent(selectedCountries.join(','))}`;
 		const r=await fetch(url,{method:'POST'});
 		const payload=await r.json();
+		if(!r.ok){
+			if(payload?.detail?.error==='synthetic_seeding_disabled'){
+				resultBox.textContent='Synthetic seeding is disabled on backend. For demo mode set TB_ENABLE_SYNTHETIC_SEEDING=1 in backend terminal and restart backend.';
+			}else{
+				resultBox.textContent=JSON.stringify(payload,null,2);
+			}
+			loadDataSafety();
+			return;
+		}
 		resultBox.textContent=JSON.stringify(payload,null,2);
 		// Refresh region dropdown after seeding
 		loadRegions();
@@ -321,4 +372,4 @@ async function loadRegions(){
 		// Backend unavailable — leave placeholder only
 	}
 }
-(async()=>{try{await fetch(`${API}/`);document.getElementById('status').innerHTML='<li>✅ Backend running</li>';}catch{document.getElementById('status').innerHTML='<li>❌ Backend unavailable</li>';}loadRegions();loadKPIBanner();loadDataSafety();})();
+(async()=>{try{await fetch(`${API}/`);document.getElementById('status').innerHTML='<li>✅ Backend running</li>';}catch{document.getElementById('status').innerHTML='<li>❌ Backend unavailable</li>';}refreshDemoModeStatus();loadRegions();loadKPIBanner();loadDataSafety();})();

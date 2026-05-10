@@ -484,6 +484,80 @@ footer {
 }
 .btn-export-zip:hover { background: #1d3a5e; }
 
+.btn-warning {
+	background: #8a4b00;
+	color: #fff;
+	border: none;
+	border-radius: 8px;
+	padding: 0.48rem 0.9rem;
+	font-weight: 700;
+	cursor: pointer;
+}
+
+.btn-warning:hover { background: #6f3c00; }
+
+.demo-mode-row {
+	display: flex;
+	align-items: center;
+	gap: 0.6rem;
+	margin: 0.55rem 0;
+}
+
+.demo-mode-status {
+	font-size: 0.78rem;
+	color: #6a7f8d;
+	font-weight: 600;
+}
+
+.demo-mode-status.on {
+	color: #8a4b00;
+}
+
+.modal-overlay {
+	position: fixed;
+	inset: 0;
+	background: rgba(0, 0, 0, 0.35);
+	display: none;
+	align-items: center;
+	justify-content: center;
+	padding: 1rem;
+	z-index: 1000;
+}
+
+.modal-overlay.open {
+	display: flex;
+}
+
+.modal-card {
+	background: #fff;
+	border: 1px solid #d5dfeb;
+	border-radius: 12px;
+	box-shadow: 0 16px 40px rgba(21, 44, 68, 0.18);
+	max-width: 520px;
+	width: 100%;
+	padding: 1rem 1.1rem;
+}
+
+.modal-card h3 {
+	margin: 0 0 0.45rem;
+	color: #214762;
+}
+
+.modal-card input {
+	width: 100%;
+	margin-top: 0.4rem;
+	padding: 0.48rem 0.55rem;
+	border-radius: 8px;
+	border: 1px solid #c9d5e3;
+}
+
+.modal-actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: 0.45rem;
+	margin-top: 0.8rem;
+}
+
 
 @keyframes fadeRise {
 	from {

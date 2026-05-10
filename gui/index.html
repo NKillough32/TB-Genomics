@@ -70,6 +70,10 @@
       <option value="UKR">Ukraine</option>
       <option value="ZAF">South Africa</option>
     </select>
+    <div class="demo-mode-row">
+      <button id="activateDemoBtn" class="btn-warning" onclick="openDemoModeDialog()">Activate demo mode (synthetic)</button>
+      <span id="demoModeStatus" class="demo-mode-status">Demo mode: OFF</span>
+    </div>
     <button onclick="seedSyntheticData()">Generate synthetic dataset</button>
     <pre id="seedResult" class="log-box"></pre>
   </section>
@@ -137,6 +141,21 @@
     <pre id="auditTrail" class="log-box"></pre>
   </section>
 </main>
+
+<div id="demoModeModal" class="modal-overlay" aria-hidden="true">
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="demoModeTitle">
+    <h3 id="demoModeTitle">Confirm Demo Mode Activation</h3>
+    <p>This enables synthetic training data workflows for this browser session.</p>
+    <p><strong>Warning:</strong> Do not use this mode for real public health actions.</p>
+    <label for="demoModeConfirmInput">Type <strong>DEMO</strong> to continue:</label>
+    <input id="demoModeConfirmInput" type="text" placeholder="Type DEMO" />
+    <div class="modal-actions">
+      <button class="btn-warning" onclick="confirmDemoMode()">Confirm</button>
+      <button onclick="closeDemoModeDialog()">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <footer>
   <p>Decision-support tool only. No automated decisions are made.</p>
 </footer>

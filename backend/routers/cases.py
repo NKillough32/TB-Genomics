@@ -385,14 +385,51 @@ def outbreaker_analysis():
 
 
 @router.get("/lineage-dr-validation")
-def lineage_dr_validation():
+def lineage_dr_validation(db: Session = Depends(get_db)):
     """Return lineage/drug-resistance integration validation artifact."""
+
+    analysis_summary = {
+        "interpreted_samples": 0,
+        "samples_with_lineage": 0,
+        "samples_with_resistance_calls": 0,
+        "samples_with_interpretation_summary": 0,
+    }
+
+    try:
+        summary_row = db.execute(
+            text(
+                """
+                SELECT
+                    COUNT(*)::int AS interpreted_samples,
+                    COUNT(*) FILTER (WHERE lineage IS NOT NULL AND BTRIM(lineage) <> '')::int AS samples_with_lineage,
+                    COUNT(*) FILTER (
+                        WHERE predicted_drug_resistance IS NOT NULL
+                        AND predicted_drug_resistance::text NOT IN ('null', '{}', '[]')
+                    )::int AS samples_with_resistance_calls,
+                    COUNT(*) FILTER (
+                        WHERE interpretation_summary IS NOT NULL AND BTRIM(interpretation_summary) <> ''
+                    )::int AS samples_with_interpretation_summary
+                FROM tb_interpretation
+                """
+            )
+        ).mappings().first()
+        if summary_row:
+            analysis_summary = {
+                "interpreted_samples": int(summary_row["interpreted_samples"] or 0),
+                "samples_with_lineage": int(summary_row["samples_with_lineage"] or 0),
+                "samples_with_resistance_calls": int(summary_row["samples_with_resistance_calls"] or 0),
+                "samples_with_interpretation_summary": int(summary_row["samples_with_interpretation_summary"] or 0),
+            }
+    except Exception as exc:
+        analysis_summary["error"] = str(exc)
+
     path = "exports/lineage_dr_validation.json"
     if not os.path.exists(path):
         return {
             "status": "no_results",
             "message": "Lineage/DR validation has not been run yet",
             "artifact_path": path,
+            "analysis_summary": analysis_summary,
         }
 
     try:
@@ -403,9 +440,11 @@ def lineage_dr_validation():
             "status": "error",
             "message": str(exc),
             "artifact_path": path,
+            "analysis_summary": analysis_summary,
         }
 
     payload["artifact_path"] = path
+    payload["analysis_summary"] = analysis_summary
     return payload
 
 
@@ -1115,6 +1154,7 @@ def outbreak_report(db: Session = Depends(get_db)):
     story.append(Paragraph("Lineage and Drug Resistance Validation", styles["Heading3"]))
     if lineage_dr_data:
         lineage_engines = (lineage_dr_data.get("engines") or {})
+        analysis_summary = lineage_dr_data.get("analysis_summary") or {}
         lineage_rows = [
             ["Overall Status", str(lineage_dr_data.get("status", "unknown"))],
             ["TB-Profiler", str((lineage_engines.get("tb_profiler") or {}).get("status", "unknown"))],
@@ -1122,6 +1162,9 @@ def outbreak_report(db: Session = Depends(get_db)):
             ["Docker Fallback", str((lineage_dr_data.get("docker") or {}).get("fallback_enabled", False))],
             ["Docker Daemon Running", str((lineage_dr_data.get("docker") or {}).get("daemon_running", False))],
             ["FASTA Inputs", str((lineage_dr_data.get("inputs") or {}).get("fasta_count", 0))],
+            ["Interpreted Samples", str(analysis_summary.get("interpreted_samples", 0))],
+            ["Samples with Lineage", str(analysis_summary.get("samples_with_lineage", 0))],
+            ["Samples with Resistance Calls", str(analysis_summary.get("samples_with_resistance_calls", 0))],
         ]
         lineage_table = Table(lineage_rows, colWidths=[2.8 * inch, 3.0 * inch])
         lineage_table.setStyle(
@@ -1630,6 +1673,12 @@ def advanced_search(
     if lineage:
         query_str += " AND ti.lineage = :lineage"
         params["lineage"] = lineage
+    if resistance:
+        query_str += (
+            " AND ti.predicted_drug_resistance IS NOT NULL"
+            " AND LOWER(CAST(ti.predicted_drug_resistance AS TEXT)) LIKE :resistance_pattern"
+        )
+        params["resistance_pattern"] = f"%{resistance.strip().lower()}%"
     if date_from:
         query_str += " AND c.specimen_date >= :date_from"
         params["date_from"] = date_from

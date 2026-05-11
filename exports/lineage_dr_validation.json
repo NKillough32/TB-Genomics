@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-10T12:16:39.102889+00:00",
+  "generated_at": "2026-05-11T08:35:41.317998+00:00",
   "status": "completed",
   "scaffold_version": "1.0",
   "engines": {
@@ -8,7 +8,7 @@
       "executable": "C:\\Users\\Nicho\\Desktop\\TB-Genomics-main\\.venv\\Scripts\\tb-profiler",
       "version_probe": {
         "status": "error",
-        "output": "Traceback (most recent call last): | ModuleNotFoundError: No module named 'pysam'"
+        "output": "Traceback (most recent call last): | ModuleNotFoundError: No module named 'pathogenprofiler'"
       },
       "message": "tb-profiler executable found but version probe failed"
     },
@@ -23,10 +23,10 @@
     "available": true,
     "status": "ok",
     "probe": "Docker version 28.1.1, build 4eba377",
-    "daemon_running": false,
-    "daemon_probe": "Client:",
+    "daemon_running": true,
+    "daemon_probe": "docker daemon reachable",
     "fallback_enabled": true,
-    "tbprofiler_image": "quay.io/jodyphelan/tbprofiler:latest"
+    "tbprofiler_image": "staphb/tbprofiler:latest"
   },
   "wsl": {
     "available": true,
@@ -68,23 +68,23 @@
   },
   "tbprofiler_run": {
     "status": "completed",
-    "runner": "wsl",
-    "wsl_env": "tbtools",
-    "message": "tb-profiler WSL execution finished",
+    "runner": "docker",
+    "image": "staphb/tbprofiler:latest",
+    "message": "tb-profiler docker execution finished",
     "attempted_samples": 10,
     "successful_samples": 10,
     "failed_samples": 0,
     "output_jsons": [
-      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/e43f85e1-970e-43b4-a0bb-abbe3263af2a.results.json",
-      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/cfdf2e5f-17d2-437e-bcc3-be5d34d71bff.results.json",
-      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/f060e3bc-448f-4fd3-b34b-aed407416c3e.results.json",
-      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/33423c4b-7d23-43df-b683-0dfdd2783841.results.json",
-      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/1b3e068a-7e84-44e0-b53e-9a7f76268abe.results.json",
-      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/4efd60cc-fef0-47b6-9e87-898756699ef7.results.json",
-      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/8eef995d-edbd-4c67-a9c8-e68756d1113b.results.json",
-      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/61b31192-bd43-40ca-9e4f-d70c5fc42376.results.json",
-      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/c4670b75-ef3f-433e-89a4-de305d10f317.results.json",
-      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/259b7b08-b232-4947-bdfe-699e08e8b15b.results.json"
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/11d909f6-d97e-41a8-8846-588281945751.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/27958f11-cf56-4e92-b129-60c015e091d6.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/c3a1d20f-d65d-4d80-87c2-e6c9393fb8fc.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/2df18475-bce0-41c0-b21f-20b6dc4285ea.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/6465806b-3d76-4cc5-9665-74526177cb32.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/21c5c7da-214b-4878-9398-03b39032e7b7.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/97e80dc3-8a67-409c-a74a-9fa04fa5cc28.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/dba54a02-d12b-4b0a-9e8d-203daa3bd8d3.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/fdcd5020-edad-4bb8-973e-abd81f16ac6b.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/8c53d227-9dd6-4e36-9ec4-25a9bca0818b.results.json"
     ],
     "failures": []
   },
@@ -107,27 +107,39 @@
     "successful_samples": 10,
     "failed_samples": 0,
     "output_jsons": [
-      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/e43f85e1-970e-43b4-a0bb-abbe3263af2a.results.json",
-      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/cfdf2e5f-17d2-437e-bcc3-be5d34d71bff.results.json",
-      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/f060e3bc-448f-4fd3-b34b-aed407416c3e.results.json",
-      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/33423c4b-7d23-43df-b683-0dfdd2783841.results.json",
-      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/1b3e068a-7e84-44e0-b53e-9a7f76268abe.results.json",
-      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/4efd60cc-fef0-47b6-9e87-898756699ef7.results.json",
-      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/8eef995d-edbd-4c67-a9c8-e68756d1113b.results.json",
-      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/61b31192-bd43-40ca-9e4f-d70c5fc42376.results.json",
-      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/c4670b75-ef3f-433e-89a4-de305d10f317.results.json",
-      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/259b7b08-b232-4947-bdfe-699e08e8b15b.results.json"
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/11d909f6-d97e-41a8-8846-588281945751.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/27958f11-cf56-4e92-b129-60c015e091d6.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/c3a1d20f-d65d-4d80-87c2-e6c9393fb8fc.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/2df18475-bce0-41c0-b21f-20b6dc4285ea.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/6465806b-3d76-4cc5-9665-74526177cb32.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/21c5c7da-214b-4878-9398-03b39032e7b7.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/97e80dc3-8a67-409c-a74a-9fa04fa5cc28.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/dba54a02-d12b-4b0a-9e8d-203daa3bd8d3.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/fdcd5020-edad-4bb8-973e-abd81f16ac6b.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/8c53d227-9dd6-4e36-9ec4-25a9bca0818b.results.json"
     ],
     "failures": []
   },
   "tbprofiler_docker_run": {
-    "status": "skipped",
+    "status": "completed",
     "runner": "docker",
-    "message": "Docker tb-profiler execution not attempted",
-    "attempted_samples": 0,
-    "successful_samples": 0,
+    "image": "staphb/tbprofiler:latest",
+    "message": "tb-profiler docker execution finished",
+    "attempted_samples": 10,
+    "successful_samples": 10,
     "failed_samples": 0,
-    "output_jsons": [],
+    "output_jsons": [
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/11d909f6-d97e-41a8-8846-588281945751.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/27958f11-cf56-4e92-b129-60c015e091d6.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/c3a1d20f-d65d-4d80-87c2-e6c9393fb8fc.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/2df18475-bce0-41c0-b21f-20b6dc4285ea.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/6465806b-3d76-4cc5-9665-74526177cb32.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/21c5c7da-214b-4878-9398-03b39032e7b7.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/97e80dc3-8a67-409c-a74a-9fa04fa5cc28.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/dba54a02-d12b-4b0a-9e8d-203daa3bd8d3.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/fdcd5020-edad-4bb8-973e-abd81f16ac6b.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/8c53d227-9dd6-4e36-9ec4-25a9bca0818b.results.json"
+    ],
     "failures": []
   },
   "db_import": {
@@ -140,20 +152,9 @@
   "tbprofiler_db_import": {
     "status": "imported",
     "message": "tb-profiler results imported into tb_interpretation",
-    "imported_rows": 0,
-    "skipped_rows": 10,
-    "warnings": [
-      "sample_id not found in cases (e43f85e1-970e-43b4-a0bb-abbe3263af2a)",
-      "sample_id not found in cases (cfdf2e5f-17d2-437e-bcc3-be5d34d71bff)",
-      "sample_id not found in cases (f060e3bc-448f-4fd3-b34b-aed407416c3e)",
-      "sample_id not found in cases (33423c4b-7d23-43df-b683-0dfdd2783841)",
-      "sample_id not found in cases (1b3e068a-7e84-44e0-b53e-9a7f76268abe)",
-      "sample_id not found in cases (4efd60cc-fef0-47b6-9e87-898756699ef7)",
-      "sample_id not found in cases (8eef995d-edbd-4c67-a9c8-e68756d1113b)",
-      "sample_id not found in cases (61b31192-bd43-40ca-9e4f-d70c5fc42376)",
-      "sample_id not found in cases (c4670b75-ef3f-433e-89a4-de305d10f317)",
-      "sample_id not found in cases (259b7b08-b232-4947-bdfe-699e08e8b15b)"
-    ]
+    "imported_rows": 10,
+    "skipped_rows": 0,
+    "warnings": []
   },
   "mykrobe_run": {
     "status": "skipped",

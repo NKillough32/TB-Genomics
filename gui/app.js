@@ -270,7 +270,13 @@ async function loadLineageDrValidation(){
 	try{
 		const r=await fetch(`${API}/cases/lineage-dr-validation`);
 		const payload=await r.json();
-		box.textContent=JSON.stringify(payload,null,2);
+		let html='<div class="result-panel">';
+		html+=`<h4>Validation status: ${payload.status||'unknown'}</h4>`;
+		const summary=payload.analysis_summary||{};
+		html+=`<div class="kpi-strip">Interpreted samples: ${summary.interpreted_samples||0} | With lineage: ${summary.samples_with_lineage||0} | With resistance calls: ${summary.samples_with_resistance_calls||0}</div>`;
+		html+=`<pre class="log-box">${JSON.stringify(payload,null,2)}</pre>`;
+		html+='</div>';
+		box.innerHTML=html;
 	}catch(e){
 		box.textContent=`Failed to load lineage/DR validation: ${e}`;
 	}
@@ -300,6 +306,7 @@ async function advancedSearch(){
 	const lineage=document.getElementById('searchLineage').value||null;
 	const dateFrom=document.getElementById('searchDateFrom').value||null;
 	const dateTo=document.getElementById('searchDateTo').value||null;
+	const resistance=document.getElementById('searchResistance').value||null;
 	const box=document.getElementById('searchResults');
 	box.textContent='Searching cases...';
 	try{
@@ -309,6 +316,7 @@ async function advancedSearch(){
 		if(lineage) params.push(`lineage=${encodeURIComponent(lineage)}`);
 		if(dateFrom) params.push(`date_from=${encodeURIComponent(dateFrom)}`);
 		if(dateTo) params.push(`date_to=${encodeURIComponent(dateTo)}`);
+		if(resistance) params.push(`resistance=${encodeURIComponent(resistance)}`);
 		url+=params.join('&');
 		const r=await fetch(url);
 		const data=await r.json();

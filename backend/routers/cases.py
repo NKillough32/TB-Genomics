@@ -1,6 +1,7 @@
 import os
 import json
 import re
+import csv
 import hashlib
 from statistics import median
 from itertools import combinations
@@ -15,6 +16,7 @@ from backend.models import Case
 from backend.data_safety import enforce_operational_dataset, get_data_safety_status
 
 router = APIRouter(prefix="/cases", tags=["cases"])
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 
 def get_db():
@@ -427,6 +429,19 @@ def _sha256_of_file(path: str) -> str:
         return digest.hexdigest()
     except Exception:
         return "n/a"
+
+
+def _write_csv_rows(path: str, rows: list[list[object]]) -> None:
+    """Write UTF-8 CSV rows for appendix companion files; swallow IO errors for report continuity."""
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", newline="", encoding="utf-8") as handle:
+            writer = csv.writer(handle)
+            for row in rows:
+                writer.writerow(["" if value is None else str(value) for value in row])
+    except Exception:
+        # Report generation must not fail if companion CSV export is unavailable.
+        pass
 
 
 def _confidence_tier(
@@ -966,7 +981,7 @@ def outbreak_report(db: Session = Depends(get_db)):
     ]
     high_confidence_all_count = len(high_confidence_edges)
     high_confidence_snapshot_count = int(
-        transmission_data.get("high_confidence_edges", 0) or 0
+        (transmission_data.get("high_confidence_edges", 0) if transmission_data else 0) or 0
     )
 
     qc_detail_rows = [
@@ -1391,7 +1406,23 @@ def outbreak_report(db: Session = Depends(get_db)):
         except Exception:
             model_reliability = "Exploratory"
 
+    required_repro_metadata = [
+        ("Reference genome", summary_data.get("reference_genome") if summary_data else None),
+        ("SNP-calling pipeline/version", summary_data.get("snp_pipeline_version") if summary_data else None),
+        ("Resistance catalogue/version", lineage_dr_data.get("resistance_catalogue_version") if lineage_dr_data else None),
+        ("Lineage-calling tool/version", lineage_dr_data.get("lineage_tool_version") if lineage_dr_data else None),
+        ("outbreaker2 version", summary_data.get("analysis_engine_version") if summary_data else None),
+        ("Random seed", summary_data.get("random_seed") if summary_data else None),
+    ]
+    missing_required_repro_fields = [
+        label
+        for label, value in required_repro_metadata
+        if value is None or (isinstance(value, str) and not value.strip())
+    ]
+    circulation_label = "Development / Internal Draft Only" if missing_required_repro_fields else "Eligible for External Circulation"
+
     executive_rows = [
+        ["Circulation status", circulation_label, "High" if missing_required_repro_fields else "Moderate", "Complete reproducibility metadata before external governance circulation" if missing_required_repro_fields else "Proceed with governance review"],
         ["Sequencing coverage", summary_coverage, "Low" if summary_sequenced_cases else "Moderate", "Maintain / widen only if capacity permits"],
         ["QC pass rate", summary_qc_pass_rate, "High" if qc_status_counts["fail"] or qc_status_counts["not_reported"] else "Low", "Review failed and unreported samples"],
         ["Contamination", str(qc_status_counts["contamination"]), "Moderate/high" if qc_status_counts["contamination"] else "Low", "Repeat sequencing / exclude from cluster assignment"],
@@ -1418,6 +1449,11 @@ def outbreak_report(db: Session = Depends(get_db)):
             ]
         )
     )
+    if missing_required_repro_fields:
+        story.append(Paragraph(
+            "<b>REPORT STATUS: DEVELOPMENT / INTERNAL DRAFT ONLY</b> - Required reproducibility metadata is incomplete; external circulation is blocked until mandatory fields are populated.",
+            section_note_style,
+        ))
     story.append(Paragraph("Executive Action Summary", styles["Heading3"]))
     story.append(Paragraph(
         "Use this page first. Items marked model-only or exploratory require genomic validation and epidemiological corroboration before operational action.",
@@ -1765,13 +1801,13 @@ def outbreak_report(db: Session = Depends(get_db)):
         append_numbered_caption(
             "Table 7. Clusters ranked by investigation priority score. Score is composite: cluster size (×2), "
             "cross-region spread (×3), specimen recency within 14/30/60 days (×3/2/1), open investigation status (×3). "
-            "Higher scores indicate clusters warranting urgent epidemiological follow-up. "
-            "<b>Status 'open'</b> means an active field investigation is ongoing or recommended."
+            "Higher scores indicate clusters warranting prioritised MDT review and data-completeness follow-up. "
+            "<b>Status 'open'</b> means an active review is ongoing or recommended."
         )
         story.append(Paragraph(
-            "<b>Recommended action:</b> For clusters with priority score >10 and status 'open', ensure field epidemiology is "
-            "actively investigating shared exposure (household contacts, healthcare settings, social networks). "
-            "Cross-region clusters may indicate transmission events during travel or care-seeking across NHS trust boundaries.",
+            "<b>Recommended action:</b> For clusters with priority score >10 and status 'open', ensure MDT review and epidemiological data completion. "
+            "Do not infer direct transmission or source-recipient direction from model output alone. "
+            "Cross-region clusters should trigger coordination checks across NHS trust boundaries.",
             section_note_style,
         ))
     else:
@@ -1900,6 +1936,18 @@ def outbreak_report(db: Session = Depends(get_db)):
     case_table_for_appendix = None
     discordance_table_for_appendix = None
     if case_rows:
+        case_action_csv_rows = [[
+            "Case",
+            "Cluster",
+            "Pairwise SNP?",
+            "NN SNP",
+            "Likely link",
+            "Posterior",
+            "Tier",
+            "QC",
+            "Warning",
+            "Recommended action",
+        ]]
         case_action_rows = [[
             wrap_cell("Case", cell_hdr_style),
             wrap_cell("Cluster", cell_hdr_style),
@@ -1975,6 +2023,18 @@ def outbreak_report(db: Session = Depends(get_db)):
                 wrap_cell(warning, cell_body_style),
                 wrap_cell(action, cell_body_style),
             ])
+            case_action_csv_rows.append([
+                _short_case_id(case_id),
+                _short_case_id(cluster_id) if cluster_id else "none",
+                pairwise_available,
+                str(nearest_snp) if nearest_snp is not None else "n/a",
+                likely_link,
+                f"{posterior:.3f}" if posterior else "n/a",
+                confidence_tier,
+                f"{qc_status}{' +contam' if contamination_flag else ''}",
+                warning,
+                action,
+            ])
 
         case_action_table = Table(
             case_action_rows,
@@ -1983,6 +2043,7 @@ def outbreak_report(db: Session = Depends(get_db)):
         )
         case_action_table.setStyle(standard_table_style(font_size=6.8, header=True, valign_top=True))
         case_table_for_appendix = (case_action_table, "Table A1. Case-level operational action table linking genomic evidence to immediate field actions. Pairwise SNP availability is required before transmission interpretation; nearest-neighbour SNP is shown only as supporting context.")
+        _write_csv_rows(os.path.join(PROJECT_ROOT, "exports", "appendix_a_case_level_actions.csv"), case_action_csv_rows)
         story.append(Paragraph("Detailed case-level operational actions are available in Appendix A for systematic review of all active cases.", interp_style))
     else:
         story.append(Paragraph("No case-level records available for operational action table.", styles["Normal"]))
@@ -2187,6 +2248,7 @@ def outbreak_report(db: Session = Depends(get_db)):
             "interpretation": interpretation,
         })
 
+    full_disc_csv_rows = [["Case Pair", "Pairwise SNP result", "Outbreaker2", "Pairwise SNP", "Posterior", "Interpretation"]]
     if discordant_pairs:
         discordant_gt12 = sum(
             1
@@ -2233,6 +2295,14 @@ def outbreak_report(db: Session = Depends(get_db)):
                 f"{item['posterior']:.3f}" if item["posterior"] else "n/a",
                 item["interpretation"],
             ])
+            full_disc_csv_rows.append([
+                item["pair"],
+                item["snp_result"],
+                item["out_result"],
+                str(item["pairwise"]) if item["pairwise"] is not None else "n/a",
+                f"{item['posterior']:.3f}" if item["posterior"] else "n/a",
+                item["interpretation"],
+            ])
         full_disc_table = Table(
             wrap_rows(full_disc_rows),
             colWidths=[0.95 * inch, 1.05 * inch, 0.8 * inch, 0.75 * inch, 0.7 * inch, 2.1 * inch],
@@ -2243,8 +2313,10 @@ def outbreak_report(db: Session = Depends(get_db)):
             full_disc_table,
             "Table A2. Full discordant pairs between pairwise SNP evidence and outbreaker2 linkage for structured adjudication.",
         )
+        _write_csv_rows(os.path.join(PROJECT_ROOT, "exports", "appendix_b_full_discordance_review.csv"), full_disc_csv_rows)
     else:
         story.append(Paragraph("No discordant pairs identified from available outputs.", styles["Normal"]))
+        _write_csv_rows(os.path.join(PROJECT_ROOT, "exports", "appendix_b_full_discordance_review.csv"), full_disc_csv_rows)
 
     story.append(Spacer(1, 0.2 * inch))
     story.append(Paragraph("QC Failure Drill-Down", styles["Heading3"]))
@@ -2458,7 +2530,7 @@ def outbreak_report(db: Session = Depends(get_db)):
         if geo_note_shown:
             story.append(Paragraph(
                 "Regional geography unavailable in this extract; data is recorded at United Kingdom level only. "
-                "For operational surveillance, re-ingest with HSC Trust, PHA locality, or council area populated in the geographic_region field.",
+                "For operational surveillance, re-ingest with a safe hierarchy in geographic_region: HSC Trust, PHA locality, council area, and postcode district only if governance approvals and small-number controls are satisfied.",
                 section_note_style,
             ))
 
@@ -2501,7 +2573,9 @@ def outbreak_report(db: Session = Depends(get_db)):
     story.append(Paragraph(
         "MCMC convergence diagnostics indicate whether the Bayesian sampler has explored the parameter space adequately. "
         "Convergence diagnostic (Gelman-Rubin / R-hat) <1.1 indicates reliable estimates. Values >1.1 suggest exploratory inference only. "
-        "Effective sample size, acceptance rate, and multi-chain robustness all support confidence in the transmission probabilities reported.",
+        "Effective sample size, acceptance rate, and multi-chain robustness all support confidence in the transmission probabilities reported. "
+        "For robust surveillance use: fixed random seed, multiple chains, longer run length, reported R-hat/ESS/acceptance rate, "
+        "and sensitivity analysis using plausible TB generation-time priors.",
         section_note_style,
     ))
     if summary_data:
@@ -2545,12 +2619,13 @@ def outbreak_report(db: Session = Depends(get_db)):
             story.append(Paragraph(
                 f"<b>⚠ MODEL CAVEAT:</b> Convergence diagnostic R-hat = {conv_val:.3f} (>1.1 threshold). "
                 "MCMC has not fully mixed. All transmission probabilities and network inferences should be treated as exploratory. "
-                "Consider: (1) re-running with increased chain length, (2) checking input data completeness, (3) consulting bioinformatics team before operational decisions.",
+                "Consider: (1) fixed random seed, (2) multiple chains, (3) increased chain length, (4) reporting ESS and acceptance rate, "
+                "(5) sensitivity analysis with plausible TB generation-time priors, (6) consulting bioinformatics team before operational decisions.",
                 interp_style
             ))
     else:
         story.append(Paragraph(
-            "No MCMC diagnostic data available. Model reliability cannot be assessed. Treat all inferences as exploratory.",
+            "No MCMC diagnostic data available. Model reliability cannot be assessed. Treat all inferences as exploratory and rerun with fixed seed, multiple chains, longer MCMC run, reported R-hat/ESS/acceptance rate, and generation-time-prior sensitivity analysis.",
             interp_style,
         ))
 
@@ -2851,12 +2926,12 @@ def outbreak_report(db: Session = Depends(get_db)):
 
     reproducibility_rows = [
         ["Metadata item", "Value"],
-        ["Reference genome", str(summary_data.get("reference_genome") if summary_data else None) if (summary_data and summary_data.get("reference_genome")) else "Not recorded in this extract \u2014 populate before circulation (expected: H37Rv / NC_000962.3)"],
-        ["SNP-calling pipeline/version", str(summary_data.get("snp_pipeline_version") if summary_data else None) if (summary_data and summary_data.get("snp_pipeline_version")) else "Not recorded in this extract \u2014 populate before circulation (e.g. Clockwork/COMPASS/Snippy + version)"],
-        ["Resistance catalogue/version", str(lineage_dr_data.get("resistance_catalogue_version") if lineage_dr_data else None) if (lineage_dr_data and lineage_dr_data.get("resistance_catalogue_version")) else "Not recorded in this extract \u2014 populate before circulation (e.g. WHO mutation catalogue v2)"],
-        ["Lineage-calling tool/version", str(lineage_dr_data.get("lineage_tool_version") if lineage_dr_data else None) if (lineage_dr_data and lineage_dr_data.get("lineage_tool_version")) else "Not recorded in this extract \u2014 populate before circulation (e.g. TB-Profiler v4.x / Mykrobe)"],
-        ["outbreaker2 version", str(summary_data.get("analysis_engine_version") if summary_data else None) if (summary_data and summary_data.get("analysis_engine_version")) else f"Not recorded \u2014 engine: {summary_data.get('analysis_engine', 'outbreaker2') if summary_data else 'outbreaker2'} (populate R package version before circulation)"],
-        ["Random seed", str(summary_data.get("random_seed") if summary_data else None) if (summary_data and summary_data.get("random_seed") is not None) else "Not set \u2014 run is non-reproducible without a fixed seed; set seed before circulation"],
+        ["Reference genome", str(summary_data.get("reference_genome") if summary_data else None) if (summary_data and summary_data.get("reference_genome")) else "Not recorded in this extract \u2014 mandatory before external circulation (expected: H37Rv / NC_000962.3)"],
+        ["SNP-calling pipeline/version", str(summary_data.get("snp_pipeline_version") if summary_data else None) if (summary_data and summary_data.get("snp_pipeline_version")) else "Not recorded in this extract \u2014 mandatory before external circulation (e.g. Clockwork/COMPASS/Snippy + version)"],
+        ["Resistance catalogue/version", str(lineage_dr_data.get("resistance_catalogue_version") if lineage_dr_data else None) if (lineage_dr_data and lineage_dr_data.get("resistance_catalogue_version")) else "Not recorded in this extract \u2014 mandatory before external circulation (e.g. WHO mutation catalogue v2)"],
+        ["Lineage-calling tool/version", str(lineage_dr_data.get("lineage_tool_version") if lineage_dr_data else None) if (lineage_dr_data and lineage_dr_data.get("lineage_tool_version")) else "Not recorded in this extract \u2014 mandatory before external circulation (e.g. TB-Profiler v4.x / Mykrobe)"],
+        ["outbreaker2 version", str(summary_data.get("analysis_engine_version") if summary_data else None) if (summary_data and summary_data.get("analysis_engine_version")) else f"Not recorded \u2014 engine: {summary_data.get('analysis_engine', 'outbreaker2') if summary_data else 'outbreaker2'} (mandatory before external circulation)"],
+        ["Random seed", str(summary_data.get("random_seed") if summary_data else None) if (summary_data and summary_data.get("random_seed") is not None) else "Not set \u2014 run is non-reproducible without a fixed seed; mandatory before external circulation"],
         ["Model priors", str(summary_data.get("model_priors") if summary_data else None) if (summary_data and summary_data.get("model_priors")) else (f"Default outbreaker2 priors; MCMC: {summary_data.get('n_generations','?')} generations, burnin {summary_data.get('burnin','?')}, {summary_data.get('n_samples','?')} posterior samples" if summary_data else "Not recorded \u2014 populate before circulation")],
         ["Input hash: exports/cases.csv", _sha256_of_file(os.path.join("exports", "cases.csv"))],
         ["Input hash: exports/dna.fasta", _sha256_of_file(os.path.join("exports", "dna.fasta"))],
@@ -2887,17 +2962,18 @@ def outbreak_report(db: Session = Depends(get_db)):
             f"<b>PRE-CIRCULATION GOVERNANCE NOTICE:</b> {len(unpopulated_fields)} reproducibility field(s) are unpopulated: "
             + "; ".join(unpopulated_fields[:6])
             + (f" (and {len(unpopulated_fields) - 6} more)" if len(unpopulated_fields) > 6 else "")
-            + ". These must be completed before this report is shared externally. "
+            + ". External/formal circulation is blocked until these are completed. "
             "In particular, the random seed must be recorded to ensure the run is reproducible. "
-            "Contact the pipeline administrator to obtain the required values.",
+            "Until then, retain this report as development/internal draft only. Contact the pipeline administrator to obtain the required values.",
             section_note_style,
         ))
 
     story.append(Spacer(1, 0.08 * inch))
     story.append(Paragraph(
         "<b>Layout usability note:</b> Several operational tables are intentionally dense for completeness. "
-        "Before external circulation, provide Appendix A and Appendix B as companion CSV/Excel files "
-        "or regenerate appendices in landscape format to reduce forced word-wrapping.",
+        "Before circulation, provide Appendix A and Appendix B as Excel-compatible CSV companions. "
+        "This report now writes exports/appendix_a_case_level_actions.csv and exports/appendix_b_full_discordance_review.csv. "
+        "For MDT use, include the one-page action sheet (Appendix C).",
         section_note_style,
     ))
 
@@ -2938,6 +3014,31 @@ def outbreak_report(db: Session = Depends(get_db)):
         disc_obj, disc_caption = discordance_table_for_appendix
         story.append(disc_obj)
         append_numbered_caption(disc_caption)
+
+    # Optional one-page MDT action sheet to support rapid governance review.
+    start_appendix_page()
+    story.append(Paragraph("Appendix C: One-Page MDT Action Sheet", styles["Heading2"]))
+    high_priority_open_clusters = sum(
+        1
+        for row in cluster_action_rows
+        if str(row.get("investigation_status") or "").lower() == "open" and int(row.get("priority_score") or 0) > 10
+    ) if cluster_action_rows else 0
+    mdt_rows = [
+        ["Priority area", "Current signal", "Required MDT action", "Owner", "When"],
+        ["Circulation readiness", circulation_label, "Complete mandatory reproducibility metadata before external circulation", "Pipeline + Governance", "Before circulation"],
+        ["Model reliability", model_reliability, "Treat directionality as exploratory until diagnostics are complete", "Bioinformatics + MDT", "Current cycle"],
+        ["High-priority open clusters", str(high_priority_open_clusters), "Review shared exposures and complete epidemiological fields", "MDT + Field team", "Next MDT"],
+        ["Discordant model links", str(len(discordant_pairs) if discordant_pairs else 0), "Use pairwise SNP + epidemiology adjudication pathway", "MDT", "Next MDT"],
+        ["Geography completeness", "UK-only extract", "Populate HSC Trust, PHA locality, council area; use postcode district only with governance approval", "Data management", "Next ingest"],
+    ]
+    mdt_table = Table(
+        wrap_rows(mdt_rows),
+        colWidths=fit_col_widths([1.45 * inch, 1.2 * inch, 2.95 * inch, 1.0 * inch, 0.95 * inch], fill=True),
+        repeatRows=1,
+    )
+    mdt_table.setStyle(standard_table_style(font_size=7.4, header=True, valign_top=True))
+    story.append(mdt_table)
+    append_numbered_caption("Table A3. Condensed MDT action sheet for immediate governance and operational review.")
 
     output_path = report_path
     try:

@@ -3,11 +3,11 @@
   "burnin": 500,
   "n_samples": 1500,
   "case_count": 25,
-  "likelihood_mean": -19979.3039,
-  "likelihood_sd": 3853.2536,
+  "likelihood_mean": -19627.8335,
+  "likelihood_sd": 3805.0623,
   "transmission_edges": 24,
   "posterior_samples": 1500,
   "data_provenance": "real",
   "analysis_engine": "outbreaker2",
-  "generated_at": "2026-05-11T09:14:22Z"
+  "generated_at": "2026-05-11T09:46:14Z"
 }

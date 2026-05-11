@@ -12,10 +12,10 @@ pkg_status <- function(pkg_name) {
   ok <- requireNamespace(pkg_name, quietly = TRUE)
   if (!ok) {
     return(list(
-      status = "not_installed",
+      status = "optional_unavailable",
       package = pkg_name,
       version = NA_character_,
-      message = paste0(pkg_name, " package not installed")
+      message = paste0(pkg_name, " optional engine not available in current runtime")
     ))
   }
 
@@ -53,7 +53,7 @@ if (bactdating$status == "installed") {
   }
 }
 
-consensus_status <- "pending_secondary_outputs"
+consensus_status <- "primary_evidence_only"
 if (transphylo$status == "ready" || bactdating$status == "ready") {
   consensus_status <- "ready_to_run"
 }
@@ -78,7 +78,7 @@ payload <- list(
     confidence = "unknown"
   ),
   notes = c(
-    "This scaffold validates package and input readiness for secondary engines.",
+    "This scaffold validates optional secondary-engine availability and input readiness.",
     "It does not infer additional transmission links until tree/date prerequisites are satisfied."
   )
 )

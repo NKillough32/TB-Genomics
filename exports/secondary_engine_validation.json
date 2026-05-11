@@ -1,19 +1,19 @@
 {
-  "generated_at": "2026-05-08T22:40:58Z",
+  "generated_at": "2026-05-11T10:25:04Z",
   "status": "completed",
   "scaffold_version": "1.0",
   "engines": {
     "transphylo": {
-      "status": "not_installed",
+      "status": "ready_missing_inputs",
       "package": "TransPhylo",
-      "version": null,
-      "message": "TransPhylo package not installed"
+      "version": "1.4.10",
+      "message": "TransPhylo installed but needs exports/outbreaker_phylo.nwk and exports/cases.csv"
     },
     "bactdating": {
-      "status": "not_installed",
+      "status": "ready_missing_inputs",
       "package": "BactDating",
-      "version": null,
-      "message": "BactDating package not installed"
+      "version": "1.1.4",
+      "message": "BactDating installed but needs exports/outbreaker_phylo.nwk and exports/cases.csv"
     }
   },
   "prerequisites": {
@@ -23,9 +23,9 @@
     "dates_path": "exports/cases.csv"
   },
   "consensus": {
-    "status": "pending_secondary_outputs",
+    "status": "primary_evidence_only",
     "agreement": null,
     "confidence": "unknown"
   },
-  "notes": ["This scaffold validates package and input readiness for secondary engines.", "It does not infer additional transmission links until tree/date prerequisites are satisfied."]
+  "notes": ["This scaffold validates optional secondary-engine availability and input readiness.", "It does not infer additional transmission links until tree/date prerequisites are satisfied."]
 }

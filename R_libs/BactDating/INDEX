@@ -1,0 +1,49 @@
+BactDating              BactDating: Bayesian inference of ancestral
+                        dates on bacterial phylogenetic trees
+allDates                Compute dates of leaves and internal nodes for
+                        a given tree
+as.mcmc.resBactDating   Convert to coda mcmc format
+as.treedata.resBactDating
+                        Convert to treedata format from ggtree package
+bactdate                Main function of BactDating package to date the
+                        nodes of a phylogenetic tree
+clusteredTest           Experimental clustered permutation test
+coalpriorR              Coalescent prior function
+collapse.singles.useRec
+                        Modified collapse.singles() from package ape
+                        which deletes the single nodes (i.e., with a
+                        single descendant) in a tree, respecting the
+                        rec function. Internal, used by drop.tip.useRec
+drop.tip.useRec         Modified drop.tip() from 'ape' package that
+                        also updates the recombination proportions
+                        added when loaded from CFML or Gubbins
+dualScale               Rescaling function using dual scale
+extractSample           Extract a sample of trees
+initRoot                Initial tree rooting based on best root-to-tip
+                        correlation
+leafDates               Compute dates of leaves for a given tree
+likelihoodArc           arc likelihood function
+likelihoodCarc          carc likelihood function
+likelihoodGamma         Gamma likelihood function
+likelihoodNegbin        Negative-binomial likelihood function
+likelihoodPoisson       Poisson likelihood function
+likelihoodRelaxedgamma
+                        Relaxed gamma likelihood function
+loadCFML                Load output from ClonalFrameML
+loadGubbins             Load output from Gubbins
+modelcompare            Perform Bayesian comparison between two models
+                        based on DIC values
+nodeDates               Compute dates of internal nodes for a given
+                        tree
+plot.resBactDating      Plotting methods
+plotDualScale           Plot tree rescaled using dual scale
+print.resBactDating     Print function for resBactDating objects
+roottotip               Root to tip correlation
+simcoaltree             Simulation of coalescent dated tree
+simdatedtree            Simulation of dated tree using rtree and rexp
+                        branch lengths
+simobsphy               Simulation of observed phylogeny given a dated
+                        tree
+staph                   Data on Staphylococcus aureus ST239 from Harris
+                        et al (2010)
+summary.resBactDating   Summary function for resBactDating objects

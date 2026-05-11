@@ -1,7 +1,7 @@
 {
   "status": "ok",
   "method": "sequence_distance_connected_components",
-  "generated_at": "2026-05-11T09:13:48.215973+00:00",
+  "generated_at": "2026-05-11T09:45:15.093464+00:00",
   "threshold_snp_distance": 25,
   "min_cluster_size": 2,
   "sequenced_cases": 20,

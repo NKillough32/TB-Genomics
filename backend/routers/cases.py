@@ -204,6 +204,36 @@ def _derive_effective_engine_status(payload: dict) -> dict:
         "mykrobe_local": mykrobe_local,
     }
 
+
+def _secondary_epi_summary(
+    secondary_validation_data: dict | None,
+    transmission_data: dict | None,
+    method_comparison_data: dict | None,
+) -> dict:
+    """Summarize usable epidemiology from secondary-validation context."""
+    secondary_validation_data = secondary_validation_data or {}
+    transmission_data = transmission_data or {}
+    method_comparison_data = method_comparison_data or {}
+
+    prerequisites = secondary_validation_data.get("prerequisites") or {}
+    consensus = secondary_validation_data.get("consensus") or {}
+    agreement = method_comparison_data.get("agreement") or {}
+
+    high_confidence_edges = int(transmission_data.get("high_confidence_edges") or 0)
+    key_nodes = transmission_data.get("key_nodes") or []
+
+    return {
+        "consensus_state": str(consensus.get("status") or "unknown"),
+        "tree_input_available": bool(prerequisites.get("has_tree_newick")),
+        "cases_input_available": bool(prerequisites.get("has_cases_csv")),
+        "primary_network_available": bool(transmission_data),
+        "high_confidence_links": high_confidence_edges,
+        "priority_nodes_flagged": len(key_nodes),
+        "pairwise_precision": round(float(agreement.get("pairwise_precision_outbreaker_vs_sequence") or 0.0), 3),
+        "pairwise_recall": round(float(agreement.get("pairwise_recall_outbreaker_vs_sequence") or 0.0), 3),
+        "pairwise_jaccard": round(float(agreement.get("pairwise_jaccard") or 0.0), 3),
+    }
+
 @router.get("/")
 def list_cases(db: Session = Depends(get_db)):
     return db.query(Case).all()
@@ -615,7 +645,7 @@ def outbreak_report(db: Session = Depends(get_db)):
         from reportlab.lib.pagesizes import A4
         from reportlab.lib.styles import getSampleStyleSheet
         from reportlab.lib.units import inch
-        from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+        from reportlab.platypus import Image, KeepTogether, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
         from reportlab.lib.utils import ImageReader
     except Exception as e:
         return {"error": f"PDF generation dependency missing: {e}"}
@@ -936,6 +966,29 @@ def outbreak_report(db: Session = Depends(get_db)):
 
     story = []
 
+    def append_table_with_caption(
+        table: Table,
+        caption_text: str | None = None,
+        *,
+        spacer_after: float = 0.15,
+        keep_together: bool = True,
+        max_keep_rows: int = 18,
+    ) -> None:
+        """Keep table/caption together when practical to reduce page-split artifacts."""
+        parts = [table]
+        if caption_text:
+            parts.append(Paragraph(caption_text, caption_style))
+
+        row_count = getattr(table, "_nrows", 0)
+        if keep_together and row_count and row_count <= max_keep_rows:
+            story.append(KeepTogether(parts))
+        else:
+            for part in parts:
+                story.append(part)
+
+        if spacer_after > 0:
+            story.append(Spacer(1, spacer_after * inch))
+
     story.append(Paragraph("NI TB Genomic Surveillance", styles["Title"]))
     story.append(Paragraph("Outbreak Investigation Report", styles["Heading2"]))
     story.append(Paragraph(f"Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC", styles["Normal"]))
@@ -997,12 +1050,12 @@ def outbreak_report(db: Session = Depends(get_db)):
         ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
         ("LEFTPADDING", (0, 0), (-1, -1), 5),
     ]))
-    story.append(bg_table)
-    story.append(Paragraph(
+    append_table_with_caption(
+        bg_table,
         "Table 1. TB genomics reference — key terms used throughout this report.",
-        caption_style,
-    ))
-    story.append(Spacer(1, 0.2 * inch))
+        spacer_after=0.2,
+        keep_together=False,
+    )
 
     story.append(Paragraph("Case Summary", styles["Heading3"]))
     summary_table_data = [
@@ -1023,14 +1076,13 @@ def outbreak_report(db: Session = Depends(get_db)):
             ]
         )
     )
-    story.append(summary_table)
-    story.append(Paragraph(
+    append_table_with_caption(
+        summary_table,
         "Table 2. Programme case count summary. Clustered cases are those linked by genomic similarity to at least one other case. "
         "Unclustered (singleton) cases may represent imported strains, sporadic transmission, or reactivation of latent disease. "
         "Open clusters are active genomic transmission clusters with ongoing epidemiological investigation.",
-        caption_style,
-    ))
-    story.append(Spacer(1, 0.15 * inch))
+        spacer_after=0.15,
+    )
 
     interpretation_flags = []
     if kpi_data:
@@ -1122,7 +1174,7 @@ def outbreak_report(db: Session = Depends(get_db)):
                     ]
                 )
             )
-            story.append(analysis_table)
+            append_table_with_caption(analysis_table, spacer_after=0.0)
         else:
             story.append(Paragraph("No structured analysis metrics available.", styles["Normal"]))
     else:
@@ -1171,7 +1223,7 @@ def outbreak_report(db: Session = Depends(get_db)):
                 ]
             )
         )
-        story.append(kpi_table)
+        append_table_with_caption(kpi_table, spacer_after=0.0)
 
         if kpi_data.get("warning"):
             story.append(Spacer(1, 0.1 * inch))
@@ -1211,7 +1263,7 @@ def outbreak_report(db: Session = Depends(get_db)):
                     ]
                 )
             )
-            story.append(region_table)
+            append_table_with_caption(region_table, spacer_after=0.0)
     else:
         story.append(Paragraph("Surveillance KPIs unavailable.", styles["Normal"]))
 
@@ -1289,8 +1341,7 @@ def outbreak_report(db: Session = Depends(get_db)):
                 ]
             )
         )
-        story.append(action_table)
-        story.append(Spacer(1, 0.08 * inch))
+        append_table_with_caption(action_table, spacer_after=0.08)
         story.append(Paragraph(
             "Table 7. Clusters ranked by investigation priority score. Score is composite: cluster size (×2), "
             "cross-region spread (×3), specimen recency within 14/30/60 days (×3/2/1), open investigation status (×3). "
@@ -1312,25 +1363,22 @@ def outbreak_report(db: Session = Depends(get_db)):
     if lineage_dr_data:
         analysis_summary = _lineage_analysis_summary(db)
         analysis_epi_summary = _lineage_epi_summary(db)
-        lineage_engines = (lineage_dr_data.get("engines") or {})
-        effective_engines = _derive_effective_engine_status(lineage_dr_data)
+        interpreted_samples = int(analysis_summary.get("interpreted_samples", 0) or 0)
+        with_lineage = int(analysis_summary.get("samples_with_lineage", 0) or 0)
+        with_resistance = int(analysis_summary.get("samples_with_resistance_calls", 0) or 0)
+        lineage_coverage_pct = round((with_lineage / interpreted_samples) * 100.0, 2) if interpreted_samples else 0.0
+        resistance_coverage_pct = round((with_resistance / interpreted_samples) * 100.0, 2) if interpreted_samples else 0.0
         lineage_rows = [
-            ["Overall Status", str(lineage_dr_data.get("status", "unknown"))],
-            ["TB-Profiler", str(effective_engines.get("tb_profiler", "unknown"))],
-            ["Mykrobe", str(effective_engines.get("mykrobe", "unknown"))],
-            ["Docker Fallback", str((lineage_dr_data.get("docker") or {}).get("fallback_enabled", False))],
-            ["Docker Daemon Running", str((lineage_dr_data.get("docker") or {}).get("daemon_running", False))],
-            ["FASTA Inputs", str((lineage_dr_data.get("inputs") or {}).get("fasta_count", 0))],
-            ["Interpreted Samples", str(analysis_summary.get("interpreted_samples", 0))],
-            ["Samples with Lineage", str(analysis_summary.get("samples_with_lineage", 0))],
-            ["Samples with Resistance Calls", str(analysis_summary.get("samples_with_resistance_calls", 0))],
+            ["Interpreted Samples", str(interpreted_samples)],
+            ["Samples with Lineage", str(with_lineage)],
+            ["Lineage Coverage (%)", str(lineage_coverage_pct)],
+            ["Samples with Resistance Calls", str(with_resistance)],
+            ["Resistance Coverage (%)", str(resistance_coverage_pct)],
             ["Any Resistance Signal", str(analysis_epi_summary.get("samples_with_any_resistance_signal", 0))],
             ["Rifampicin-Resistant (suspected)", str(analysis_epi_summary.get("rifampicin_resistant_suspected", 0))],
             ["Isoniazid-Resistant (suspected)", str(analysis_epi_summary.get("isoniazid_resistant_suspected", 0))],
             ["MDR (suspected)", str(analysis_epi_summary.get("mdr_suspected", 0))],
             ["FQ-Resistant (suspected)", str(analysis_epi_summary.get("fluoroquinolone_resistant_suspected", 0))],
-            ["TB-Profiler (Local)", str((lineage_engines.get("tb_profiler") or {}).get("status", "unknown"))],
-            ["Mykrobe (Local)", str((lineage_engines.get("mykrobe") or {}).get("status", "unknown"))],
         ]
         lineage_table = Table(lineage_rows, colWidths=[2.8 * inch, 3.0 * inch])
         lineage_table.setStyle(
@@ -1343,42 +1391,36 @@ def outbreak_report(db: Session = Depends(get_db)):
                 ]
             )
         )
-        story.append(lineage_table)
-
-        story.append(Paragraph(
-            "Table 8. Lineage and drug-resistance validation status. TB-Profiler and Mykrobe are bioinformatic pipelines "
-            "that classify M. tuberculosis lineage and predict drug resistance from WGS reads. "
-            "'Available' means the tool executed successfully; 'unavailable' may indicate missing software, Docker daemon issues, or insufficient FASTA inputs. "
-            "FASTA inputs refers to the number of consensus genome sequences submitted for analysis. "
-            "Resistance rows provide programmatic flags to prioritize possible RR/MDR/FQ-resistant cases for review.",
-            caption_style,
-        ))
+        append_table_with_caption(
+            lineage_table,
+            "Table 8. Lineage and drug-resistance epidemiology summary. "
+            "Rows prioritize actionable burden indicators (coverage, resistance signal counts, and suspected RR/MDR/FQ resistance) "
+            "to support triage and follow-up planning.",
+            spacer_after=0.0,
+        )
         top_lineages = analysis_epi_summary.get("top_lineages") or []
         if top_lineages:
             top_text = ", ".join([f"{x.get('lineage')}: {x.get('count')}" for x in top_lineages[:4]])
             story.append(Paragraph(f"Top observed lineages: {top_text}", styles["Normal"]))
-        next_steps = lineage_dr_data.get("next_steps") or []
-        if next_steps:
-            story.append(Spacer(1, 0.08 * inch))
-            story.append(Paragraph("Lineage/DR Next Steps", styles["Heading4"]))
-            for step in next_steps[:4]:
-                story.append(Paragraph(f"- {str(step)}", styles["Normal"]))
     else:
         story.append(Paragraph("No lineage/DR validation artifact found.", styles["Normal"]))
 
     story.append(Spacer(1, 0.2 * inch))
     story.append(Paragraph("Secondary Transmission Engines", styles["Heading3"]))
     if secondary_validation_data:
-        secondary_engines = secondary_validation_data.get("engines") or {}
-        transphylo_state = str((secondary_engines.get("transphylo") or {}).get("status", "unknown"))
-        bactdating_state = str((secondary_engines.get("bactdating") or {}).get("status", "unknown"))
+        secondary_epi = _secondary_epi_summary(
+            secondary_validation_data=secondary_validation_data,
+            transmission_data=transmission_data,
+            method_comparison_data=method_comparison_data,
+        )
         secondary_rows = [
-            ["Secondary Validation Status", str(secondary_validation_data.get("status", "unknown"))],
-            ["Consensus State", str((secondary_validation_data.get("consensus") or {}).get("status", "unknown"))],
-            ["TransPhylo", transphylo_state],
-            ["BactDating", bactdating_state],
-            ["Tree Input Available", str((secondary_validation_data.get("prerequisites") or {}).get("has_tree_newick", False))],
-            ["Cases Input Available", str((secondary_validation_data.get("prerequisites") or {}).get("has_cases_csv", False))],
+            ["Consensus State", str(secondary_epi.get("consensus_state", "unknown"))],
+            ["Primary Network Available", str(secondary_epi.get("primary_network_available", False))],
+            ["High-Confidence Links", str(secondary_epi.get("high_confidence_links", 0))],
+            ["Priority Nodes Flagged", str(secondary_epi.get("priority_nodes_flagged", 0))],
+            ["Cross-Method Precision", str(secondary_epi.get("pairwise_precision", 0.0))],
+            ["Cross-Method Recall", str(secondary_epi.get("pairwise_recall", 0.0))],
+            ["Cross-Method Jaccard", str(secondary_epi.get("pairwise_jaccard", 0.0))],
         ]
         secondary_table = Table(secondary_rows, colWidths=[2.8 * inch, 3.0 * inch])
         secondary_table.setStyle(
@@ -1391,14 +1433,17 @@ def outbreak_report(db: Session = Depends(get_db)):
                 ]
             )
         )
-        story.append(secondary_table)
-        story.append(Paragraph(
-            "Table 9. Secondary engine validation. TransPhylo uses a phylogenetic tree and sampling dates to reconstruct "
-            "transmission under a within-host evolutionary model. BactDating estimates dated ancestral phylogenies to calibrate "
-            "transmission timelines. Both require a Newick-format phylogenetic tree as input. "
-            "Where tools are unavailable, outbreaker2 results remain the primary genomic evidence.",
-            caption_style,
-        ))
+        append_table_with_caption(
+            secondary_table,
+            "Table 9. Secondary transmission evidence summary. This section reports actionable signals from network inference and "
+            "cross-method agreement, focusing on whether transmission hypotheses are strong enough to prioritize field investigation.",
+            spacer_after=0.0,
+        )
+        if int(secondary_epi.get("high_confidence_links", 0)) > 0:
+            story.append(Paragraph(
+                "Action signal: high-confidence transmission links are present; prioritize contact tracing and exposure verification for flagged nodes.",
+                section_note_style,
+            ))
     else:
         story.append(Paragraph("No secondary engine validation artifact found.", styles["Normal"]))
 
@@ -1426,7 +1471,7 @@ def outbreak_report(db: Session = Depends(get_db)):
                 ]
             )
         )
-        story.append(comp_table)
+        append_table_with_caption(comp_table, spacer_after=0.0)
     else:
         story.append(Paragraph("No cluster method comparison artifact found.", styles["Normal"]))
 
@@ -1459,7 +1504,7 @@ def outbreak_report(db: Session = Depends(get_db)):
                     ]
                 )
             )
-            story.append(seq_table)
+            append_table_with_caption(seq_table, spacer_after=0.0)
 
     story.append(Spacer(1, 0.2 * inch))
     story.append(Paragraph("Transmission Priority Signals", styles["Heading3"]))

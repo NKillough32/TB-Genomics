@@ -171,7 +171,8 @@ def seed_synthetic_dataset(
         if reset:
             db.execute(
                 text(
-                    "TRUNCATE TABLE case_clusters, tb_interpretation, clusters, cases "
+                    "TRUNCATE TABLE case_clusters, tb_interpretation, clusters, "
+                    "sample_qc_metrics, consensus_sequences, cases "
                     "RESTART IDENTITY CASCADE"
                 )
             )
@@ -270,6 +271,48 @@ def seed_synthetic_dataset(
                         "sample_id": case_id,
                         "sequence": sequence,
                         "length": len(sequence),
+                    },
+                )
+
+                # Synthetic QC metrics — realistic distributions for WGS TB samples.
+                mean_depth = round(random.uniform(60.0, 280.0), 1)
+                coverage_breadth = round(random.uniform(92.0, 99.8), 2)
+                ambiguous_pct = round(random.uniform(0.0, 3.5), 2)
+                contamination = random.random() < 0.04  # ~4% contamination flag rate
+                # QC fail if depth <80, breadth <95, or contamination flagged
+                qc_fail = contamination or mean_depth < 80.0 or coverage_breadth < 95.0
+                qc_status = "fail" if qc_fail else "pass"
+                if qc_fail:
+                    reasons = []
+                    if contamination:
+                        reasons.append("contamination signal detected")
+                    if mean_depth < 80.0:
+                        reasons.append(f"mean depth {mean_depth}x below threshold 80x")
+                    if coverage_breadth < 95.0:
+                        reasons.append(f"coverage breadth {coverage_breadth}% below 95%")
+                    qc_failure_reason = "; ".join(reasons)
+                else:
+                    qc_failure_reason = None
+                reported_at = datetime.utcnow() - timedelta(
+                    days=random.randint(0, max(0, (today - specimen_date).days))
+                )
+                db.execute(
+                    text(
+                        "INSERT INTO sample_qc_metrics "
+                        "(sample_id, mean_depth, coverage_breadth, ambiguous_base_percent, "
+                        "contamination_flag, qc_status, qc_failure_reason, reported_at) "
+                        "VALUES (:sample_id, :mean_depth, :coverage_breadth, :ambiguous_base_percent, "
+                        ":contamination_flag, :qc_status, :qc_failure_reason, :reported_at)"
+                    ),
+                    {
+                        "sample_id": case_id,
+                        "mean_depth": mean_depth,
+                        "coverage_breadth": coverage_breadth,
+                        "ambiguous_base_percent": ambiguous_pct,
+                        "contamination_flag": contamination,
+                        "qc_status": qc_status,
+                        "qc_failure_reason": qc_failure_reason,
+                        "reported_at": reported_at,
                     },
                 )
 

@@ -22,7 +22,7 @@ Plain-language project overview
 ------------------------------
 
 For a simple explanation of what this project does and how it supports TB programme operations,
-see: PROJECT_EXPLAINED_SIMPLE.md
+see: docs/PROJECT_EXPLAINED_SIMPLE.md
 
 External dependencies (not bundled):
 - PostgreSQL
@@ -150,7 +150,7 @@ If sequencing output is generated on an Azure VM and needs to feed this platform
 use the connector script and setup guide:
 
 - scripts/azure_vm_ingest_connector.py
-- governance/AZURE_VM_INGEST_SETUP.md
+- docs/governance/AZURE_VM_INGEST_SETUP.md
 
 The connector supports scheduled uploads and only sends new/changed files.
 

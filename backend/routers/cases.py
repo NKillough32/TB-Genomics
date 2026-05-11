@@ -1,6 +1,7 @@
 
 import os
 import json
+from itertools import combinations
 
 from datetime import datetime
 from fastapi import APIRouter, Depends
@@ -233,6 +234,88 @@ def _secondary_epi_summary(
         "pairwise_recall": round(float(agreement.get("pairwise_recall_outbreaker_vs_sequence") or 0.0), 3),
         "pairwise_jaccard": round(float(agreement.get("pairwise_jaccard") or 0.0), 3),
     }
+
+
+def _short_case_id(case_id: str | None) -> str:
+    if not case_id:
+        return "n/a"
+    return str(case_id)[:8]
+
+
+def _resistance_profile_text(predicted_dr: object) -> str:
+    """Render concise drug-resistance profile from JSON-like field."""
+    if not predicted_dr:
+        return "none"
+
+    if isinstance(predicted_dr, str):
+        return predicted_dr[:64]
+
+    if isinstance(predicted_dr, dict):
+        resistant = []
+        for drug, phenotype in predicted_dr.items():
+            phen = str(phenotype).lower()
+            if "resistant" in phen or phen == "r":
+                resistant.append(str(drug))
+        return ", ".join(resistant[:4]) if resistant else "susceptible"
+
+    return str(predicted_dr)[:64]
+
+
+def _iter_resistance_mutations(mutations: object):
+    """Yield normalized mutation rows from flexible JSON structures."""
+    if not mutations:
+        return
+
+    if isinstance(mutations, dict):
+        for drug, value in mutations.items():
+            if isinstance(value, list):
+                for item in value:
+                    if isinstance(item, dict):
+                        yield {
+                            "drug": str(item.get("drug") or drug),
+                            "mutation": str(item.get("mutation") or item.get("variant") or item.get("change") or item),
+                            "gene": str(item.get("gene") or "n/a"),
+                            "confidence": str(item.get("confidence") or item.get("support") or "n/a"),
+                        }
+                    else:
+                        yield {
+                            "drug": str(drug),
+                            "mutation": str(item),
+                            "gene": "n/a",
+                            "confidence": "n/a",
+                        }
+            elif isinstance(value, dict):
+                yield {
+                    "drug": str(value.get("drug") or drug),
+                    "mutation": str(value.get("mutation") or value.get("variant") or value.get("change") or value),
+                    "gene": str(value.get("gene") or "n/a"),
+                    "confidence": str(value.get("confidence") or value.get("support") or "n/a"),
+                }
+            else:
+                yield {
+                    "drug": str(drug),
+                    "mutation": str(value),
+                    "gene": "n/a",
+                    "confidence": "n/a",
+                }
+        return
+
+    if isinstance(mutations, list):
+        for item in mutations:
+            if isinstance(item, dict):
+                yield {
+                    "drug": str(item.get("drug") or "n/a"),
+                    "mutation": str(item.get("mutation") or item.get("variant") or item.get("change") or item),
+                    "gene": str(item.get("gene") or "n/a"),
+                    "confidence": str(item.get("confidence") or item.get("support") or "n/a"),
+                }
+            else:
+                yield {
+                    "drug": "n/a",
+                    "mutation": str(item),
+                    "gene": "n/a",
+                    "confidence": "n/a",
+                }
 
 @router.get("/")
 def list_cases(db: Session = Depends(get_db)):
@@ -645,7 +728,7 @@ def outbreak_report(db: Session = Depends(get_db)):
         from reportlab.lib.pagesizes import A4
         from reportlab.lib.styles import getSampleStyleSheet
         from reportlab.lib.units import inch
-        from reportlab.platypus import Image, KeepTogether, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+        from reportlab.platypus import Image, KeepTogether, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
         from reportlab.lib.utils import ImageReader
     except Exception as e:
         return {"error": f"PDF generation dependency missing: {e}"}
@@ -821,6 +904,174 @@ def outbreak_report(db: Session = Depends(get_db)):
         )
     ).mappings().all()
 
+    case_rows = db.execute(
+        text(
+            """
+            SELECT
+                c.pseudonymised_case_id::text AS case_id,
+                c.specimen_date,
+                c.geographic_region,
+                c.case_status,
+                cc.cluster_id::text AS cluster_id,
+                cl.snp_distance,
+                cl.investigation_status,
+                ti.predicted_drug_resistance,
+                ti.resistance_mutations,
+                ti.interpretation_summary,
+                sqm.qc_status,
+                sqm.coverage_breadth,
+                sqm.mean_depth,
+                sqm.contamination_flag,
+                sqm.ambiguous_base_percent
+            FROM cases c
+            LEFT JOIN case_clusters cc ON cc.sample_id = c.pseudonymised_case_id
+            LEFT JOIN clusters cl ON cl.cluster_id = cc.cluster_id
+            LEFT JOIN tb_interpretation ti ON ti.sample_id = c.pseudonymised_case_id
+            LEFT JOIN sample_qc_metrics sqm ON sqm.sample_id = c.pseudonymised_case_id
+            ORDER BY c.specimen_date DESC NULLS LAST, c.pseudonymised_case_id
+            """
+        )
+    ).mappings().all()
+
+    case_by_id = {str(row.get("case_id")): row for row in case_rows if row.get("case_id")}
+    transmission_edges = (transmission_data or {}).get("edges") or []
+
+    best_incoming = {}
+    best_outgoing = {}
+    outbreaker_pair_prob = {}
+
+    for edge in transmission_edges:
+        source = str(edge.get("source") or "")
+        target = str(edge.get("target") or "")
+        if not source or not target:
+            continue
+        prob = float(edge.get("probability") or 0.0)
+
+        if target not in best_incoming or prob > best_incoming[target]["probability"]:
+            best_incoming[target] = {"source": source, "probability": prob}
+        if source not in best_outgoing or prob > best_outgoing[source]["probability"]:
+            best_outgoing[source] = {"target": target, "probability": prob}
+
+        pair_key = tuple(sorted([source, target]))
+        if pair_key not in outbreaker_pair_prob or prob > outbreaker_pair_prob[pair_key]:
+            outbreaker_pair_prob[pair_key] = prob
+
+    sequence_cluster_members = {}
+    for row in case_rows:
+        cid = str(row.get("cluster_id") or "")
+        case_id = str(row.get("case_id") or "")
+        if cid and case_id:
+            sequence_cluster_members.setdefault(cid, []).append(case_id)
+
+    sequence_pair_set = set()
+    for members in sequence_cluster_members.values():
+        uniq = sorted(set(members))
+        for left, right in combinations(uniq, 2):
+            sequence_pair_set.add((left, right))
+
+    high_confidence_edges = [
+        e for e in transmission_edges if float(e.get("probability") or 0.0) >= 0.70
+    ]
+
+    qc_detail_rows = [
+        row for row in case_rows
+        if str(row.get("qc_status") or "").lower() not in ("pass", "passed")
+        or bool(row.get("contamination_flag"))
+    ]
+
+    if not qc_detail_rows:
+        qc_detail_rows = [r for r in case_rows if r.get("qc_status")][:15]
+
+    mutation_rows_raw = db.execute(
+        text(
+            """
+            SELECT
+                sample_id::text AS case_id,
+                resistance_mutations,
+                predicted_drug_resistance
+            FROM tb_interpretation
+            WHERE resistance_mutations IS NOT NULL
+            AND resistance_mutations::text NOT IN ('null', '{}', '[]')
+            ORDER BY sample_id
+            LIMIT 80
+            """
+        )
+    ).mappings().all()
+
+    cluster_epi_rows = db.execute(
+        text(
+            """
+            WITH base AS (
+                SELECT
+                    cc.cluster_id::text AS cluster_id,
+                    c.pseudonymised_case_id::text AS case_id,
+                    c.specimen_date,
+                    c.geographic_region,
+                    COALESCE(cl.investigation_status, 'unknown') AS investigation_status,
+                    cl.snp_distance,
+                    LOWER(CAST(ti.predicted_drug_resistance AS text)) AS dr_text
+                FROM case_clusters cc
+                JOIN cases c ON c.pseudonymised_case_id = cc.sample_id
+                LEFT JOIN clusters cl ON cl.cluster_id = cc.cluster_id
+                LEFT JOIN tb_interpretation ti ON ti.sample_id = cc.sample_id
+            ),
+            index_case AS (
+                SELECT DISTINCT ON (cluster_id)
+                    cluster_id,
+                    case_id AS suspected_index_case
+                FROM base
+                ORDER BY cluster_id, specimen_date ASC NULLS LAST, case_id
+            )
+            SELECT
+                b.cluster_id,
+                COUNT(*)::int AS cases,
+                MIN(b.specimen_date) AS first_specimen,
+                MAX(b.specimen_date) AS latest_specimen,
+                ROUND(AVG(COALESCE(b.snp_distance, 0))::numeric, 1) AS median_snp_proxy,
+                MAX(COALESCE(b.snp_distance, 0))::int AS max_snp_proxy,
+                COUNT(*) FILTER (
+                    WHERE b.dr_text LIKE '%rifamp%' AND (b.dr_text LIKE '%resistant%' OR b.dr_text LIKE '%\"r\"%')
+                )::int AS rr_cases,
+                COUNT(*) FILTER (
+                    WHERE b.dr_text LIKE '%rifamp%'
+                    AND b.dr_text LIKE '%isoniazid%'
+                    AND (b.dr_text LIKE '%resistant%' OR b.dr_text LIKE '%\"r\"%')
+                )::int AS mdr_cases,
+                COUNT(*) FILTER (WHERE b.specimen_date >= CURRENT_DATE - INTERVAL '30 days')::int AS recent_30d,
+                COUNT(*) FILTER (WHERE b.specimen_date >= CURRENT_DATE - INTERVAL '60 days')::int AS recent_60d,
+                COUNT(*) FILTER (WHERE b.specimen_date >= CURRENT_DATE - INTERVAL '90 days')::int AS recent_90d,
+                MAX(b.investigation_status) AS investigation_status,
+                i.suspected_index_case
+            FROM base b
+            LEFT JOIN index_case i ON i.cluster_id = b.cluster_id
+            GROUP BY b.cluster_id, i.suspected_index_case
+            ORDER BY cases DESC, latest_specimen DESC
+            LIMIT 20
+            """
+        )
+    ).mappings().all()
+
+    completeness_row = db.execute(
+        text(
+            """
+            SELECT
+                COUNT(*)::int AS total_cases,
+                COUNT(*) FILTER (WHERE specimen_date IS NOT NULL)::int AS specimen_date_present,
+                COUNT(*) FILTER (WHERE geographic_region IS NOT NULL AND BTRIM(geographic_region) <> '')::int AS region_present,
+                COUNT(*) FILTER (WHERE ti.lineage IS NOT NULL AND BTRIM(ti.lineage) <> '')::int AS lineage_present,
+                COUNT(*) FILTER (
+                    WHERE ti.predicted_drug_resistance IS NOT NULL
+                    AND ti.predicted_drug_resistance::text NOT IN ('null', '{}', '[]')
+                )::int AS resistance_present,
+                COUNT(*) FILTER (WHERE c.local_lab_sample_id IS NOT NULL AND BTRIM(c.local_lab_sample_id) <> '')::int AS notification_proxy_present,
+                COUNT(*) FILTER (WHERE sqm.sample_id IS NOT NULL)::int AS qc_present
+            FROM cases c
+            LEFT JOIN tb_interpretation ti ON ti.sample_id = c.pseudonymised_case_id
+            LEFT JOIN sample_qc_metrics sqm ON sqm.sample_id = c.pseudonymised_case_id
+            """
+        )
+    ).mappings().first()
+
     graphic_files = [
         "outbreaker_trace.png",
         "outbreaker_hist.png",
@@ -882,6 +1133,8 @@ def outbreak_report(db: Session = Depends(get_db)):
 
     doc = SimpleDocTemplate(report_path, pagesize=A4, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36)
     styles = getSampleStyleSheet()
+    # Keep all section headings on the same page as the element that follows them
+    styles["Heading3"].keepWithNext = 1
 
     # ── Custom styles ──────────────────────────────────────────────────────────
     from reportlab.lib.styles import ParagraphStyle
@@ -972,7 +1225,7 @@ def outbreak_report(db: Session = Depends(get_db)):
         *,
         spacer_after: float = 0.15,
         keep_together: bool = True,
-        max_keep_rows: int = 18,
+        max_keep_rows: int = 30,
     ) -> None:
         """Keep table/caption together when practical to reduce page-split artifacts."""
         parts = [table]
@@ -1506,8 +1759,463 @@ def outbreak_report(db: Session = Depends(get_db)):
             )
             append_table_with_caption(seq_table, spacer_after=0.0)
 
+    story.append(PageBreak())
+    story.append(Paragraph("Case-Level Operational Actions", styles["Heading3"]))
+    if case_rows:
+        case_action_rows = [["Case", "Cluster", "SNP NN", "Likely Link", "Posterior", "Resistance", "QC", "Recommended Action"]]
+        for row in case_rows[:30]:
+            case_id = str(row.get("case_id") or "")
+            cluster_id = str(row.get("cluster_id") or "")
+            incoming = best_incoming.get(case_id)
+            outgoing = best_outgoing.get(case_id)
+
+            if incoming and (not outgoing or incoming["probability"] >= outgoing["probability"]):
+                likely_link = f"{_short_case_id(incoming['source'])} -> {_short_case_id(case_id)}"
+                posterior = incoming["probability"]
+            elif outgoing:
+                likely_link = f"{_short_case_id(case_id)} -> {_short_case_id(outgoing['target'])}"
+                posterior = outgoing["probability"]
+            else:
+                likely_link = "none"
+                posterior = 0.0
+
+            qc_status = str(row.get("qc_status") or "not_reported")
+            contamination_flag = bool(row.get("contamination_flag"))
+            resistance_text = _resistance_profile_text(row.get("predicted_drug_resistance"))
+            has_rr_signal = "rifamp" in resistance_text.lower() or "mdr" in resistance_text.lower()
+            qc_problem = qc_status.lower() not in ("pass", "passed") or contamination_flag
+
+            if qc_problem:
+                action = "Repeat/verify sequence before action"
+            elif posterior >= 0.9:
+                action = "Immediate contact tracing"
+            elif posterior >= 0.7:
+                action = "Targeted epi follow-up"
+            elif has_rr_signal:
+                action = "Urgent DR clinical review"
+            elif cluster_id:
+                action = "Monitor in active cluster"
+            else:
+                action = "Routine surveillance"
+
+            case_action_rows.append([
+                _short_case_id(case_id),
+                _short_case_id(cluster_id) if cluster_id else "none",
+                str(row.get("snp_distance") if row.get("snp_distance") is not None else "n/a"),
+                likely_link,
+                f"{posterior:.3f}" if posterior else "n/a",
+                resistance_text,
+                f"{qc_status}{' +contam' if contamination_flag else ''}",
+                action,
+            ])
+
+        case_action_table = Table(
+            case_action_rows,
+            colWidths=[0.65 * inch, 0.65 * inch, 0.55 * inch, 1.25 * inch, 0.65 * inch, 1.05 * inch, 0.8 * inch, 1.35 * inch],
+            repeatRows=1,
+        )
+        case_action_table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.whitesmoke),
+                    ("BOX", (0, 0), (-1, -1), 0.5, colors.grey),
+                    ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.lightgrey),
+                    ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+                    ("FONTSIZE", (0, 0), (-1, -1), 7.2),
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ]
+            )
+        )
+        append_table_with_caption(
+            case_action_table,
+            "Table 11. Case-level operational action table linking genomic evidence to immediate field actions. "
+            "SNP NN uses an available cluster SNP proxy where pairwise SNP matrices are not available; actions remain decision-support and require public-health review.",
+            spacer_after=0.0,
+            keep_together=False,
+        )
+    else:
+        story.append(Paragraph("No case-level records available for operational action table.", styles["Normal"]))
+
     story.append(Spacer(1, 0.2 * inch))
-    story.append(Paragraph("Transmission Priority Signals", styles["Heading3"]))
+    story.append(Paragraph("High-Confidence Transmission Pairs", styles["Heading3"]))
+    if high_confidence_edges:
+        pair_rows = [["Source", "Recipient", "Posterior", "SNP Dist", "Date Gap (d)", "Shared Cluster", "Action"]]
+        for edge in sorted(high_confidence_edges, key=lambda x: float(x.get("probability") or 0.0), reverse=True)[:40]:
+            source = str(edge.get("source") or "")
+            target = str(edge.get("target") or "")
+            prob = float(edge.get("probability") or 0.0)
+            src_case = case_by_id.get(source) or {}
+            tgt_case = case_by_id.get(target) or {}
+            src_cluster = str(src_case.get("cluster_id") or "")
+            tgt_cluster = str(tgt_case.get("cluster_id") or "")
+            shared_cluster = src_cluster if src_cluster and src_cluster == tgt_cluster else "no"
+
+            snp_proxy = src_case.get("snp_distance") if src_cluster and src_cluster == tgt_cluster else None
+            src_date = src_case.get("specimen_date")
+            tgt_date = tgt_case.get("specimen_date")
+            date_gap = abs((tgt_date - src_date).days) if src_date and tgt_date else None
+
+            if prob >= 0.9:
+                action = "Immediate trace + exposure review"
+            elif prob >= 0.8:
+                action = "Rapid contact verification"
+            else:
+                action = "Review with cluster context"
+
+            pair_rows.append([
+                _short_case_id(source),
+                _short_case_id(target),
+                f"{prob:.3f}",
+                str(snp_proxy) if snp_proxy is not None else "n/a",
+                str(date_gap) if date_gap is not None else "n/a",
+                _short_case_id(shared_cluster) if shared_cluster != "no" else "no",
+                action,
+            ])
+
+        pair_table = Table(
+            pair_rows,
+            colWidths=[0.75 * inch, 0.75 * inch, 0.7 * inch, 0.65 * inch, 0.75 * inch, 0.8 * inch, 1.7 * inch],
+            repeatRows=1,
+        )
+        pair_table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.whitesmoke),
+                    ("BOX", (0, 0), (-1, -1), 0.5, colors.grey),
+                    ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.lightgrey),
+                    ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+                    ("FONTSIZE", (0, 0), (-1, -1), 7.3),
+                ]
+            )
+        )
+        append_table_with_caption(
+            pair_table,
+            "Table 12. High-confidence source-recipient pairs (posterior >= 0.70) for contact-tracing prioritization, to be interpreted with epidemiological corroboration.",
+            spacer_after=0.0,
+            keep_together=False,
+        )
+    else:
+        story.append(Paragraph("No high-confidence transmission pairs found.", styles["Normal"]))
+
+    story.append(Spacer(1, 0.2 * inch))
+    story.append(Paragraph("Discordant Method Review", styles["Heading3"]))
+    discordant_pairs = []
+    for pair in sequence_pair_set.union(set(outbreaker_pair_prob.keys())):
+        in_seq = pair in sequence_pair_set
+        in_out = pair in outbreaker_pair_prob
+        if in_seq == in_out:
+            continue
+        left, right = pair
+        left_row = case_by_id.get(left) or {}
+        right_row = case_by_id.get(right) or {}
+        left_cluster = str(left_row.get("cluster_id") or "")
+        right_cluster = str(right_row.get("cluster_id") or "")
+        snp_proxy = left_row.get("snp_distance") if left_cluster and left_cluster == right_cluster else None
+        post = float(outbreaker_pair_prob.get(pair) or 0.0)
+        interpretation = (
+            "Temporal support without SNP-threshold support; assess missing intermediates/importation"
+            if in_out and not in_seq
+            else "SNP-clustered but no directed outbreaker support; possible older/shared-source linkage"
+        )
+        discordant_pairs.append({
+            "pair": f"{_short_case_id(left)}-{_short_case_id(right)}",
+            "snp_result": "same_cluster" if in_seq else "not_clustered",
+            "out_result": "linked" if in_out else "not_linked",
+            "snp_proxy": snp_proxy,
+            "posterior": post,
+            "interpretation": interpretation,
+        })
+
+    if discordant_pairs:
+        disc_rows = [["Case Pair", "SNP Result", "Outbreaker2", "SNP Dist", "Posterior", "Interpretation"]]
+        for item in sorted(discordant_pairs, key=lambda x: x["posterior"], reverse=True)[:40]:
+            disc_rows.append([
+                item["pair"],
+                item["snp_result"],
+                item["out_result"],
+                str(item["snp_proxy"]) if item["snp_proxy"] is not None else "n/a",
+                f"{item['posterior']:.3f}" if item["posterior"] else "n/a",
+                item["interpretation"],
+            ])
+        disc_table = Table(disc_rows, colWidths=[1.0 * inch, 1.0 * inch, 0.9 * inch, 0.7 * inch, 0.7 * inch, 2.2 * inch], repeatRows=1)
+        disc_table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.whitesmoke),
+                    ("BOX", (0, 0), (-1, -1), 0.5, colors.grey),
+                    ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.lightgrey),
+                    ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+                    ("FONTSIZE", (0, 0), (-1, -1), 7.2),
+                ]
+            )
+        )
+        append_table_with_caption(
+            disc_table,
+            "Table 13. Discordant pairs between SNP-threshold clustering and outbreaker2 linkage to support structured multidisciplinary adjudication.",
+            spacer_after=0.0,
+            keep_together=False,
+        )
+    else:
+        story.append(Paragraph("No discordant pairs identified from available outputs.", styles["Normal"]))
+
+    story.append(Spacer(1, 0.2 * inch))
+    story.append(Paragraph("QC Failure Drill-Down", styles["Heading3"]))
+    if qc_detail_rows:
+        qc_rows = [["Sample", "QC", "Coverage", "Depth", "Contam", "Mixed-Lineage", "Repeat Required"]]
+        for row in qc_detail_rows[:30]:
+            interp_summary = str(row.get("interpretation_summary") or "").lower()
+            mixed = "yes" if "mixed" in interp_summary else "no"
+            qc_status = str(row.get("qc_status") or "not_reported")
+            contam = "yes" if bool(row.get("contamination_flag")) else "no"
+            repeat_needed = "yes" if qc_status.lower() not in ("pass", "passed") or contam == "yes" else "no"
+            qc_rows.append([
+                _short_case_id(str(row.get("case_id") or "")),
+                qc_status,
+                str(round(float(row.get("coverage_breadth")), 2)) if row.get("coverage_breadth") is not None else "n/a",
+                str(round(float(row.get("mean_depth")), 2)) if row.get("mean_depth") is not None else "n/a",
+                contam,
+                mixed,
+                repeat_needed,
+            ])
+        qc_table = Table(qc_rows, colWidths=[0.85 * inch, 0.8 * inch, 0.8 * inch, 0.75 * inch, 0.65 * inch, 1.05 * inch, 1.2 * inch], repeatRows=1)
+        qc_table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.whitesmoke),
+                    ("BOX", (0, 0), (-1, -1), 0.5, colors.grey),
+                    ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.lightgrey),
+                    ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+                    ("FONTSIZE", (0, 0), (-1, -1), 7.5),
+                ]
+            )
+        )
+        append_table_with_caption(
+            qc_table,
+            "Table 14. QC drill-down identifying samples requiring repeat testing or cautious interpretation before operational decisions.",
+            spacer_after=0.0,
+            keep_together=False,
+        )
+    else:
+        story.append(Paragraph("No QC details available.", styles["Normal"]))
+
+    story.append(Spacer(1, 0.2 * inch))
+    story.append(Paragraph("Drug-Resistance Mutation Details", styles["Heading3"]))
+    mutation_rows = [["Case", "Drug", "Mutation", "Gene", "Confidence", "Predicted", "Phenotypic DST"]]
+    for base in mutation_rows_raw:
+        case_id = str(base.get("case_id") or "")
+        predicted = base.get("predicted_drug_resistance")
+        predicted_text = _resistance_profile_text(predicted)
+        for mut in _iter_resistance_mutations(base.get("resistance_mutations")):
+            mutation_rows.append([
+                _short_case_id(case_id),
+                str(mut.get("drug") or "n/a"),
+                str(mut.get("mutation") or "n/a"),
+                str(mut.get("gene") or "n/a"),
+                str(mut.get("confidence") or "n/a"),
+                predicted_text,
+                "not_available",
+            ])
+            if len(mutation_rows) >= 60:
+                break
+        if len(mutation_rows) >= 60:
+            break
+
+    if len(mutation_rows) > 1:
+        mut_table = Table(mutation_rows, colWidths=[0.75 * inch, 0.75 * inch, 1.4 * inch, 0.65 * inch, 0.75 * inch, 1.05 * inch, 0.95 * inch], repeatRows=1)
+        mut_table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.whitesmoke),
+                    ("BOX", (0, 0), (-1, -1), 0.5, colors.grey),
+                    ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.lightgrey),
+                    ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+                    ("FONTSIZE", (0, 0), (-1, -1), 7.1),
+                ]
+            )
+        )
+        append_table_with_caption(
+            mut_table,
+            "Table 15. Drug-resistance mutation evidence supporting predicted phenotype. "
+            "Phenotypic DST linkage should be incorporated when an accredited laboratory DST feed is available.",
+            spacer_after=0.0,
+            keep_together=False,
+        )
+    else:
+        story.append(Paragraph("No structured resistance-mutation details found.", styles["Normal"]))
+
+    story.append(Spacer(1, 0.2 * inch))
+    story.append(Paragraph("Cluster Epidemiology Summary", styles["Heading3"]))
+    if cluster_epi_rows:
+        cluster_rows = [["Cluster", "Cases", "First", "Latest", "Median SNP", "Max SNP", "RR/MDR", "Index", "Recent(30/60/90)", "Status"]]
+        cluster_outgoing = {}
+        for edge in transmission_edges:
+            src = str(edge.get("source") or "")
+            src_cluster = str((case_by_id.get(src) or {}).get("cluster_id") or "")
+            if src_cluster and float(edge.get("probability") or 0.0) >= 0.70:
+                cluster_outgoing[src_cluster] = cluster_outgoing.get(src_cluster, 0) + 1
+
+        for row in cluster_epi_rows:
+            cluster_id = str(row.get("cluster_id") or "")
+            rr_mdr = f"{int(row.get('rr_cases') or 0)}/{int(row.get('mdr_cases') or 0)}"
+            recent = f"{int(row.get('recent_30d') or 0)}/{int(row.get('recent_60d') or 0)}/{int(row.get('recent_90d') or 0)}"
+            status = str(row.get("investigation_status") or "unknown")
+            if cluster_outgoing.get(cluster_id, 0) > 0 and status == "open":
+                status = "open+linked"
+            cluster_rows.append([
+                _short_case_id(cluster_id),
+                str(int(row.get("cases") or 0)),
+                str(row.get("first_specimen") or "n/a"),
+                str(row.get("latest_specimen") or "n/a"),
+                str(row.get("median_snp_proxy") or "n/a"),
+                str(row.get("max_snp_proxy") or "n/a"),
+                rr_mdr,
+                _short_case_id(str(row.get("suspected_index_case") or "")),
+                recent,
+                status,
+            ])
+        cluster_table = Table(cluster_rows, colWidths=[0.62 * inch, 0.45 * inch, 0.9 * inch, 0.9 * inch, 0.65 * inch, 0.6 * inch, 0.55 * inch, 0.65 * inch, 1.0 * inch, 0.9 * inch], repeatRows=1)
+        cluster_table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.whitesmoke),
+                    ("BOX", (0, 0), (-1, -1), 0.5, colors.grey),
+                    ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.lightgrey),
+                    ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+                    ("FONTSIZE", (0, 0), (-1, -1), 6.9),
+                ]
+            )
+        )
+        append_table_with_caption(
+            cluster_table,
+            "Table 16. Cluster-level epidemiology profile including growth recency and RR/MDR burden (RR/MDR reported as case counts).",
+            spacer_after=0.0,
+            keep_together=False,
+        )
+    else:
+        story.append(Paragraph("No cluster-level epidemiology rows available.", styles["Normal"]))
+
+    story.append(Spacer(1, 0.2 * inch))
+    story.append(Paragraph("Geographical Cluster Spread", styles["Heading3"]))
+    if cluster_epi_rows:
+        geo_rows = [["Cluster", "Regions", "Cases", "Cross-Region", "Risk Flag"]]
+        for row in cluster_epi_rows[:20]:
+            cluster_id = str(row.get("cluster_id") or "")
+            members = sequence_cluster_members.get(cluster_id, [])
+            regions = sorted({str((case_by_id.get(x) or {}).get("geographic_region") or "Unknown") for x in members})
+            region_text = ", ".join(regions[:2]) + ("..." if len(regions) > 2 else "")
+            cross_region = "yes" if len(regions) > 1 else "no"
+            risk_flag = "high" if int(row.get("mdr_cases") or 0) > 0 or int(row.get("recent_30d") or 0) >= 2 else "monitor"
+            geo_rows.append([
+                _short_case_id(cluster_id),
+                region_text,
+                str(int(row.get("cases") or 0)),
+                cross_region,
+                risk_flag,
+            ])
+        geo_table = Table(geo_rows, colWidths=[0.8 * inch, 2.6 * inch, 0.7 * inch, 0.9 * inch, 1.2 * inch], repeatRows=1)
+        geo_table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.whitesmoke),
+                    ("BOX", (0, 0), (-1, -1), 0.5, colors.grey),
+                    ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.lightgrey),
+                    ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+                    ("FONTSIZE", (0, 0), (-1, -1), 7.5),
+                ]
+            )
+        )
+        append_table_with_caption(
+            geo_table,
+            "Table 17. Cluster geography summary at region/trust-safe level (no household-level identifiers displayed).",
+            spacer_after=0.0,
+            keep_together=False,
+        )
+
+    story.append(Spacer(1, 0.2 * inch))
+    story.append(Paragraph("Missing-Data Dashboard", styles["Heading3"]))
+    if completeness_row:
+        total = int(completeness_row.get("total_cases") or 0)
+
+        def pct(present):
+            return round((int(present or 0) / total) * 100.0, 1) if total else 0.0
+
+        miss_rows = [["Field", "Completeness", "Missing", "Impact"]]
+        field_specs = [
+            ("Collection date", completeness_row.get("specimen_date_present"), "affects outbreaker2 timing"),
+            ("Notification date (proxy)", completeness_row.get("notification_proxy_present"), "affects surveillance timeline"),
+            ("Region/trust", completeness_row.get("region_present"), "affects representativeness and spread"),
+            ("Lineage", completeness_row.get("lineage_present"), "affects phylogenetic interpretation"),
+            ("Resistance call", completeness_row.get("resistance_present"), "affects clinical action"),
+            ("QC metrics", completeness_row.get("qc_present"), "affects confidence in inference"),
+        ]
+        for label, present, impact in field_specs:
+            present_n = int(present or 0)
+            miss_rows.append([
+                label,
+                f"{pct(present_n)}%",
+                str(max(total - present_n, 0)),
+                impact,
+            ])
+
+        miss_table = Table(miss_rows, colWidths=[1.4 * inch, 1.0 * inch, 0.8 * inch, 3.0 * inch], repeatRows=1)
+        miss_table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.whitesmoke),
+                    ("BOX", (0, 0), (-1, -1), 0.5, colors.grey),
+                    ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.lightgrey),
+                    ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+                    ("FONTSIZE", (0, 0), (-1, -1), 8.0),
+                ]
+            )
+        )
+        append_table_with_caption(
+            miss_table,
+            "Table 18. Completeness and impact dashboard for key outbreak-investigation data fields, aligned to transparent inference limitations.",
+            spacer_after=0.0,
+        )
+
+    story.append(Spacer(1, 0.2 * inch))
+    story.append(Paragraph("Model Reliability Diagnostics", styles["Heading3"]))
+    if summary_data:
+        conv = summary_data.get("convergence_diagnostic")
+        acc = summary_data.get("acceptance_rate")
+        ess = summary_data.get("effective_sample_size")
+        chains = summary_data.get("n_chains")
+        sensitivity = summary_data.get("sensitivity_run")
+
+        conv_val = float(conv) if conv is not None else None
+        reliability = "reliable" if conv_val is not None and conv_val <= 1.1 else "exploratory"
+
+        diag_rows = [
+            ["Diagnostic", "Value", "Threshold", "Interpretation"],
+            ["Effective sample size", str(ess if ess is not None else "n/a"), ">200 (rule-of-thumb)", "Higher is more stable"],
+            ["Gelman-Rubin / R-hat", str(conv if conv is not None else "n/a"), "<1.1", "Convergence confidence"],
+            ["Acceptance rate", str(acc if acc is not None else "n/a"), "0.2-0.6 (typical)", "Mixing efficiency"],
+            ["Number of chains", str(chains if chains is not None else "n/a"), ">=2", "Multi-chain robustness"],
+            ["Sensitivity run performed", str(sensitivity if sensitivity is not None else "no"), "yes", "Parameter robustness"],
+            ["Overall reliability", reliability, "", "Use exploratory language if not converged"],
+        ]
+        diag_table = Table(diag_rows, colWidths=[1.6 * inch, 0.9 * inch, 1.3 * inch, 2.4 * inch], repeatRows=1)
+        diag_table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.whitesmoke),
+                    ("BOX", (0, 0), (-1, -1), 0.5, colors.grey),
+                    ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.lightgrey),
+                    ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+                    ("FONTSIZE", (0, 0), (-1, -1), 8.0),
+                ]
+            )
+        )
+        append_table_with_caption(
+            diag_table,
+            "Table 19. Model-diagnostic reliability section distinguishing operationally reliable vs exploratory outbreaker2 inference.",
+            spacer_after=0.0,
+        )
+
+    story.append(Spacer(1, 0.2 * inch))
+    story.append(Paragraph("Transmission Routes Reference", styles["Heading3"]))
     # ── TB Transmission Routes — Background ───────────────────────────────────
     story.append(Paragraph("Understanding TB Transmission Routes from WGS", styles["Heading3"]))
     story.append(Paragraph(
@@ -1549,10 +2257,10 @@ def outbreak_report(db: Session = Depends(get_db)):
     ]))
     story.append(routes_table)
     story.append(Paragraph(
-        "Table 11. TB transmission route classification by SNP distance (M. tuberculosis whole-genome comparison). "
+        "Table 20. TB transmission route classification by SNP distance (M. tuberculosis whole-genome comparison). "
         "SNP thresholds follow UK NICE guideline NG33 and published literature (Walker et al. 2013, Meehan et al. 2019). "
-        "The generation time assumed in outbreaker2 modelling is set at programme configuration and affects when "
-        "a given SNP distance is interpreted as consistent with direct vs indirect transmission.",
+        "The generation-time prior used in outbreaker2 is programme-configured and influences whether "
+        "a given SNP distance is interpreted as consistent with direct versus indirect transmission.",
         caption_style,
     ))
     story.append(Spacer(1, 0.18 * inch))
@@ -1583,7 +2291,7 @@ def outbreak_report(db: Session = Depends(get_db)):
         story.append(priority_table)
 
         story.append(Paragraph(
-            f"Table 12. Top-priority cases by network centrality. "
+            f"Table 21. Top-priority cases by network centrality. "
             f"Network snapshot: {transmission_data.get('node_count', 0)} nodes, "
             f"{transmission_data.get('edge_count', 0)} directed links, "
             f"{transmission_data.get('high_confidence_edges', 0)} high-confidence links (posterior >0.70). "

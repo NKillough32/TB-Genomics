@@ -1,7 +1,7 @@
 {
   "status": "ok",
   "method": "sequence_distance_connected_components",
-  "generated_at": "2026-05-11T09:45:15.093464+00:00",
+  "generated_at": "2026-05-11T10:32:42.513991+00:00",
   "threshold_snp_distance": 25,
   "min_cluster_size": 2,
   "sequenced_cases": 20,
@@ -12,17 +12,17 @@
   "clusters": [
     {
       "cluster_label": "SEQ-001",
-      "cluster_id": "5de4f410-12bf-500d-8f75-17974cc7a92f",
+      "cluster_id": "5cfd8109-5e57-5d21-8371-b3598edd33f3",
       "case_count": 6
     },
     {
       "cluster_label": "SEQ-002",
-      "cluster_id": "5db5d1d5-3812-5ce5-a203-227ba59969cd",
+      "cluster_id": "a2228458-27c6-5efe-87f8-b260582ff42b",
       "case_count": 6
     },
     {
       "cluster_label": "SEQ-003",
-      "cluster_id": "4162ad4a-181a-59d3-a4dd-8f06cbf2f85e",
+      "cluster_id": "cc57094c-1fd9-5877-9326-793a1e7998e5",
       "case_count": 2
     }
   ]

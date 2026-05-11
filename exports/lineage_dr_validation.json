@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-11T09:45:14.042848+00:00",
+  "generated_at": "2026-05-11T10:32:41.793180+00:00",
   "status": "completed",
   "scaffold_version": "1.0",
   "engines": {
@@ -192,9 +192,20 @@
   "tbprofiler_db_import": {
     "status": "imported",
     "message": "tb-profiler results imported into tb_interpretation",
-    "imported_rows": 10,
-    "skipped_rows": 0,
-    "warnings": []
+    "imported_rows": 0,
+    "skipped_rows": 10,
+    "warnings": [
+      "sample_id not found in cases (491ae09e-b7ad-4fd3-9ffe-60ce12dc76d5)",
+      "sample_id not found in cases (8df2dbee-f635-4cd1-92d9-f07db88eeefc)",
+      "sample_id not found in cases (99ad0871-d7b7-441b-971f-1625ea7e53e3)",
+      "sample_id not found in cases (5803da20-e873-4581-a154-c5fa5300c144)",
+      "sample_id not found in cases (c963dae2-fe9d-4386-994f-dce88fb68641)",
+      "sample_id not found in cases (fbee9035-462e-4f13-bb0c-9c079b756171)",
+      "sample_id not found in cases (61ba28ca-99f1-4bf9-a76c-9c95a2c1c40f)",
+      "sample_id not found in cases (01f77d29-20aa-4f4f-848f-5df54ded3d97)",
+      "sample_id not found in cases (0ae5993d-00e8-420a-b071-dd34400c7273)",
+      "sample_id not found in cases (49738574-589a-4d41-87b9-243514fd9b0b)"
+    ]
   },
   "mykrobe_run": {
     "status": "skipped",

@@ -18,6 +18,88 @@ def get_db():
     try: yield db
     finally: db.close()
 
+
+def _lineage_analysis_summary(db: Session) -> dict:
+    """Return live lineage/DR interpretation counts from tb_interpretation."""
+    summary = {
+        "interpreted_samples": 0,
+        "samples_with_lineage": 0,
+        "samples_with_resistance_calls": 0,
+        "samples_with_interpretation_summary": 0,
+    }
+
+    try:
+        summary_row = db.execute(
+            text(
+                """
+                SELECT
+                    COUNT(*)::int AS interpreted_samples,
+                    COUNT(*) FILTER (WHERE lineage IS NOT NULL AND BTRIM(lineage) <> '')::int AS samples_with_lineage,
+                    COUNT(*) FILTER (
+                        WHERE predicted_drug_resistance IS NOT NULL
+                        AND predicted_drug_resistance::text NOT IN ('null', '{}', '[]')
+                    )::int AS samples_with_resistance_calls,
+                    COUNT(*) FILTER (
+                        WHERE interpretation_summary IS NOT NULL AND BTRIM(interpretation_summary) <> ''
+                    )::int AS samples_with_interpretation_summary
+                FROM tb_interpretation
+                """
+            )
+        ).mappings().first()
+        if summary_row:
+            summary = {
+                "interpreted_samples": int(summary_row["interpreted_samples"] or 0),
+                "samples_with_lineage": int(summary_row["samples_with_lineage"] or 0),
+                "samples_with_resistance_calls": int(summary_row["samples_with_resistance_calls"] or 0),
+                "samples_with_interpretation_summary": int(summary_row["samples_with_interpretation_summary"] or 0),
+            }
+    except Exception as exc:
+        summary["error"] = str(exc)
+
+    return summary
+
+
+def _derive_effective_engine_status(payload: dict) -> dict:
+    """Compute user-facing engine statuses from local + fallback execution context."""
+    payload = payload or {}
+    engines = payload.get("engines") or {}
+    tb_local = (engines.get("tb_profiler") or {}).get("status", "unknown")
+    mykrobe_local = (engines.get("mykrobe") or {}).get("status", "unknown")
+
+    tb_run = payload.get("tbprofiler_run") or {}
+    tb_wsl_run = payload.get("tbprofiler_wsl_run") or {}
+    tb_docker_run = payload.get("tbprofiler_docker_run") or {}
+
+    mykrobe_run = payload.get("mykrobe_run") or {}
+    mykrobe_wsl_run = payload.get("mykrobe_wsl_run") or {}
+
+    wsl_info = payload.get("wsl") or {}
+    wsl_tb = (wsl_info.get("tbprofiler") or {}).get("status", "unknown")
+    wsl_mykrobe = (wsl_info.get("mykrobe") or {}).get("status", "unknown")
+
+    # TB-Profiler effective status
+    tb_effective = tb_local
+    if tb_run.get("status") == "completed":
+        tb_effective = f"available_via_{tb_run.get('runner', 'runner')}"
+    elif tb_wsl_run.get("status") == "completed" or wsl_tb == "installed":
+        tb_effective = "available_via_wsl"
+    elif tb_docker_run.get("status") == "completed":
+        tb_effective = "available_via_docker"
+
+    # Mykrobe effective status
+    mykrobe_effective = mykrobe_local
+    if mykrobe_run.get("status") == "completed":
+        mykrobe_effective = f"available_via_{mykrobe_run.get('runner', 'runner')}"
+    elif mykrobe_wsl_run.get("status") == "completed" or wsl_mykrobe == "installed":
+        mykrobe_effective = "available_via_wsl"
+
+    return {
+        "tb_profiler": tb_effective,
+        "mykrobe": mykrobe_effective,
+        "tb_profiler_local": tb_local,
+        "mykrobe_local": mykrobe_local,
+    }
+
 @router.get("/")
 def list_cases(db: Session = Depends(get_db)):
     return db.query(Case).all()
@@ -387,41 +469,7 @@ def outbreaker_analysis():
 @router.get("/lineage-dr-validation")
 def lineage_dr_validation(db: Session = Depends(get_db)):
     """Return lineage/drug-resistance integration validation artifact."""
-
-    analysis_summary = {
-        "interpreted_samples": 0,
-        "samples_with_lineage": 0,
-        "samples_with_resistance_calls": 0,
-        "samples_with_interpretation_summary": 0,
-    }
-
-    try:
-        summary_row = db.execute(
-            text(
-                """
-                SELECT
-                    COUNT(*)::int AS interpreted_samples,
-                    COUNT(*) FILTER (WHERE lineage IS NOT NULL AND BTRIM(lineage) <> '')::int AS samples_with_lineage,
-                    COUNT(*) FILTER (
-                        WHERE predicted_drug_resistance IS NOT NULL
-                        AND predicted_drug_resistance::text NOT IN ('null', '{}', '[]')
-                    )::int AS samples_with_resistance_calls,
-                    COUNT(*) FILTER (
-                        WHERE interpretation_summary IS NOT NULL AND BTRIM(interpretation_summary) <> ''
-                    )::int AS samples_with_interpretation_summary
-                FROM tb_interpretation
-                """
-            )
-        ).mappings().first()
-        if summary_row:
-            analysis_summary = {
-                "interpreted_samples": int(summary_row["interpreted_samples"] or 0),
-                "samples_with_lineage": int(summary_row["samples_with_lineage"] or 0),
-                "samples_with_resistance_calls": int(summary_row["samples_with_resistance_calls"] or 0),
-                "samples_with_interpretation_summary": int(summary_row["samples_with_interpretation_summary"] or 0),
-            }
-    except Exception as exc:
-        analysis_summary["error"] = str(exc)
+    analysis_summary = _lineage_analysis_summary(db)
 
     path = "exports/lineage_dr_validation.json"
     if not os.path.exists(path):
@@ -445,6 +493,7 @@ def lineage_dr_validation(db: Session = Depends(get_db)):
 
     payload["artifact_path"] = path
     payload["analysis_summary"] = analysis_summary
+    payload["effective_engines"] = _derive_effective_engine_status(payload)
     return payload
 
 
@@ -1153,18 +1202,21 @@ def outbreak_report(db: Session = Depends(get_db)):
     story.append(Spacer(1, 0.2 * inch))
     story.append(Paragraph("Lineage and Drug Resistance Validation", styles["Heading3"]))
     if lineage_dr_data:
+        analysis_summary = _lineage_analysis_summary(db)
         lineage_engines = (lineage_dr_data.get("engines") or {})
-        analysis_summary = lineage_dr_data.get("analysis_summary") or {}
+        effective_engines = _derive_effective_engine_status(lineage_dr_data)
         lineage_rows = [
             ["Overall Status", str(lineage_dr_data.get("status", "unknown"))],
-            ["TB-Profiler", str((lineage_engines.get("tb_profiler") or {}).get("status", "unknown"))],
-            ["Mykrobe", str((lineage_engines.get("mykrobe") or {}).get("status", "unknown"))],
+            ["TB-Profiler", str(effective_engines.get("tb_profiler", "unknown"))],
+            ["Mykrobe", str(effective_engines.get("mykrobe", "unknown"))],
             ["Docker Fallback", str((lineage_dr_data.get("docker") or {}).get("fallback_enabled", False))],
             ["Docker Daemon Running", str((lineage_dr_data.get("docker") or {}).get("daemon_running", False))],
             ["FASTA Inputs", str((lineage_dr_data.get("inputs") or {}).get("fasta_count", 0))],
             ["Interpreted Samples", str(analysis_summary.get("interpreted_samples", 0))],
             ["Samples with Lineage", str(analysis_summary.get("samples_with_lineage", 0))],
             ["Samples with Resistance Calls", str(analysis_summary.get("samples_with_resistance_calls", 0))],
+            ["TB-Profiler (Local)", str((lineage_engines.get("tb_profiler") or {}).get("status", "unknown"))],
+            ["Mykrobe (Local)", str((lineage_engines.get("mykrobe") or {}).get("status", "unknown"))],
         ]
         lineage_table = Table(lineage_rows, colWidths=[2.8 * inch, 3.0 * inch])
         lineage_table.setStyle(

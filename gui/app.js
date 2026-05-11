@@ -273,7 +273,13 @@ async function loadLineageDrValidation(){
 		let html='<div class="result-panel">';
 		html+=`<h4>Validation status: ${payload.status||'unknown'}</h4>`;
 		const summary=payload.analysis_summary||{};
+		const epi=payload.analysis_epi_summary||{};
 		html+=`<div class="kpi-strip">Interpreted samples: ${summary.interpreted_samples||0} | With lineage: ${summary.samples_with_lineage||0} | With resistance calls: ${summary.samples_with_resistance_calls||0}</div>`;
+		html+=`<div class="kpi-strip">Any resistance signal: ${epi.samples_with_any_resistance_signal||0} | Rifampicin-resistant (suspected): ${epi.rifampicin_resistant_suspected||0} | MDR (suspected): ${epi.mdr_suspected||0}</div>`;
+		if(Array.isArray(epi.top_lineages)&&epi.top_lineages.length>0){
+			const topLineages=epi.top_lineages.slice(0,4).map(x=>`${x.lineage}: ${x.count}`).join(' | ');
+			html+=`<p><strong>Top lineages:</strong> ${topLineages}</p>`;
+		}
 		html+=`<pre class="log-box">${JSON.stringify(payload,null,2)}</pre>`;
 		html+='</div>';
 		box.innerHTML=html;

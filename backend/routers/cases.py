@@ -59,6 +59,110 @@ def _lineage_analysis_summary(db: Session) -> dict:
     return summary
 
 
+def _lineage_epi_summary(db: Session) -> dict:
+    """Return epidemiology-oriented lineage/DR indicators for decision support."""
+    summary = {
+        "samples_with_any_resistance_signal": 0,
+        "rifampicin_resistant_suspected": 0,
+        "isoniazid_resistant_suspected": 0,
+        "mdr_suspected": 0,
+        "fluoroquinolone_resistant_suspected": 0,
+        "top_lineages": [],
+        "top_lineage_region_pairs": [],
+    }
+
+    try:
+        base_row = db.execute(
+            text(
+                """
+                WITH dr AS (
+                    SELECT LOWER(CAST(predicted_drug_resistance AS TEXT)) AS dr_text
+                    FROM tb_interpretation
+                    WHERE predicted_drug_resistance IS NOT NULL
+                    AND predicted_drug_resistance::text NOT IN ('null', '{}', '[]')
+                )
+                SELECT
+                    COUNT(*) FILTER (
+                        WHERE dr_text LIKE '%resistant%'
+                        OR dr_text LIKE '%\"r\"%'
+                    )::int AS samples_with_any_resistance_signal,
+                    COUNT(*) FILTER (
+                        WHERE dr_text LIKE '%rifamp%'
+                        AND (dr_text LIKE '%resistant%' OR dr_text LIKE '%\"r\"%')
+                    )::int AS rifampicin_resistant_suspected,
+                    COUNT(*) FILTER (
+                        WHERE dr_text LIKE '%isoniazid%'
+                        AND (dr_text LIKE '%resistant%' OR dr_text LIKE '%\"r\"%')
+                    )::int AS isoniazid_resistant_suspected,
+                    COUNT(*) FILTER (
+                        WHERE dr_text LIKE '%fluoro%'
+                        AND (dr_text LIKE '%resistant%' OR dr_text LIKE '%\"r\"%')
+                    )::int AS fluoroquinolone_resistant_suspected,
+                    COUNT(*) FILTER (
+                        WHERE dr_text LIKE '%rifamp%'
+                        AND dr_text LIKE '%isoniazid%'
+                        AND (dr_text LIKE '%resistant%' OR dr_text LIKE '%\"r\"%')
+                    )::int AS mdr_suspected
+                FROM dr
+                """
+            )
+        ).mappings().first()
+
+        if base_row:
+            summary.update(
+                {
+                    "samples_with_any_resistance_signal": int(base_row["samples_with_any_resistance_signal"] or 0),
+                    "rifampicin_resistant_suspected": int(base_row["rifampicin_resistant_suspected"] or 0),
+                    "isoniazid_resistant_suspected": int(base_row["isoniazid_resistant_suspected"] or 0),
+                    "mdr_suspected": int(base_row["mdr_suspected"] or 0),
+                    "fluoroquinolone_resistant_suspected": int(base_row["fluoroquinolone_resistant_suspected"] or 0),
+                }
+            )
+
+        lineage_rows = db.execute(
+            text(
+                """
+                SELECT lineage, COUNT(*)::int AS n
+                FROM tb_interpretation
+                WHERE lineage IS NOT NULL AND BTRIM(lineage) <> ''
+                GROUP BY lineage
+                ORDER BY n DESC, lineage
+                LIMIT 5
+                """
+            )
+        ).mappings().all()
+        summary["top_lineages"] = [
+            {"lineage": str(r["lineage"]), "count": int(r["n"] or 0)}
+            for r in lineage_rows
+        ]
+
+        pair_rows = db.execute(
+            text(
+                """
+                SELECT c.geographic_region AS region, ti.lineage, COUNT(*)::int AS n
+                FROM tb_interpretation ti
+                JOIN cases c ON c.pseudonymised_case_id = ti.sample_id
+                WHERE ti.lineage IS NOT NULL AND BTRIM(ti.lineage) <> ''
+                GROUP BY c.geographic_region, ti.lineage
+                ORDER BY n DESC, c.geographic_region, ti.lineage
+                LIMIT 8
+                """
+            )
+        ).mappings().all()
+        summary["top_lineage_region_pairs"] = [
+            {
+                "region": str(r["region"]),
+                "lineage": str(r["lineage"]),
+                "count": int(r["n"] or 0),
+            }
+            for r in pair_rows
+        ]
+    except Exception as exc:
+        summary["error"] = str(exc)
+
+    return summary
+
+
 def _derive_effective_engine_status(payload: dict) -> dict:
     """Compute user-facing engine statuses from local + fallback execution context."""
     payload = payload or {}
@@ -470,6 +574,7 @@ def outbreaker_analysis():
 def lineage_dr_validation(db: Session = Depends(get_db)):
     """Return lineage/drug-resistance integration validation artifact."""
     analysis_summary = _lineage_analysis_summary(db)
+    analysis_epi_summary = _lineage_epi_summary(db)
 
     path = "exports/lineage_dr_validation.json"
     if not os.path.exists(path):
@@ -478,6 +583,7 @@ def lineage_dr_validation(db: Session = Depends(get_db)):
             "message": "Lineage/DR validation has not been run yet",
             "artifact_path": path,
             "analysis_summary": analysis_summary,
+            "analysis_epi_summary": analysis_epi_summary,
         }
 
     try:
@@ -489,10 +595,12 @@ def lineage_dr_validation(db: Session = Depends(get_db)):
             "message": str(exc),
             "artifact_path": path,
             "analysis_summary": analysis_summary,
+            "analysis_epi_summary": analysis_epi_summary,
         }
 
     payload["artifact_path"] = path
     payload["analysis_summary"] = analysis_summary
+    payload["analysis_epi_summary"] = analysis_epi_summary
     payload["effective_engines"] = _derive_effective_engine_status(payload)
     return payload
 
@@ -1203,6 +1311,7 @@ def outbreak_report(db: Session = Depends(get_db)):
     story.append(Paragraph("Lineage and Drug Resistance Validation", styles["Heading3"]))
     if lineage_dr_data:
         analysis_summary = _lineage_analysis_summary(db)
+        analysis_epi_summary = _lineage_epi_summary(db)
         lineage_engines = (lineage_dr_data.get("engines") or {})
         effective_engines = _derive_effective_engine_status(lineage_dr_data)
         lineage_rows = [
@@ -1215,6 +1324,11 @@ def outbreak_report(db: Session = Depends(get_db)):
             ["Interpreted Samples", str(analysis_summary.get("interpreted_samples", 0))],
             ["Samples with Lineage", str(analysis_summary.get("samples_with_lineage", 0))],
             ["Samples with Resistance Calls", str(analysis_summary.get("samples_with_resistance_calls", 0))],
+            ["Any Resistance Signal", str(analysis_epi_summary.get("samples_with_any_resistance_signal", 0))],
+            ["Rifampicin-Resistant (suspected)", str(analysis_epi_summary.get("rifampicin_resistant_suspected", 0))],
+            ["Isoniazid-Resistant (suspected)", str(analysis_epi_summary.get("isoniazid_resistant_suspected", 0))],
+            ["MDR (suspected)", str(analysis_epi_summary.get("mdr_suspected", 0))],
+            ["FQ-Resistant (suspected)", str(analysis_epi_summary.get("fluoroquinolone_resistant_suspected", 0))],
             ["TB-Profiler (Local)", str((lineage_engines.get("tb_profiler") or {}).get("status", "unknown"))],
             ["Mykrobe (Local)", str((lineage_engines.get("mykrobe") or {}).get("status", "unknown"))],
         ]
@@ -1235,9 +1349,14 @@ def outbreak_report(db: Session = Depends(get_db)):
             "Table 8. Lineage and drug-resistance validation status. TB-Profiler and Mykrobe are bioinformatic pipelines "
             "that classify M. tuberculosis lineage and predict drug resistance from WGS reads. "
             "'Available' means the tool executed successfully; 'unavailable' may indicate missing software, Docker daemon issues, or insufficient FASTA inputs. "
-            "FASTA inputs refers to the number of consensus genome sequences submitted for analysis.",
+            "FASTA inputs refers to the number of consensus genome sequences submitted for analysis. "
+            "Resistance rows provide programmatic flags to prioritize possible RR/MDR/FQ-resistant cases for review.",
             caption_style,
         ))
+        top_lineages = analysis_epi_summary.get("top_lineages") or []
+        if top_lineages:
+            top_text = ", ".join([f"{x.get('lineage')}: {x.get('count')}" for x in top_lineages[:4]])
+            story.append(Paragraph(f"Top observed lineages: {top_text}", styles["Normal"]))
         next_steps = lineage_dr_data.get("next_steps") or []
         if next_steps:
             story.append(Spacer(1, 0.08 * inch))

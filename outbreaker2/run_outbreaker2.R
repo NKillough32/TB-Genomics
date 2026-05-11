@@ -135,8 +135,8 @@ tryCatch({
   }
   
   # Save R object
-  saveRDS(res, 'outbreaker2_results.rds')
-  cat("Results saved to outbreaker2_results.rds\n")
+  saveRDS(res, 'exports/outbreaker2_results.rds')
+  cat("Results saved to exports/outbreaker2_results.rds\n")
   
   # Generate plots
   cat("Generating diagnostic plots...\n")

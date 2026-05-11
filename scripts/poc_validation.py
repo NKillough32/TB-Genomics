@@ -173,7 +173,7 @@ class PoC_Validator:
         print("=" * 60)
 
         # Save report to file
-        report_path = Path("poc_validation_report.json")
+        report_path = Path("exports/poc_validation_report.json")
         with open(report_path, "w") as f:
             json.dump(self.results, f, indent=2)
         print(f"\n✅ Report saved to {report_path}")

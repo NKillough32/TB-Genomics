@@ -15,7 +15,10 @@ pkg_status <- function(pkg_name) {
       status = "optional_unavailable",
       package = pkg_name,
       version = NA_character_,
-      message = paste0(pkg_name, " optional engine not available in current runtime")
+      message = paste0(
+        pkg_name,
+        " optional engine not available in current runtime"
+      )
     ))
   }
 
@@ -36,7 +39,10 @@ bactdating <- pkg_status("BactDating")
 if (transphylo$status == "installed") {
   if (!has_tree || !has_dates) {
     transphylo$status <- "ready_missing_inputs"
-    transphylo$message <- "TransPhylo installed but needs exports/outbreaker_phylo.nwk and exports/cases.csv"
+    transphylo$message <- paste0(
+      "TransPhylo installed but needs exports/",
+      "outbreaker_phylo.nwk and exports/cases.csv"
+    )
   } else {
     transphylo$status <- "ready"
     transphylo$message <- "TransPhylo installed and key inputs detected"
@@ -46,7 +52,10 @@ if (transphylo$status == "installed") {
 if (bactdating$status == "installed") {
   if (!has_tree || !has_dates) {
     bactdating$status <- "ready_missing_inputs"
-    bactdating$message <- "BactDating installed but needs exports/outbreaker_phylo.nwk and exports/cases.csv"
+    bactdating$message <- paste0(
+      "BactDating installed but needs exports/",
+      "outbreaker_phylo.nwk and exports/cases.csv"
+    )
   } else {
     bactdating$status <- "ready"
     bactdating$message <- "BactDating installed and key inputs detected"
@@ -78,8 +87,14 @@ payload <- list(
     confidence = "unknown"
   ),
   notes = c(
-    "This scaffold validates optional secondary-engine availability and input readiness.",
-    "It does not infer additional transmission links until tree/date prerequisites are satisfied."
+    paste0(
+      "This scaffold validates optional secondary-engine ",
+      "availability and input readiness."
+    ),
+    paste0(
+      "It does not infer additional transmission links until ",
+      "tree/date prerequisites are satisfied."
+    )
   )
 )
 

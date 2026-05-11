@@ -1,1 +1,24 @@
-Case Pair,Pairwise SNP result,Outbreaker2,Pairwise SNP,Posterior,Interpretation
+Case Pair,Pairwise SNP result,Outbreaker2,Pairwise SNP,Posterior,Interpretation,Code
+716130a0-e5ffea1d,pairwise>12 or unavailable,linked,864,1.000,Temporal support without pairwise SNP support; assess missing intermediates/importation,D1
+3a23165b-ce1cd7ce,pairwise>12 or unavailable,linked,16,1.000,Temporal support without pairwise SNP support; assess missing intermediates/importation,D1
+24cc59c8-740131f2,pairwise>12 or unavailable,linked,n/a,1.000,Temporal support without pairwise SNP support; assess missing intermediates/importation,D2
+6f306409-e10f9dde,pairwise>12 or unavailable,linked,18,1.000,Temporal support without pairwise SNP support; assess missing intermediates/importation,D1
+1a574171-b6530faa,pairwise>12 or unavailable,linked,22,1.000,Temporal support without pairwise SNP support; assess missing intermediates/importation,D1
+24cc59c8-e0b496a8,pairwise>12 or unavailable,linked,n/a,1.000,Temporal support without pairwise SNP support; assess missing intermediates/importation,D2
+b36fc4ca-fb419fc3,pairwise>12 or unavailable,linked,28,1.000,Temporal support without pairwise SNP support; assess missing intermediates/importation,D1
+905ea01d-f17d7f92,pairwise>12 or unavailable,linked,13,1.000,Temporal support without pairwise SNP support; assess missing intermediates/importation,D1
+78e6e3e1-fb419fc3,pairwise>12 or unavailable,linked,21,1.000,Temporal support without pairwise SNP support; assess missing intermediates/importation,D1
+631bcffb-e10f9dde,pairwise>12 or unavailable,linked,16,1.000,Temporal support without pairwise SNP support; assess missing intermediates/importation,D1
+78e6e3e1-f17d7f92,pairwise>12 or unavailable,linked,16,1.000,Temporal support without pairwise SNP support; assess missing intermediates/importation,D1
+89f900c2-e0b496a8,pairwise>12 or unavailable,linked,n/a,1.000,Temporal support without pairwise SNP support; assess missing intermediates/importation,D2
+a8d08022-e10f9dde,pairwise>12 or unavailable,linked,17,1.000,Temporal support without pairwise SNP support; assess missing intermediates/importation,D1
+a8d08022-b4218364,pairwise>12 or unavailable,linked,881,1.000,Temporal support without pairwise SNP support; assess missing intermediates/importation,D1
+3a23165b-89f900c2,pairwise>12 or unavailable,linked,n/a,1.000,Temporal support without pairwise SNP support; assess missing intermediates/importation,D2
+0ab71d84-905ea01d,pairwise>12 or unavailable,linked,15,1.000,Temporal support without pairwise SNP support; assess missing intermediates/importation,D1
+b1548d7e-e0b496a8,pairwise>12 or unavailable,linked,n/a,0.994,Temporal support without pairwise SNP support; assess missing intermediates/importation,D2
+9ab6c0d9-e10f9dde,pairwise>12 or unavailable,linked,883,0.880,Temporal support without pairwise SNP support; assess missing intermediates/importation,D1
+3a23165b-fb419fc3,pairwise>12 or unavailable,linked,889,0.681,Temporal support without pairwise SNP support; assess missing intermediates/importation,D1
+a8d08022-ce1cd7ce,pairwise>12 or unavailable,linked,19,0.677,Temporal support without pairwise SNP support; assess missing intermediates/importation,D1
+716130a0-b1548d7e,pairwise>12 or unavailable,linked,884,0.661,Temporal support without pairwise SNP support; assess missing intermediates/importation,D1
+078d9814-3a23165b,pairwise>12 or unavailable,linked,n/a,0.525,Temporal support without pairwise SNP support; assess missing intermediates/importation,D2
+b6530faa-ce1cd7ce,pairwise>12 or unavailable,linked,898,0.438,Temporal support without pairwise SNP support; assess missing intermediates/importation,D1

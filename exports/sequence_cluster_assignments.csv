@@ -1,0 +1,15 @@
+case_id,specimen_date,geographic_region,cluster_id,source
+3a23165b-8cab-4d72-af38-275452e300eb,2024-11-28,United Kingdom,04e65e42-815f-5fc3-9fff-03b8cfca511b,sequence_derived
+631bcffb-c8c8-4a8f-a89b-c76776ccd53a,2026-05-02,United Kingdom,04e65e42-815f-5fc3-9fff-03b8cfca511b,sequence_derived
+6f306409-9583-4a5e-9a68-8bc1aaf99b19,2026-03-11,United Kingdom,04e65e42-815f-5fc3-9fff-03b8cfca511b,sequence_derived
+a8d08022-ceba-4385-aa67-583f6ed8a571,2025-05-29,United Kingdom,04e65e42-815f-5fc3-9fff-03b8cfca511b,sequence_derived
+ce1cd7ce-6a28-4dbe-972a-186ddad2073e,2025-01-16,United Kingdom,04e65e42-815f-5fc3-9fff-03b8cfca511b,sequence_derived
+e10f9dde-e2cb-4f72-a0ff-de40fd55140b,2026-02-22,United Kingdom,04e65e42-815f-5fc3-9fff-03b8cfca511b,sequence_derived
+0ab71d84-77f3-48f6-95af-ac79abc2b0a2,2026-01-25,United Kingdom,39be6563-a0ea-55e4-a4e9-00a2511f0e36,sequence_derived
+78e6e3e1-a28e-4154-9aaa-8ac345e0296c,2025-08-04,United Kingdom,39be6563-a0ea-55e4-a4e9-00a2511f0e36,sequence_derived
+905ea01d-845d-442c-9397-7667c2b3f4fa,2025-12-31,United Kingdom,39be6563-a0ea-55e4-a4e9-00a2511f0e36,sequence_derived
+b36fc4ca-bf9c-4ab9-88ea-fadfb23884fc,2025-04-12,United Kingdom,39be6563-a0ea-55e4-a4e9-00a2511f0e36,sequence_derived
+f17d7f92-40aa-451f-a9d9-3588b490bd89,2025-11-05,United Kingdom,39be6563-a0ea-55e4-a4e9-00a2511f0e36,sequence_derived
+fb419fc3-b9e0-476a-ba28-ea5773358814,2025-03-20,United Kingdom,39be6563-a0ea-55e4-a4e9-00a2511f0e36,sequence_derived
+1a574171-7407-4baa-952e-9b3ebd390193,2026-01-05,United Kingdom,604b7f43-c4b0-5044-b185-2b6ba4e7d26b,sequence_derived
+b6530faa-2227-4b3b-9530-7e2b6b075c86,2025-01-29,United Kingdom,604b7f43-c4b0-5044-b185-2b6ba4e7d26b,sequence_derived

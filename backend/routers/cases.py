@@ -363,20 +363,62 @@ def _normalise_token(value: object) -> str:
 
 
 def _expected_genes_for_drug(drug: object) -> list[str]:
+    """Return the WHO TB Mutation Catalogue v2 expected resistance genes for a given drug.
+
+    Ordered from most-specific to least-specific substring so that e.g.
+    "rifabutin" is matched before the broader "rifamp" prefix.
+    Gene names are case-sensitive per standard TB nomenclature.
+    """
     drug_text = str(drug or "").lower()
+    # (substring_marker, [expected_genes])  — first match wins
     mapping = [
-        ("rifamp", ["rpoB"]),
-        ("rifabutin", ["rpoB"]),
-        ("isoniazid", ["katG", "inhA", "fabG1"]),
-        ("pyrazinamide", ["pncA"]),
-        ("ethambutol", ["embB"]),
-        ("fluoroquin", ["gyrA", "gyrB"]),
-        ("moxifloxacin", ["gyrA", "gyrB"]),
-        ("levofloxacin", ["gyrA", "gyrB"]),
-        ("amikacin", ["rrs", "eis"]),
-        ("kanamycin", ["rrs", "eis"]),
-        ("capreomycin", ["rrs", "eis"]),
-        ("streptomycin", ["rpsL", "rrs"]),
+        # ── Rifamycins ──────────────────────────────────────────────────────
+        ("rifabutin",        ["rpoB"]),
+        ("rifapentine",      ["rpoB"]),
+        ("rifamp",           ["rpoB"]),                          # rifampicin / rifampin
+        # ── Isoniazid ───────────────────────────────────────────────────────
+        ("isoniazid",        ["katG", "inhA", "fabG1", "ahpC", "kasA"]),
+        # ── Ethionamide / Prothionamide (share inhA/fabG1 with isoniazid) ──
+        ("prothionamide",    ["ethA", "ethR", "inhA", "fabG1", "mshA"]),
+        ("ethionamide",      ["ethA", "ethR", "inhA", "fabG1", "mshA"]),
+        # ── Pyrazinamide ────────────────────────────────────────────────────
+        ("pyrazinamide",     ["pncA", "rpsA", "panD"]),
+        # ── Ethambutol ──────────────────────────────────────────────────────
+        ("ethambutol",       ["embB", "embA", "embC", "embR", "iniB"]),
+        # ── Fluoroquinolones (individual agents before generic class) ───────
+        ("moxifloxacin",     ["gyrA", "gyrB"]),
+        ("levofloxacin",     ["gyrA", "gyrB"]),
+        ("ciprofloxacin",    ["gyrA", "gyrB"]),
+        ("ofloxacin",        ["gyrA", "gyrB"]),
+        ("gatifloxacin",     ["gyrA", "gyrB"]),
+        ("fluoroquinolone",  ["gyrA", "gyrB"]),                  # generic class
+        ("fluoroquin",       ["gyrA", "gyrB"]),                  # abbreviation
+        # ── Aminoglycosides / injectable second-line agents ─────────────────
+        ("amikacin",         ["rrs", "eis"]),
+        ("kanamycin",        ["rrs", "eis"]),
+        ("capreomycin",      ["rrs", "tlyA"]),
+        ("streptomycin",     ["rpsL", "rrs", "gid"]),
+        # ── Bedaquiline ─────────────────────────────────────────────────────
+        ("bedaquiline",      ["atpE", "Rv0678", "pepQ", "mmpL5", "mmpS5"]),
+        # ── Linezolid ───────────────────────────────────────────────────────
+        ("linezolid",        ["rrl", "rplC"]),
+        # ── Clofazimine ─────────────────────────────────────────────────────
+        ("clofazimine",      ["Rv0678", "pepQ", "mmpL5", "mmpS5"]),
+        # ── Delamanid ───────────────────────────────────────────────────────
+        ("delamanid",        ["ddn", "fgd1", "fbiA", "fbiB", "fbiC"]),
+        # ── Pretomanid ──────────────────────────────────────────────────────
+        ("pretomanid",       ["ddn", "fgd1", "fbiA", "fbiB", "fbiC", "Rv3547"]),
+        # ── Para-aminosalicylic acid (PAS) ───────────────────────────────────
+        ("aminosalicylic",   ["thyA", "folC", "thyX"]),
+        ("para-amino",       ["thyA", "folC", "thyX"]),
+        # ── Cycloserine / Terizidone ─────────────────────────────────────────
+        ("terizidone",       ["ald", "alr"]),
+        ("cycloserine",      ["ald", "alr"]),
+        # ── Carbapenems (used in BPaL regimens) ─────────────────────────────
+        ("imipenem",         ["blaC"]),
+        ("meropenem",        ["blaC"]),
+        # ── Clavam ──────────────────────────────────────────────────────────
+        ("clavulanate",      ["blaC"]),
     ]
     for marker, genes in mapping:
         if marker in drug_text:
@@ -698,6 +740,25 @@ def outbreak_report(db: Session = Depends(get_db)):
 
     os.makedirs("exports", exist_ok=True)
     report_path = os.path.join("exports", "outbreaker_investigation_report.pdf")
+
+    # Guard: if the PDF is already open (e.g. in a viewer), fail fast with a
+    # clear 409 rather than a cryptic PermissionError deep inside ReportLab.
+    if os.path.exists(report_path):
+        try:
+            with open(report_path, "a+b"):
+                pass
+        except PermissionError:
+            from fastapi.responses import JSONResponse
+            return JSONResponse(
+                status_code=409,
+                content={
+                    "detail": (
+                        "Cannot generate report: "
+                        f"'{os.path.basename(report_path)}' is open in another application. "
+                        "Close the PDF viewer and try again."
+                    )
+                },
+            )
 
     total_cases = db.execute(text("SELECT COUNT(*) FROM cases")).scalar() or 0
     clustered_cases = db.execute(text("SELECT COUNT(DISTINCT sample_id) FROM case_clusters")).scalar() or 0
@@ -1139,7 +1200,7 @@ def outbreak_report(db: Session = Depends(get_db)):
 
     def build_report_image(image_path: str):
         max_width = 6.4 * inch
-        max_height = 5.2 * inch
+        max_height = 4.4 * inch
         img_reader = ImageReader(image_path)
         original_width, original_height = img_reader.getSize()
 
@@ -1187,14 +1248,54 @@ def outbreak_report(db: Session = Depends(get_db)):
         except Exception:
             return None
 
+    _report_meta = {
+        "status": "DEVELOPMENT / INTERNAL DRAFT ONLY — DO NOT CIRCULATE EXTERNALLY",
+        "generated_at": datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
+    }
+
     def build_doc(output_file: str):
+        def _draw_page(canvas, doc):
+            canvas.saveState()
+            pw, ph = canvas._pagesize
+            lm, rm = doc.leftMargin, doc.rightMargin
+            # ── Header ──────────────────────────────────────────────────────────
+            canvas.setFont("Helvetica-Bold", 6.5)
+            canvas.setFillColor(colors.HexColor("#1d3557"))
+            canvas.drawString(lm, ph - 24, "NI TB Genomic Surveillance — Outbreak Investigation Report")
+            canvas.setFont("Helvetica", 6.5)
+            canvas.setFillColor(colors.HexColor("#457b9d"))
+            canvas.drawRightString(pw - rm, ph - 24, f"Generated: {_report_meta['generated_at']}  |  CONFIDENTIAL")
+            # Double-rule header separator: thick navy + thin steel
+            canvas.setStrokeColor(colors.HexColor("#1d3557"))
+            canvas.setLineWidth(1.2)
+            canvas.line(lm, ph - 28, pw - rm, ph - 28)
+            canvas.setStrokeColor(colors.HexColor("#a8c8e1"))
+            canvas.setLineWidth(0.4)
+            canvas.line(lm, ph - 30, pw - rm, ph - 30)
+            # ── Footer ──────────────────────────────────────────────────────────
+            canvas.setStrokeColor(colors.HexColor("#c5d5e4"))
+            canvas.setLineWidth(0.4)
+            canvas.line(lm, 28, pw - rm, 28)
+            if doc.page == 1:
+                canvas.setFillColor(colors.HexColor("#e63946"))
+                canvas.setFont("Helvetica-Bold", 6.5)
+                canvas.drawCentredString(pw / 2, 16, _report_meta["status"])
+            else:
+                canvas.setFillColor(colors.HexColor("#8a9aaa"))
+                canvas.setFont("Helvetica", 5.8)
+                canvas.drawCentredString(pw / 2, 14, _report_meta["status"])
+            canvas.setFont("Helvetica", 6.5)
+            canvas.setFillColor(colors.HexColor("#457b9d"))
+            canvas.drawRightString(pw - rm, 16, f"Page {doc.page}")
+            canvas.restoreState()
+
         doc_obj = BaseDocTemplate(
             output_file,
             pagesize=A4,
-            rightMargin=36,
-            leftMargin=36,
-            topMargin=36,
-            bottomMargin=36,
+            rightMargin=32,
+            leftMargin=32,
+            topMargin=48,
+            bottomMargin=40,
         )
         portrait_frame = Frame(
             doc_obj.leftMargin,
@@ -1212,38 +1313,85 @@ def outbreak_report(db: Session = Depends(get_db)):
             id="landscape_frame",
         )
         doc_obj.addPageTemplates([
-            PageTemplate(id="Portrait", frames=[portrait_frame], pagesize=A4),
-            PageTemplate(id="Landscape", frames=[landscape_frame], pagesize=landscape(A4)),
+            PageTemplate(id="Portrait", frames=[portrait_frame], pagesize=A4, onPage=_draw_page),
+            PageTemplate(id="Landscape", frames=[landscape_frame], pagesize=landscape(A4), onPage=_draw_page),
         ])
         return doc_obj
 
     doc = build_doc(report_path)
     styles = getSampleStyleSheet()
-    # Keep all section headings on the same page as the element that follows them
-    styles["Heading3"].keepWithNext = 1
 
-    # ── Custom styles ──────────────────────────────────────────────────────────
+    # ── Brand palette (single source of truth) ────────────────────────────────
+    # Navy / primary
+    C_NAVY       = colors.HexColor("#1d3557")   # deep navy — headings, header bg
+    C_STEEL      = colors.HexColor("#457b9d")   # mid-steel — sub-headings, borders
+    C_SKY        = colors.HexColor("#a8c8e1")   # pale sky — table zebra, light accents
+    C_CLOUD      = colors.HexColor("#eef4f9")   # near-white blue — very light fills
+    # Accent / alert
+    C_TEAL       = colors.HexColor("#2a9d8f")   # teal — callout borders
+    C_TEAL_BG    = colors.HexColor("#e8f6f4")   # teal tint — callout background
+    C_ALERT      = colors.HexColor("#e63946")   # action-red — urgent flags
+    C_ALERT_BG   = colors.HexColor("#fde8e8")   # red tint — urgent row highlights
+    # Neutral
+    C_INK        = colors.HexColor("#1c2b3a")   # near-black — body text
+    C_MUTED      = colors.HexColor("#5a7080")   # medium grey — captions, secondary
+    C_RULE       = colors.HexColor("#c5d5e4")   # light rule — table grid lines
+    C_WHITE      = colors.white
+
+    # ── Heading overrides ─────────────────────────────────────────────────────
     from reportlab.lib.styles import ParagraphStyle
     from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_JUSTIFY
 
+    styles["Title"].fontSize = 22
+    styles["Title"].textColor = C_NAVY
+    styles["Title"].fontName  = "Helvetica-Bold"
+    styles["Title"].leading   = 26
+    styles["Title"].spaceAfter = 4
+
+    styles["Heading2"].fontSize    = 13
+    styles["Heading2"].textColor   = C_NAVY
+    styles["Heading2"].fontName    = "Helvetica-Bold"
+    styles["Heading2"].leading     = 16
+    styles["Heading2"].spaceBefore = 10
+    styles["Heading2"].spaceAfter  = 4
+    styles["Heading2"].keepWithNext = 1
+
+    styles["Heading3"].fontSize    = 10.5
+    styles["Heading3"].textColor   = C_STEEL
+    styles["Heading3"].fontName    = "Helvetica-Bold"
+    styles["Heading3"].leading     = 14
+    styles["Heading3"].spaceBefore = 8
+    styles["Heading3"].spaceAfter  = 3
+    styles["Heading3"].keepWithNext = 1
+
+    styles["Heading4"].fontSize    = 9
+    styles["Heading4"].textColor   = C_MUTED
+    styles["Heading4"].fontName    = "Helvetica-Oblique"
+    styles["Heading4"].leading     = 12
+    styles["Heading4"].spaceBefore = 5
+    styles["Heading4"].spaceAfter  = 2
+    styles["Heading4"].keepWithNext = 1
+
+    # ── Custom paragraph styles ───────────────────────────────────────────────
     caption_style = ParagraphStyle(
         "Caption",
         parent=styles["Normal"],
-        fontSize=8,
-        textColor=colors.HexColor("#4a6a7a"),
-        leading=11,
-        spaceAfter=4,
+        fontSize=7.2,
+        textColor=C_MUTED,
+        leading=10,
+        spaceAfter=3,
+        spaceBefore=1,
         italic=True,
     )
     callout_style = ParagraphStyle(
         "Callout",
         parent=styles["Normal"],
-        fontSize=9,
-        textColor=colors.HexColor("#184e44"),
-        backColor=colors.HexColor("#eef8f6"),
-        borderColor=colors.HexColor("#7ec9b8"),
-        borderWidth=0.8,
-        borderPadding=(5, 7, 5, 7),
+        fontSize=8.8,
+        textColor=colors.HexColor("#0f3d35"),
+        backColor=C_TEAL_BG,
+        borderColor=C_TEAL,
+        borderWidth=1.0,
+        borderPadding=(5, 8, 5, 8),
         leading=13,
         spaceAfter=6,
     )
@@ -1251,7 +1399,7 @@ def outbreak_report(db: Session = Depends(get_db)):
         "Interp",
         parent=styles["Normal"],
         fontSize=8.5,
-        textColor=colors.HexColor("#2d3a4a"),
+        textColor=C_INK,
         leading=12,
         spaceAfter=4,
         alignment=TA_JUSTIFY,
@@ -1259,8 +1407,8 @@ def outbreak_report(db: Session = Depends(get_db)):
     small_style = ParagraphStyle(
         "Small",
         parent=styles["Normal"],
-        fontSize=7.5,
-        textColor=colors.HexColor("#5a7a8a"),
+        fontSize=7.4,
+        textColor=C_MUTED,
         leading=10,
         spaceAfter=3,
     )
@@ -1268,19 +1416,19 @@ def outbreak_report(db: Session = Depends(get_db)):
         "SectionNote",
         parent=styles["Normal"],
         fontSize=8,
-        textColor=colors.HexColor("#1a4060"),
-        backColor=colors.HexColor("#e8f0fb"),
-        borderColor=colors.HexColor("#8aaad8"),
+        textColor=C_NAVY,
+        backColor=C_CLOUD,
+        borderColor=C_STEEL,
         borderWidth=0.8,
-        borderPadding=(4, 6, 4, 6),
+        borderPadding=(4, 7, 4, 7),
         leading=12,
-        spaceAfter=6,
+        spaceAfter=5,
     )
     cell_hdr_style = ParagraphStyle(
         "CellHdr",
         parent=styles["Normal"],
-        fontSize=8,
-        textColor=colors.white,
+        fontSize=7.8,
+        textColor=C_WHITE,
         fontName="Helvetica-Bold",
         leading=11,
         wordWrap="LTR",
@@ -1291,8 +1439,8 @@ def outbreak_report(db: Session = Depends(get_db)):
     cell_body_style = ParagraphStyle(
         "CellBody",
         parent=styles["Normal"],
-        fontSize=7.5,
-        textColor=colors.HexColor("#2d3a4a"),
+        fontSize=7.4,
+        textColor=C_INK,
         leading=10,
         wordWrap="LTR",
         splitLongWords=False,
@@ -1302,9 +1450,9 @@ def outbreak_report(db: Session = Depends(get_db)):
     cell_bold_style = ParagraphStyle(
         "CellBold",
         parent=styles["Normal"],
-        fontSize=7.5,
+        fontSize=7.4,
         fontName="Helvetica-Bold",
-        textColor=colors.HexColor("#2d3a4a"),
+        textColor=C_INK,
         leading=10,
         spaceAfter=0,
     )
@@ -1314,7 +1462,13 @@ def outbreak_report(db: Session = Depends(get_db)):
 
     def append_numbered_caption(caption_text: str, *, style=caption_style) -> None:
         table_counter["value"] += 1
-        story.append(Paragraph(_format_table_caption(caption_text, table_counter["value"]), style))
+        caption_para = Paragraph(_format_table_caption(caption_text, table_counter["value"]), style)
+        # Keep caption on the same page as the preceding table/content
+        if story and not isinstance(story[-1], Spacer):
+            last = story.pop()
+            story.append(KeepTogether([last, caption_para]))
+        else:
+            story.append(caption_para)
 
     def append_table_with_caption(
         table: Table,
@@ -1340,6 +1494,20 @@ def outbreak_report(db: Session = Depends(get_db)):
         if spacer_after > 0:
             story.append(Spacer(1, spacer_after * inch))
 
+    def append_appendix_caption(label_text: str) -> None:
+        """Fixed-label caption for appendix tables — no sequential number prefix."""
+        story.append(Paragraph(label_text, caption_style))
+
+    pair_id_style = ParagraphStyle(
+        "PairId",
+        parent=styles["Normal"],
+        fontName="Courier",
+        fontSize=6.5,
+        leading=9,
+        textColor=colors.HexColor("#2d3a4a"),
+        spaceAfter=0,
+    )
+
     def wrap_cell(value: object, style=cell_body_style):
         return Paragraph(str(value), style)
 
@@ -1353,32 +1521,66 @@ def outbreak_report(db: Session = Depends(get_db)):
             ])
         return wrapped_rows
 
-    TABLE_HEADER_BG = colors.HexColor("#2a5080")
-    TABLE_HEADER_TEXT = colors.white
-    TABLE_BORDER = colors.HexColor("#8aaad8")
-    TABLE_GRID = colors.HexColor("#c8d8ec")
+    TABLE_HEADER_BG   = C_NAVY
+    TABLE_HEADER_TEXT = C_WHITE
+    TABLE_BORDER      = C_STEEL
+    TABLE_GRID        = C_RULE
+    TABLE_ZEBRA       = C_CLOUD   # alternating row fill
 
-    def standard_table_style(font_size: float, header: bool = True, valign_top: bool = False):
+    def standard_table_style(font_size: float, header: bool = True, valign_top: bool = False, zebra: bool = True):
         commands = [
-            ("BOX", (0, 0), (-1, -1), 0.5, TABLE_BORDER),
-            ("INNERGRID", (0, 0), (-1, -1), 0.25, TABLE_GRID),
-            ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
-            ("FONTSIZE", (0, 0), (-1, -1), font_size),
+            ("BOX",       (0, 0), (-1, -1), 0.6, TABLE_BORDER),
+            ("INNERGRID", (0, 0), (-1, -1), 0.2, TABLE_GRID),
+            ("FONTNAME",  (0, 0), (-1, -1), "Helvetica"),
+            ("FONTSIZE",  (0, 0), (-1, -1), font_size),
+            ("TOPPADDING",    (0, 0), (-1, -1), 3),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+            ("LEFTPADDING",   (0, 0), (-1, -1), 4),
+            ("RIGHTPADDING",  (0, 0), (-1, -1), 4),
         ]
         if header:
             commands.extend([
                 ("BACKGROUND", (0, 0), (-1, 0), TABLE_HEADER_BG),
-                ("TEXTCOLOR", (0, 0), (-1, 0), TABLE_HEADER_TEXT),
-                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("TEXTCOLOR",  (0, 0), (-1, 0), TABLE_HEADER_TEXT),
+                ("FONTNAME",   (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("TOPPADDING",    (0, 0), (-1, 0), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, 0), 4),
+                # Accent rule below header row
+                ("LINEBELOW",  (0, 0), (-1, 0), 1.2, C_STEEL),
             ])
+        if zebra:
+            # Stripe every even data row (rows 2, 4, 6, …; row 0 = header)
+            commands.append(("ROWBACKGROUNDS", (0, 1 if header else 0), (-1, -1), [C_WHITE, TABLE_ZEBRA]))
         if valign_top:
             commands.append(("VALIGN", (0, 0), (-1, -1), "TOP"))
         return TableStyle(commands)
 
+    def section_divider(label: str | None = None) -> None:
+        """Append a visually separated section break — a navy rule with optional bold label."""
+        from reportlab.platypus import HRFlowable
+        story.append(Spacer(1, 0.08 * inch))
+        story.append(HRFlowable(width="100%", thickness=1.2, color=C_NAVY, spaceAfter=0, spaceBefore=0))
+        if label:
+            story.append(Paragraph(
+                f"<b>{label}</b>",
+                ParagraphStyle(
+                    "_DividerLabel",
+                    parent=styles["Normal"],
+                    fontSize=9.5,
+                    textColor=C_NAVY,
+                    fontName="Helvetica-Bold",
+                    spaceBefore=3,
+                    spaceAfter=2,
+                    leading=13,
+                ),
+            ))
+        else:
+            story.append(Spacer(1, 0.04 * inch))
+
     story.append(Paragraph("NI TB Genomic Surveillance", styles["Title"]))
 
 
-    def fit_col_widths(widths, fill=True, page_width=7.25 * inch):
+    def fit_col_widths(widths, fill=True, page_width=7.375 * inch):
         total = sum(widths)
         if fill and total > 0:
             factor = page_width / total
@@ -1436,19 +1638,8 @@ def outbreak_report(db: Session = Depends(get_db)):
         colWidths=[1.45 * inch, 1.95 * inch, 0.9 * inch, 2.3 * inch],
         repeatRows=1,
     )
-    executive_table.setStyle(
-        TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2a5080")),
-                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-                ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#7f9dbd")),
-                ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#c8d8ec")),
-                ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-                ("FONTSIZE", (0, 0), (-1, -1), 7.6),
-            ]
-        )
-    )
+    _exec_style = standard_table_style(font_size=7.6, header=True, valign_top=True, zebra=True)
+    executive_table.setStyle(_exec_style)
     if missing_required_repro_fields:
         story.append(Paragraph(
             "<b>REPORT STATUS: DEVELOPMENT / INTERNAL DRAFT ONLY</b> - Required reproducibility metadata is incomplete; external circulation is blocked until mandatory fields are populated.",
@@ -1461,57 +1652,110 @@ def outbreak_report(db: Session = Depends(get_db)):
     ))
     story.append(executive_table)
 
+    _top_action_reasons = (
+        f"1 \u2014 QC: {qc_status_counts['fail']} low-coverage fails, "
+        f"{qc_status_counts['not_reported']} QC not-reported, "
+        f"{qc_status_counts['contamination']} contamination flags.  "
+        "2 \u2014 Resistance: Gene-drug combinations are preliminary; verify against WHO catalogue.  "
+        "3 \u2014 DST: MDR/RR genomic signals require culture-based confirmation before clinical action.  "
+        f"4 \u2014 Clusters: {int(open_clusters or 0)} clusters remain open for epidemiological investigation.  "
+        "5 \u2014 Model links: No pairwise SNP \u226412 direct-transmission support in this extract."
+    )
     top_actions_due_rows = [
-        ["Priority", "Action", "Owner", "Due", "Reason"],
-        [
-            "1",
-            "Repeat sequencing/QC review",
-            "Laboratory",
-            "48h",
-            f"{qc_status_counts['fail']} low-coverage fails, {qc_status_counts['not_reported']} QC not-reported, {qc_status_counts['contamination']} contamination flags",
-        ],
-        [
-            "2",
-            "Validate drug-resistance pipeline mapping",
-            "Bioinformatics / microbiology",
-            "Immediate",
-            "Gene-drug combinations are preliminary and require manual verification",
-        ],
-        [
-            "3",
-            "Confirm phenotypic DST",
-            "TB microbiology / MDT",
-            "Immediate",
-            "MDR/RR genomic signals require culture-based confirmation",
-        ],
-        [
-            "4",
-            "Review open genomic clusters",
-            "TB MDT / PHA",
-            "Next MDT",
-            f"{int(open_clusters or 0)} clusters remain open",
-        ],
-        [
-            "5",
-            "Do not escalate model-only links",
-            "HPT / TB nurses",
-            "Ongoing",
-            "No pairwise SNP ≤12 direct-transmission support shown in this extract",
-        ],
+        ["Priority", "Action", "Owner", "Due"],
+        ["1", "Repeat sequencing / QC review", "Laboratory", "48 h"],
+        ["2", "Validate drug-resistance pipeline mapping", "Bioinformatics / Microbiology", "Immediate"],
+        ["3", "Confirm phenotypic DST", "TB Microbiology / MDT", "Immediate"],
+        ["4", "Review open genomic clusters", "TB MDT / PHA", "Next MDT"],
+        ["5", "Do not escalate model-only links to field", "HPT / TB Nurses", "Ongoing"],
     ]
     top_actions_table = Table(
         wrap_rows(top_actions_due_rows),
-        colWidths=fit_col_widths([0.7 * inch, 2.2 * inch, 1.4 * inch, 0.8 * inch, 2.7 * inch], fill=True),
+        colWidths=fit_col_widths([0.62 * inch, 2.9 * inch, 2.0 * inch, 0.9 * inch], fill=True),
         repeatRows=1,
     )
-    top_actions_table.setStyle(standard_table_style(font_size=7.2, header=True, valign_top=True))
+    top_actions_table.setStyle(standard_table_style(font_size=7.5, header=True, valign_top=True))
     story.append(Spacer(1, 0.08 * inch))
     story.append(Paragraph("Top Actions Due Now", styles["Heading3"]))
     append_table_with_caption(
         top_actions_table,
         "Operational worklist for immediate MDT actioning.",
-        spacer_after=0.0,
+        spacer_after=0.05,
     )
+    story.append(Paragraph(f"<b>Reasons:</b> {_top_action_reasons}", small_style))
+    story.append(PageBreak())
+
+    # ── MDT Governance Summary (page 2) ───────────────────────────────────────
+    story.append(Paragraph("MDT Governance Summary", styles["Heading3"]))
+    _early_hpc = sum(
+        1
+        for row in cluster_action_rows
+        if str(row.get("investigation_status") or "").lower() == "open" and int(row.get("priority_score") or 0) > 10
+    ) if cluster_action_rows else 0
+    _early_mdt_rows = [
+        ["Priority area", "Current signal", "Required MDT action", "Owner", "When"],
+        ["Circulation readiness", circulation_label, "Complete mandatory reproducibility metadata before external circulation", "Pipeline + Governance", "Before circulation"],
+        ["Model reliability", model_reliability, "Treat directionality as exploratory; diagnostics unavailable", "Bioinformatics + MDT", "Current cycle"],
+        ["Open clusters", f"{int(open_clusters or 0)} total / {_early_hpc} priority >10", "MDT review and epi data completion for all open clusters", "MDT + Field team", "Next MDT"],
+        ["Discordant model links", "see Appendix B", "Pairwise SNP + epi adjudication pathway", "MDT", "Next MDT"],
+        ["Geography completeness", "UK-only extract", "Re-ingest with HSC Trust / PHA locality / council area", "Data management", "Next ingest"],
+    ]
+    _early_mdt_table = Table(
+        wrap_rows(_early_mdt_rows),
+        colWidths=fit_col_widths([1.5 * inch, 1.2 * inch, 2.85 * inch, 1.0 * inch, 0.9 * inch], fill=True),
+        repeatRows=1,
+    )
+    _early_mdt_table.setStyle(standard_table_style(font_size=7.4, header=True, valign_top=True))
+    story.append(_early_mdt_table)
+    story.append(Paragraph(
+        "Full MDT action sheet with final discordant-pair counts is in <b>Appendix C</b>.",
+        small_style,
+    ))
+    story.append(Spacer(1, 0.2 * inch))
+
+    # ── Table of Contents ─────────────────────────────────────────────────────
+    story.append(Paragraph("Contents", styles["Heading3"]))
+    _toc_rows = [
+        ["Section", "Content", "Page"],
+        ["Executive Action Summary", "Circulation status, QC, resistance, cluster, model risk summary", "1"],
+        ["Top Actions Due Now", "Immediate operational worklist", "1"],
+        ["MDT Governance Summary", "This page — condensed action sheet", "2"],
+        ["About This Report / Analysis Summary", "Programme context, KPIs, sequencing summary", "3"],
+        ["Case-Level Operational Actions", "Per-case cluster assignment and action table", "~6"],
+        ["Model-Prioritised Transmission Hypotheses", "outbreaker2 posterior-probability pair tables", "~7"],
+        ["Pairwise SNP Distance Summary", "SNP distance bands for all model-prioritised pairs", "~8"],
+        ["Current Outbreak Interpretation", "Narrative interpretation and discordance review", "~8"],
+        ["QC Failure Drill-Down", "Per-sample QC detail and low-coverage cases", "~9"],
+        ["Run-Level QC Summary", "Sequencing run quality by report date — unavailable pending run IDs", "~9"],
+        ["Drug-Resistance Mutation Details", "Gene-drug reference and resistance mutation evidence", "~10"],
+        ["Phenotypic DST Reconciliation", "Genomic vs phenotypic DST comparison — pending lab data", "~10"],
+        ["Cluster Epidemiology Summary", "Genomic summary + operational tracker for all clusters", "~11"],
+        ["Cluster Growth Status", "Cases per cluster by 30/60/90-day windows and trend", "~12"],
+        ["Epi-Link Evidence Summary", "Epi corroboration rate for all model-prioritised pairs", "~12"],
+        ["Contact-Tracing Yield", "Yield table — pending field data integration", "~12"],
+        ["Geographical Cluster Spread", "Regional spread and risk flags per cluster", "~13"],
+        ["Missing-Data Dashboard", "Completeness and inference impact for key data fields", "~13"],
+        ["Cluster Closure Criteria", "Minimum criteria required to formally close a cluster", "~13"],
+        ["Cluster Prioritisation / Model Diagnostics / Figures", "Priority table, MCMC diagnostics, network graphics", "~14-16"],
+        ["Data Provenance and Reproducibility", "Software versions, run metadata, SHA-256 input hashes", "~17"],
+        ["Appendix A", "Case classification (A1a) and case actions (A1b)", "~18+"],
+        ["Appendix B", "Full discordance review (coded table)", "~21+"],
+        ["Appendix C", "One-page MDT action sheet (governance circulation version)", "~23+"],
+        ["Appendix D", "TB Genomics Key Concepts reference", "~24+"],
+    ]
+    _toc_table = Table(
+        wrap_rows(_toc_rows),
+        colWidths=fit_col_widths([2.2 * inch, 4.55 * inch, 0.55 * inch], fill=True),
+        repeatRows=1,
+    )
+    _toc_table.setStyle(standard_table_style(font_size=7.4, header=True, valign_top=False))
+    story.append(_toc_table)
+    story.append(Spacer(1, 0.05 * inch))
+    story.append(Paragraph(
+        "Appendices A\u2013D are in landscape format after the main report. "
+        "Flag codes used in pair tables: SNP-linked = SNP \u226412 supported; D1: SNP>12 = genomically discordant; Model-only = no pairwise SNP; QC-unresolved = QC failed/not reported.",
+        small_style,
+    ))
     story.append(PageBreak())
 
     # ── About This Report ──────────────────────────────────────────────────────
@@ -1526,9 +1770,14 @@ def outbreak_report(db: Session = Depends(get_db)):
     ))
     story.append(Spacer(1, 0.1 * inch))
 
-    # ── TB Genomics Background ─────────────────────────────────────────────────
-    story.append(Paragraph("TB Genomics — Key Concepts", styles["Heading3"]))
-    bg_rows = [
+    # ── TB Genomics Background — stored for Appendix D ─────────────────────────
+    story.append(Paragraph(
+        "<b>Genomic terminology:</b> For definitions of WGS, SNP, cluster, outbreaker2, MCMC convergence, and other terms "
+        "used in this report, see <b>Appendix D: TB Genomics Key Concepts</b> at the end of this document.",
+        small_style,
+    ))
+    story.append(Spacer(1, 0.12 * inch))
+    _key_concepts_rows = [
         [Paragraph("Concept", cell_hdr_style), Paragraph("Explanation", cell_hdr_style)],
         [Paragraph("Whole-Genome Sequencing (WGS)", cell_bold_style),
          Paragraph("Reads the complete ~4.4 Mb genome of M. tuberculosis. More informative than conventional typing (MIRU, spoligotyping).", cell_body_style)],
@@ -1559,14 +1808,6 @@ def outbreak_report(db: Session = Depends(get_db)):
          Paragraph("A directed graph where arrows indicate the most probable direction of transmission. Model-prioritised links "
                    "(posterior probability >0.70) are hypotheses and should be validated against pairwise SNP, QC status, and epidemiology.", cell_body_style)],
     ]
-    bg_table = Table(bg_rows, colWidths=fit_col_widths([1.8 * inch, 5.0 * inch], fill=True))
-    bg_table.setStyle(standard_table_style(font_size=7.9, header=True, valign_top=True))
-    append_table_with_caption(
-        bg_table,
-        "Table 1. TB genomics reference — key terms used throughout this report.",
-        spacer_after=0.2,
-        keep_together=False,
-    )
 
     story.append(Paragraph("Case Summary", styles["Heading3"]))
     summary_table_data = [
@@ -1622,7 +1863,7 @@ def outbreak_report(db: Session = Depends(get_db)):
     else:
         story.append(Paragraph("No elevated operational risk flags detected in current report window.", styles["Normal"]))
 
-    story.append(Spacer(1, 0.2 * inch))
+    section_divider()
 
     story.append(Paragraph("Analysis Summary", styles["Heading3"]))
     if summary_data:
@@ -1689,7 +1930,7 @@ def outbreak_report(db: Session = Depends(get_db)):
         section_note_style,
     ))
 
-    story.append(Spacer(1, 0.2 * inch))
+    section_divider()
     story.append(Paragraph("Programme Surveillance KPIs (Last 12 Weeks)", styles["Heading3"]))
     if kpi_data:
         kpi_table_data = [
@@ -1750,7 +1991,7 @@ def outbreak_report(db: Session = Depends(get_db)):
         "clusters in under-sequenced regions may be underdetected. Where persistent regional gaps exist, "
         "review laboratory submission pathways and specimen transport processes."
     )
-    story.append(Spacer(1, 0.2 * inch))
+    section_divider()
     story.append(Paragraph("Weekly Surveillance Trends (12 Weeks)", styles["Heading3"]))
     if weekly_trends:
         trend_rows = [["Week", "Eligible", "Sequenced", "Coverage %", "QC Pass %"]]
@@ -1767,20 +2008,27 @@ def outbreak_report(db: Session = Depends(get_db)):
         trend_table = Table(wrap_rows(trend_rows), colWidths=[1.35 * inch, 1.0 * inch, 1.0 * inch, 1.0 * inch, 1.0 * inch])
         trend_table.setStyle(standard_table_style(font_size=7.8, header=True))
         story.append(trend_table)
+        append_numbered_caption(
+            "Weekly sequencing coverage and QC pass rates over the last 12 weeks. "
+            "A declining trend may indicate emerging laboratory issues. "
+            "Weeks with zero eligible cases may reflect reporting lags rather than true absence of TB."
+        )
 
         trend_chart_path = build_trend_chart()
         if trend_chart_path and os.path.exists(trend_chart_path):
             story.append(Spacer(1, 0.12 * inch))
-            story.append(build_report_image(trend_chart_path))
+            chart_img = build_report_image(trend_chart_path)
+            fig1_cap = Paragraph(
+                "Figure 1. 12-week surveillance trend — sequencing coverage (%) and QC pass rate (%) by "
+                "calendar week. Coverage is the proportion of eligible culture-confirmed TB cases that received WGS. "
+                "Declining coverage weeks may reflect specimen submission delays, laboratory capacity issues, "
+                "or data processing backlogs. QC pass rate below 90% in consecutive weeks warrants a laboratory review.",
+                caption_style,
+            )
+            story.append(KeepTogether([chart_img, fig1_cap]))
     else:
         story.append(Paragraph("Weekly trends unavailable.", styles["Normal"]))
-
-    append_numbered_caption(
-        "Table 6. Weekly sequencing coverage and QC pass rates over the last 12 weeks. "
-        "Figure 1 (below) plots coverage and QC trends — a declining trend may indicate emerging laboratory issues. "
-        "Weeks with zero eligible cases may reflect reporting lags rather than true absence of TB."
-    )
-    story.append(Spacer(1, 0.2 * inch))
+    section_divider()
     story.append(Paragraph("Cluster Action Prioritization", styles["Heading3"]))
     if cluster_action_rows:
         action_rows = [["Cluster", "Cases", "Regions", "Most Recent", "Status", "Priority"]]
@@ -1813,8 +2061,7 @@ def outbreak_report(db: Session = Depends(get_db)):
     else:
         story.append(Paragraph("No cluster action data available.", styles["Normal"]))
 
-    story.append(Spacer(1, 0.2 * inch))
-    story.append(Paragraph("Lineage and Drug Resistance Validation", styles["Heading3"]))
+    story.append(Spacer(1, 0.15 * inch))
     if lineage_dr_data:
         analysis_summary = _lineage_analysis_summary(db)
         analysis_epi_summary = _lineage_epi_summary(db)
@@ -1837,13 +2084,22 @@ def outbreak_report(db: Session = Depends(get_db)):
         ]
         lineage_table = Table(wrap_rows(lineage_rows, header_style=cell_body_style, body_style=cell_body_style), colWidths=[2.8 * inch, 3.0 * inch])
         lineage_table.setStyle(standard_table_style(font_size=8.8, header=False))
-        append_table_with_caption(
-            lineage_table,
-            "Table 8. Lineage and drug-resistance epidemiology summary. "
-            "Rows prioritize actionable burden indicators (coverage, resistance signal counts, and suspected RR/MDR/FQ resistance) "
-            "to support triage and follow-up planning.",
-            spacer_after=0.0,
+        lineage_caption_para = Paragraph(
+            _format_table_caption(
+                "Lineage and drug-resistance epidemiology summary. "
+                "Rows prioritize actionable burden indicators (coverage, resistance signal counts, and suspected RR/MDR/FQ resistance) "
+                "to support triage and follow-up planning.",
+                table_counter["value"] + 1,
+            ),
+            caption_style,
         )
+        table_counter["value"] += 1
+        story.append(KeepTogether([
+            Paragraph("Lineage and Drug Resistance Validation", styles["Heading3"]),
+            lineage_table,
+            lineage_caption_para,
+        ]))
+        story.append(Spacer(1, 0.05 * inch))
         top_lineages = analysis_epi_summary.get("top_lineages") or []
         if top_lineages:
             top_text = ", ".join([f"{x.get('lineage')}: {x.get('count')}" for x in top_lineages[:4]])
@@ -1851,7 +2107,7 @@ def outbreak_report(db: Session = Depends(get_db)):
     else:
         story.append(Paragraph("No lineage/DR validation artifact found.", styles["Normal"]))
 
-    story.append(Spacer(1, 0.2 * inch))
+    section_divider()
     story.append(Paragraph("Secondary Transmission Engines", styles["Heading3"]))
     story.append(Paragraph(
         "<b>QC Filtering Status:</b> The outbreaker2 network displayed below includes samples with reported QC status at run time. "
@@ -1891,8 +2147,7 @@ def outbreak_report(db: Session = Depends(get_db)):
     else:
         story.append(Paragraph("No secondary engine validation artifact found.", styles["Normal"]))
 
-    story.append(Spacer(1, 0.2 * inch))
-    story.append(Paragraph("Cross-Method Clustering Comparison", styles["Heading3"]))
+    story.append(Spacer(1, 0.15 * inch))
     if method_comparison_data:
         coverage = method_comparison_data.get("coverage") or {}
         agreement = method_comparison_data.get("agreement") or {}
@@ -1906,18 +2161,26 @@ def outbreak_report(db: Session = Depends(get_db)):
         ]
         comp_table = Table(wrap_rows(comp_rows, header_style=cell_body_style, body_style=cell_body_style), colWidths=[2.8 * inch, 3.0 * inch])
         comp_table.setStyle(standard_table_style(font_size=8.8, header=False))
-        append_table_with_caption(comp_table, spacer_after=0.0)
+        table_counter["value"] += 1
+        story.append(KeepTogether([
+            Paragraph("Cross-Method Clustering Comparison", styles["Heading3"]),
+            comp_table,
+            Paragraph(
+                _format_table_caption(
+                    "Agreement between SNP-threshold sequence clustering and outbreaker2 probabilistic clustering. "
+                    "<b>Precision</b>: of pairs grouped together by outbreaker2, the fraction also grouped by sequence clusters. "
+                    "<b>Recall</b>: of pairs grouped by sequence clusters, the fraction also grouped by outbreaker2. "
+                    "<b>Jaccard</b>: overall overlap index (0=no agreement, 1=perfect agreement). "
+                    "Discordant pairs — grouped by one method but not the other — may represent cases where temporal data "
+                    "(outbreaker2) overrides genomic distance alone, or where the SNP threshold is set differently.",
+                    table_counter["value"],
+                ),
+                caption_style,
+            ),
+        ]))
     else:
+        story.append(Paragraph("Cross-Method Clustering Comparison", styles["Heading3"]))
         story.append(Paragraph("No cluster method comparison artifact found.", styles["Normal"]))
-
-    append_numbered_caption(
-        "Table 10. Agreement between SNP-threshold sequence clustering and outbreaker2 probabilistic clustering. "
-        "<b>Precision</b>: of pairs grouped together by outbreaker2, the fraction also grouped by sequence clusters. "
-        "<b>Recall</b>: of pairs grouped by sequence clusters, the fraction also grouped by outbreaker2. "
-        "<b>Jaccard</b>: overall overlap index (0=no agreement, 1=perfect agreement). "
-        "Discordant pairs — grouped by one method but not the other — may represent cases where temporal data "
-        "(outbreaker2) overrides genomic distance alone, or where the SNP threshold is set differently."
-    )
 
     if sequence_summary_data:
         story.append(Spacer(1, 0.1 * inch))
@@ -1931,9 +2194,11 @@ def outbreak_report(db: Session = Depends(get_db)):
             seq_table.setStyle(standard_table_style(font_size=8.8, header=False))
             append_table_with_caption(seq_table, spacer_after=0.0)
 
-    story.append(PageBreak())
+    story.append(Spacer(1, 0.12 * inch))
     story.append(Paragraph("Case-Level Operational Actions", styles["Heading3"]))
     case_table_for_appendix = None
+    case_classif_table_for_appendix = None
+    case_actions_b_table_for_appendix = None
     discordance_table_for_appendix = None
     if case_rows:
         case_action_csv_rows = [[
@@ -1948,15 +2213,18 @@ def outbreak_report(db: Session = Depends(get_db)):
             "Warning",
             "Recommended action",
         ]]
-        case_action_rows = [[
+        case_classif_rows = [[
             wrap_cell("Case", cell_hdr_style),
             wrap_cell("Cluster", cell_hdr_style),
             wrap_cell("Pairwise SNP?", cell_hdr_style),
             wrap_cell("NN SNP", cell_hdr_style),
-            wrap_cell("Likely link", cell_hdr_style),
             wrap_cell("Posterior", cell_hdr_style),
             wrap_cell("Tier", cell_hdr_style),
             wrap_cell("QC", cell_hdr_style),
+        ]]
+        case_actions_b_rows = [[
+            wrap_cell("Case", cell_hdr_style),
+            wrap_cell("Likely link", cell_hdr_style),
             wrap_cell("Warning", cell_hdr_style),
             wrap_cell("Recommended action", cell_hdr_style),
         ]]
@@ -1999,27 +2267,38 @@ def outbreak_report(db: Session = Depends(get_db)):
             )
 
             if qc_problem:
-                warning = "Pairwise SNP required before transmission interpretation."
-                action = "Repeat/verify sequence before action"
+                warning_long = "Pairwise SNP required before transmission interpretation."
+                action_long = "Repeat/verify sequence before action."
+                warning = "SNP-missing/QC"
+                action = "Repeat/QC"
             elif link_pairwise is None:
-                warning = "Outbreaker-only link: requires genomic validation."
-                action = "Model-prioritised exposure review — confirm with pairwise SNP and epidemiology before action."
+                warning_long = "Outbreaker-only link: requires genomic validation."
+                action_long = "Model-prioritised exposure review — confirm with pairwise SNP and epidemiology before action."
+                warning = "Model-only"
+                action = "Validate SNP+epi"
             elif link_pairwise <= 12:
-                warning = "Pairwise SNP supports cluster linkage, but epidemiology must still corroborate the direction."
-                action = "Model-prioritised exposure review — confirm with pairwise SNP and epidemiology before action."
+                warning_long = "Pairwise SNP supports cluster linkage, but epidemiology must still corroborate the direction."
+                action_long = "Confirm with pairwise SNP and epidemiology before operational action."
+                warning = "SNP-linked"
+                action = "Validate SNP+epi"
             else:
-                warning = "Pairwise SNP distance is too high for direct transmission interpretation."
-                action = "Model-prioritised exposure review — confirm with pairwise SNP and epidemiology before action."
+                warning_long = "Pairwise SNP distance is too high for direct transmission interpretation."
+                action_long = "Model-prioritised exposure review — confirm with pairwise SNP and epidemiology before action."
+                warning = "SNP>12"
+                action = "Validate SNP+epi"
 
-            case_action_rows.append([
+            case_classif_rows.append([
                 wrap_cell(_short_case_id(case_id), cell_body_style),
                 wrap_cell(_short_case_id(cluster_id) if cluster_id else "none", cell_body_style),
                 wrap_cell(pairwise_available, cell_body_style),
                 wrap_cell(str(nearest_snp) if nearest_snp is not None else "n/a", cell_body_style),
-                wrap_cell(likely_link, cell_body_style),
                 wrap_cell(f"{posterior:.3f}" if posterior else "n/a", cell_body_style),
                 wrap_cell(confidence_tier, cell_body_style),
                 wrap_cell(f"{qc_status}{' +contam' if contamination_flag else ''}", cell_body_style),
+            ])
+            case_actions_b_rows.append([
+                wrap_cell(_short_case_id(case_id), cell_body_style),
+                wrap_cell(likely_link, cell_body_style),
                 wrap_cell(warning, cell_body_style),
                 wrap_cell(action, cell_body_style),
             ])
@@ -2032,23 +2311,37 @@ def outbreak_report(db: Session = Depends(get_db)):
                 f"{posterior:.3f}" if posterior else "n/a",
                 confidence_tier,
                 f"{qc_status}{' +contam' if contamination_flag else ''}",
-                warning,
-                action,
+                warning_long,
+                action_long,
             ])
 
-        case_action_table = Table(
-            case_action_rows,
-            colWidths=[0.52 * inch, 0.52 * inch, 0.62 * inch, 0.6 * inch, 1.0 * inch, 0.5 * inch, 0.68 * inch, 0.65 * inch, 1.2 * inch, 1.12 * inch],
+        _classif_tbl = Table(
+            case_classif_rows,
+            colWidths=fit_col_widths([0.64*inch, 0.64*inch, 0.74*inch, 0.66*inch, 0.68*inch, 0.82*inch, 0.82*inch], fill=True),
             repeatRows=1,
         )
-        case_action_table.setStyle(standard_table_style(font_size=6.8, header=True, valign_top=True))
-        case_table_for_appendix = (case_action_table, "Table A1. Case-level operational action table linking genomic evidence to immediate field actions. Pairwise SNP availability is required before transmission interpretation; nearest-neighbour SNP is shown only as supporting context.")
+        _classif_tbl.setStyle(standard_table_style(font_size=7.2, header=True, valign_top=True))
+        _actions_b_tbl = Table(
+            case_actions_b_rows,
+            colWidths=fit_col_widths([0.72*inch, 2.3*inch, 1.2*inch, 1.2*inch], fill=True),
+            repeatRows=1,
+        )
+        _a1b_ts = standard_table_style(font_size=7.5, header=True, valign_top=True)
+        _a1b_ts.add("TOPPADDING", (0, 0), (-1, -1), 2)
+        _a1b_ts.add("BOTTOMPADDING", (0, 0), (-1, -1), 2)
+        _actions_b_tbl.setStyle(_a1b_ts)
+        case_classif_table_for_appendix = (_classif_tbl, "Table A1a. Case classification: cluster assignment, pairwise SNP availability, nearest-neighbour SNP, outbreaker2 posterior, confidence tier, and QC status.")
+        case_actions_b_table_for_appendix = (_actions_b_tbl, "Table A1b. Case actions: likely genomic link, validation warning, and recommended action. Verify all links with pairwise SNP and epidemiology before field escalation.")
         _write_csv_rows(os.path.join(PROJECT_ROOT, "exports", "appendix_a_case_level_actions.csv"), case_action_csv_rows)
-        story.append(Paragraph("Detailed case-level operational actions are available in Appendix A for systematic review of all active cases.", interp_style))
+        story.append(Paragraph(
+            "Detailed case classification (Table A1a) and recommended actions (Table A1b) are in Appendix A. "
+            "Full data exported to exports/appendix_a_case_level_actions.csv.",
+            interp_style,
+        ))
     else:
         story.append(Paragraph("No case-level records available for operational action table.", styles["Normal"]))
 
-    story.append(Spacer(1, 0.2 * inch))
+    section_divider()
     story.append(Paragraph("Model-Prioritised Transmission Hypotheses", styles["Heading3"]))
     story.append(Paragraph(
         "The outbreaker2 model infers transmission probabilities from SNP distance and sample collection dates. "
@@ -2088,8 +2381,8 @@ def outbreak_report(db: Session = Depends(get_db)):
             outbreaker_probability=prob,
             same_cluster=same_cluster,
         )
-        validation_flag = "Pairwise SNP supported" if pairwise_distance is not None and pairwise_distance <= 12 and same_cluster and not qc_problem else (
-            "Repeat sequencing/QC resolution" if qc_problem else ("Genomically discordant: unlikely direct transmission" if pairwise_distance is not None and pairwise_distance > 12 else "Outbreaker-only link: requires genomic validation.")
+        validation_flag = "SNP-linked" if pairwise_distance is not None and pairwise_distance <= 12 and same_cluster and not qc_problem else (
+            "QC-unresolved" if qc_problem else ("D1: SNP>12" if pairwise_distance is not None and pairwise_distance > 12 else "Model-only")
         )
         action_owner = "TB MDT" if not qc_problem else "Laboratory"
         due_date = "next MDT" if not qc_problem else "48h"
@@ -2115,38 +2408,44 @@ def outbreak_report(db: Session = Depends(get_db)):
         else:
             model_only_pairs.append(record)
 
-    def build_pair_rows(records: list[dict], title: str):
+    _pairs_csv_rows = [["Category", "Pair", "Posterior", "Pairwise SNP", "QC src/rec", "Lineage/Resistance", "Epi link", "Flag", "Owner", "Due"]]
+
+    def build_pair_rows(records: list[dict], title: str, category: str = ""):
         if not records:
             return
         rows = [[
             wrap_cell("Pair", cell_hdr_style),
-            wrap_cell("Posterior", cell_hdr_style),
-            wrap_cell("Pairwise SNP", cell_hdr_style),
-            wrap_cell("QC src/rec", cell_hdr_style),
-            wrap_cell("Lineage/Resistance", cell_hdr_style),
-            wrap_cell("Epi link", cell_hdr_style),
-            wrap_cell("Validation flag", cell_hdr_style),
-            wrap_cell("Owner", cell_hdr_style),
-            wrap_cell("Due", cell_hdr_style),
+            wrap_cell("Post.", cell_hdr_style),
+            wrap_cell("SNP", cell_hdr_style),
+            wrap_cell("QC", cell_hdr_style),
+            wrap_cell("Flag", cell_hdr_style),
         ]]
         for item in records:
             rows.append([
-                wrap_cell(item["pair"], cell_body_style),
+                Paragraph(item["pair"], pair_id_style),
                 wrap_cell(f"{item['posterior']:.3f}", cell_body_style),
                 wrap_cell(item["pairwise"], cell_body_style),
                 wrap_cell(item["qc"], cell_body_style),
-                wrap_cell(item["lineage_resistance"], cell_body_style),
-                wrap_cell(item["epi_link"], cell_body_style),
                 wrap_cell(item["validation_flag"], cell_body_style),
-                wrap_cell(item["action_owner"], cell_body_style),
-                wrap_cell(item["due_date"], cell_body_style),
+            ])
+            _pairs_csv_rows.append([
+                category,
+                item["pair"],
+                f"{item['posterior']:.3f}",
+                item["pairwise"],
+                item["qc"],
+                item.get("lineage_resistance", ""),
+                item.get("epi_link", ""),
+                item["validation_flag"],
+                item.get("action_owner", ""),
+                item.get("due_date", ""),
             ])
         table = Table(
             rows,
-            colWidths=fit_col_widths([0.95 * inch, 0.65 * inch, 0.8 * inch, 0.86 * inch, 1.3 * inch, 0.88 * inch, 1.45 * inch, 0.68 * inch, 0.62 * inch], fill=True),
+            colWidths=fit_col_widths([2.0 * inch, 0.65 * inch, 0.65 * inch, 1.0 * inch, 2.9 * inch], fill=True),
             repeatRows=1,
         )
-        table.setStyle(standard_table_style(font_size=6.7, header=True, valign_top=True))
+        table.setStyle(standard_table_style(font_size=7.0, header=True, valign_top=True))
         append_table_with_caption(
             table,
             title,
@@ -2187,13 +2486,15 @@ def outbreak_report(db: Session = Depends(get_db)):
         story.append(snp_support_table)
         story.append(Spacer(1, 0.1 * inch))
 
-    build_pair_rows(genomic_pairs[:20], "Table 12. Genomically supported model-prioritised links (pairwise SNP ≤12 and shared cluster support). These represent the most plausible recent direct transmission candidates based on both genetic distance and temporal data.")
-    build_pair_rows(model_only_pairs[:20], "Table 13. Model-prioritised hypotheses without pairwise SNP data. These require sequencing/SNP analysis before operational use.")
-    build_pair_rows(genomically_discordant[:20], "Table 14. Genomically discordant model predictions (posterior >0.70 but pairwise SNP >12). SNP distance does not support direct recent transmission; likely reflects extended genetic relatedness or model misspecification.")
-    build_pair_rows(qc_resolution_pairs[:20], "Table 15. Model-prioritised pairs involving QC-failed or not-reported samples. Hold pending repeat sequencing or QC review.")
+    build_pair_rows(genomic_pairs[:20], "Table 12. Genomically supported model-prioritised links (pairwise SNP \u226412 and shared cluster support). These represent the most plausible recent direct transmission candidates based on both genetic distance and temporal data.", "SNP-supported")
+    build_pair_rows(model_only_pairs[:20], "Table 13. Model-prioritised hypotheses without pairwise SNP data. These require sequencing/SNP analysis before operational use.", "Model-only")
+    build_pair_rows(genomically_discordant[:20], "Table 14. Genomically discordant model predictions (posterior >0.70 but pairwise SNP >12). SNP distance does not support direct recent transmission; likely reflects extended genetic relatedness or model misspecification.", "SNP>12 discordant")
+    build_pair_rows(qc_resolution_pairs[:20], "Table 15. Model-prioritised pairs involving QC-failed or not-reported samples. Hold pending repeat sequencing or QC review.", "QC unresolved")
+    if len(_pairs_csv_rows) > 1:
+        _write_csv_rows(os.path.join(PROJECT_ROOT, "exports", "transmission_pairs.csv"), _pairs_csv_rows)
 
     # ── Current Outbreak Interpretation & Top Actions ──────────────────────────────────
-    story.append(Spacer(1, 0.2 * inch))
+    section_divider()
     story.append(Paragraph("Current Outbreak Interpretation", styles["Heading3"]))
     story.append(Paragraph(
         "Current interpretation: This report identifies three open genomic clusters and multiple outbreaker2 model-prioritised transmission hypotheses. "
@@ -2239,6 +2540,10 @@ def outbreak_report(db: Session = Depends(get_db)):
             if in_out and not in_seq
             else "Pairwise SNP support without directed outbreaker linkage; possible older/shared-source linkage"
         )
+        if in_out and not in_seq:
+            disc_code = "D1" if (pairwise_distance is not None and int(pairwise_distance) > 12) else "D2"
+        else:
+            disc_code = "D3"
         discordant_pairs.append({
             "pair": f"{_short_case_id(left)}-{_short_case_id(right)}",
             "snp_result": "pairwise<=12" if in_seq else "pairwise>12 or unavailable",
@@ -2246,9 +2551,10 @@ def outbreak_report(db: Session = Depends(get_db)):
             "pairwise": pairwise_distance,
             "posterior": post,
             "interpretation": interpretation,
+            "disc_code": disc_code,
         })
 
-    full_disc_csv_rows = [["Case Pair", "Pairwise SNP result", "Outbreaker2", "Pairwise SNP", "Posterior", "Interpretation"]]
+    full_disc_csv_rows = [["Case Pair", "Pairwise SNP result", "Outbreaker2", "Pairwise SNP", "Posterior", "Interpretation", "Code"]]
     if discordant_pairs:
         discordant_gt12 = sum(
             1
@@ -2285,15 +2591,13 @@ def outbreak_report(db: Session = Depends(get_db)):
             keep_together=False,
         )
 
-        full_disc_rows = [["Case Pair", "Pairwise SNP result", "Outbreaker2", "Pairwise SNP", "Posterior", "Interpretation"]]
+        full_disc_rows = [["Case Pair", "Pairwise SNP", "Posterior", "Code"]]
         for item in sorted(discordant_pairs, key=lambda x: x["posterior"], reverse=True)[:40]:
             full_disc_rows.append([
                 item["pair"],
-                item["snp_result"],
-                item["out_result"],
                 str(item["pairwise"]) if item["pairwise"] is not None else "n/a",
                 f"{item['posterior']:.3f}" if item["posterior"] else "n/a",
-                item["interpretation"],
+                item.get("disc_code", "?"),
             ])
             full_disc_csv_rows.append([
                 item["pair"],
@@ -2302,23 +2606,98 @@ def outbreak_report(db: Session = Depends(get_db)):
                 str(item["pairwise"]) if item["pairwise"] is not None else "n/a",
                 f"{item['posterior']:.3f}" if item["posterior"] else "n/a",
                 item["interpretation"],
+                item.get("disc_code", ""),
             ])
         full_disc_table = Table(
             wrap_rows(full_disc_rows),
-            colWidths=[0.95 * inch, 1.05 * inch, 0.8 * inch, 0.75 * inch, 0.7 * inch, 2.1 * inch],
+            colWidths=fit_col_widths([1.8 * inch, 1.1 * inch, 1.1 * inch, 0.7 * inch], fill=True, page_width=10.69 * inch),
             repeatRows=1,
         )
-        full_disc_table.setStyle(standard_table_style(font_size=7.0, header=True, valign_top=True))
+        _fdt_ts = standard_table_style(font_size=7.5, header=True, valign_top=True)
+        _fdt_ts.add("TOPPADDING", (0, 0), (-1, -1), 2)
+        _fdt_ts.add("BOTTOMPADDING", (0, 0), (-1, -1), 2)
+        full_disc_table.setStyle(_fdt_ts)
         discordance_table_for_appendix = (
             full_disc_table,
-            "Table A2. Full discordant pairs between pairwise SNP evidence and outbreaker2 linkage for structured adjudication.",
+            "Table A2. Discordant pairs (coded). See code definitions above. Full data including interpretation text is in exports/appendix_b_full_discordance_review.csv.",
         )
         _write_csv_rows(os.path.join(PROJECT_ROOT, "exports", "appendix_b_full_discordance_review.csv"), full_disc_csv_rows)
     else:
         story.append(Paragraph("No discordant pairs identified from available outputs.", styles["Normal"]))
         _write_csv_rows(os.path.join(PROJECT_ROOT, "exports", "appendix_b_full_discordance_review.csv"), full_disc_csv_rows)
 
-    story.append(Spacer(1, 0.2 * inch))
+    # ── Pairwise SNP Matrix Summary ───────────────────────────────────────────
+    section_divider()
+    story.append(Paragraph("Pairwise SNP Distance Summary", styles["Heading3"]))
+    story.append(Paragraph(
+        "Pairwise SNP distances are the primary genomic evidence for or against direct recent transmission. "
+        "The table below summarises all model-prioritised case pairs by SNP distance category. "
+        "≤12 SNPs is the operational threshold for probable recent transmission; >12 SNPs makes direct transmission unlikely; "
+        "unavailable SNP (QC-failed or no consensus sequence) requires repeat sequencing before inference.",
+        interp_style,
+    ))
+    _tp_path = os.path.join("exports", "transmission_pairs.csv")
+    _snp_bins = {"0–5 SNPs (direct)": 0, "6–12 SNPs (probable)": 0, "13–25 SNPs (possible shared source)": 0, ">25 SNPs (unlikely direct)": 0, "SNP unavailable (QC/sequence missing)": 0}
+    _snp_pairs_rows = [["Pair", "SNP distance", "Category", "Epi link", "Flag"]]
+    _snp_available = 0
+    if os.path.exists(_tp_path):
+        import csv as _csv
+        with open(_tp_path, newline="", encoding="utf-8") as _f:
+            for _tp_row in _csv.DictReader(_f):
+                _pair = str(_tp_row.get("Pair") or "")
+                _snp_raw = str(_tp_row.get("Pairwise SNP") or "").strip()
+                _flag = str(_tp_row.get("Flag") or "")
+                _epi = str(_tp_row.get("Epi link") or "n/a")
+                try:
+                    _snp_val = int(_snp_raw)
+                    _snp_available += 1
+                    if _snp_val <= 5:
+                        _cat = "0–5 SNPs (direct)"
+                    elif _snp_val <= 12:
+                        _cat = "6–12 SNPs (probable)"
+                    elif _snp_val <= 25:
+                        _cat = "13–25 SNPs (possible shared source)"
+                    else:
+                        _cat = ">25 SNPs (unlikely direct)"
+                except (ValueError, TypeError):
+                    _snp_val = None
+                    _cat = "SNP unavailable (QC/sequence missing)"
+                _snp_bins[_cat] = _snp_bins.get(_cat, 0) + 1
+                _snp_pairs_rows.append([_pair, _snp_raw if _snp_val is not None else "n/a", _cat, _epi, _flag])
+    if len(_snp_pairs_rows) > 1:
+        _snp_detail_tbl = Table(
+            wrap_rows(_snp_pairs_rows[:25]),
+            colWidths=fit_col_widths([1.35*inch, 0.75*inch, 1.65*inch, 1.1*inch, 1.4*inch], fill=True),
+            repeatRows=1,
+        )
+        _snp_detail_tbl.setStyle(standard_table_style(font_size=7.2, header=True, valign_top=True))
+        append_numbered_caption(
+            "Pairwise SNP distance for all model-prioritised case pairs. "
+            "Pairs with SNP ≤12 and QC pass are primary candidates for direct transmission investigation. "
+            "Pairs with SNP >12 or unavailable require genomic and epidemiological review before field action. "
+            "Epi link column indicates whether epidemiological corroboration is available (same cluster, contact-traced, or unknown)."
+        )
+        story.append(Spacer(1, 0.08 * inch))
+    _snp_bin_rows = [["SNP distance category", "Pair count", "Operational implication"]]
+    _snp_bin_rows += [
+        ["0–5 SNPs (direct)", str(_snp_bins.get("0–5 SNPs (direct)", 0)), "Immediate: probable direct transmission — contact trace; confirm epi link"],
+        ["6–12 SNPs (probable)", str(_snp_bins.get("6–12 SNPs (probable)", 0)), "Priority: probable cluster; review shared setting and exposures"],
+        ["13–25 SNPs (possible shared source)", str(_snp_bins.get("13–25 SNPs (possible shared source)", 0)), "Review: possible shared source/reactivation; epi adjudication required"],
+        [">25 SNPs (unlikely direct)", str(_snp_bins.get(">25 SNPs (unlikely direct)", 0)), "Low priority: unlikely direct recent transmission; monitor only"],
+        ["SNP unavailable", str(_snp_bins.get("SNP unavailable (QC/sequence missing)", 0)), "Hold: repeat sequencing or QC resolution required before inference"],
+    ]
+    _snp_bin_tbl = Table(
+        wrap_rows(_snp_bin_rows),
+        colWidths=fit_col_widths([1.85*inch, 0.75*inch, 3.65*inch], fill=True),
+        repeatRows=1,
+    )
+    _snp_bin_tbl.setStyle(standard_table_style(font_size=7.5, header=True))
+    story.append(_snp_bin_tbl)
+    if _snp_available == 0 and len(_snp_pairs_rows) <= 1:
+        story.append(Paragraph("No pairwise SNP data found in transmission_pairs.csv. Run a SNP-calling pipeline to populate this section.", styles["Normal"]))
+
+    # ── QC Failure Drill-Down ──────────────────────────────────────────────────
+    section_divider()
     story.append(Paragraph("QC Failure Drill-Down", styles["Heading3"]))
     low_coverage_count = 0
     for row in qc_detail_rows:
@@ -2389,7 +2768,72 @@ def outbreak_report(db: Session = Depends(get_db)):
     else:
         story.append(Paragraph("No QC details available.", styles["Normal"]))
 
-    story.append(Spacer(1, 0.2 * inch))
+    # ── Run-Level QC Summary ───────────────────────────────────────────────────
+    section_divider()
+    story.append(Paragraph("Run-Level QC Summary", styles["Heading3"]))
+    story.append(Paragraph(
+        "Sequencing run quality directly affects confidence in transmission inferences. "
+        "Runs with high failure rates or low mean depth should trigger laboratory review before operational decisions are made from that run's samples. "
+        "Run identifiers (run_id) are not populated in this extract; the table below uses QC report date as a proxy grouping. "
+        "If no dates are recorded, the section will be marked as unavailable.",
+        section_note_style,
+    ))
+    _run_qc_query = text("""
+        SELECT
+            CAST(reported_at AS DATE)          AS run_date,
+            COUNT(*)                           AS total_samples,
+            SUM(CASE WHEN LOWER(qc_status) IN ('pass','passed') THEN 1 ELSE 0 END) AS pass_count,
+            SUM(CASE WHEN LOWER(qc_status) NOT IN ('pass','passed') THEN 1 ELSE 0 END) AS fail_count,
+            ROUND(CAST(AVG(mean_depth) AS NUMERIC), 1)         AS mean_depth_avg,
+            ROUND(CAST(AVG(coverage_breadth) AS NUMERIC), 1)   AS mean_coverage_avg
+        FROM sample_qc_metrics
+        WHERE reported_at IS NOT NULL
+        GROUP BY CAST(reported_at AS DATE)
+        ORDER BY CAST(reported_at AS DATE) DESC
+        LIMIT 20
+    """)
+    try:
+        _run_qc_rows_db = [dict(r._mapping) for r in db.execute(_run_qc_query).fetchall()]
+    except Exception:
+        _run_qc_rows_db = []
+    _rlqc_rows = [["Run date (proxy)", "Samples", "Pass", "Fail", "Fail %", "Mean depth", "Mean coverage %"]]
+    for _rl in _run_qc_rows_db:
+        _total = int(_rl.get("total_samples") or 0)
+        _fail = int(_rl.get("fail_count") or 0)
+        _fail_pct = f"{round(100 * _fail / _total, 1)}%" if _total else "n/a"
+        _rlqc_rows.append([
+            str(_rl.get("run_date") or "n/a"),
+            str(_total),
+            str(int(_rl.get("pass_count") or 0)),
+            str(_fail),
+            _fail_pct,
+            str(_rl.get("mean_depth_avg") or "n/a"),
+            str(_rl.get("mean_coverage_avg") or "n/a"),
+        ])
+    if len(_rlqc_rows) > 1:
+        _rlqc_tbl = Table(
+            wrap_rows(_rlqc_rows),
+            colWidths=fit_col_widths([1.15*inch, 0.68*inch, 0.62*inch, 0.62*inch, 0.62*inch, 0.85*inch, 1.1*inch], fill=True),
+            repeatRows=1,
+        )
+        _rlqc_tbl.setStyle(standard_table_style(font_size=7.5, header=True))
+        append_table_with_caption(
+            _rlqc_tbl,
+            "Run-level QC summary aggregated by QC report date (run_id proxy). "
+            "Runs with fail rate >20% or mean coverage <95% should be reviewed before results are used for cluster assignment. "
+            "Assign run identifiers to sample_qc_metrics.run_id to enable full run-level audit.",
+            spacer_after=0.0,
+            keep_together=False,
+        )
+    else:
+        story.append(Paragraph(
+            "<b>Run-level QC unavailable — run identifiers not recorded in this extract.</b> "
+            "Populate sample_qc_metrics.run_id or reported_at to enable run-level audit. "
+            "Individual sample QC is shown in the QC Failure Drill-Down section above.",
+            section_note_style,
+        ))
+
+    section_divider()
     story.append(Paragraph("Drug-Resistance Mutation Details", styles["Heading3"]))
     story.append(Paragraph(
         "WARNING: The mapping between predicted mutations and drug resistance is preliminary. "
@@ -2397,6 +2841,29 @@ def outbreak_report(db: Session = Depends(get_db)):
         "Invalid gene-drug combinations are flagged below and should not be reported operationally until pipeline validation is complete.",
         section_note_style,
     ))
+    # Minimum expected gene-drug mapping reference
+    gene_drug_ref_rows = [
+        ["Drug", "Expected genes", "Common unusual/invalid pairings to review"],
+        ["Rifampicin", "rpoB", "gyrA, pncA, katG, inhA — flag for pipeline review"],
+        ["Isoniazid", "katG, inhA, fabG1", "gyrA, rpoB — flag for pipeline review"],
+        ["Pyrazinamide", "pncA", "gyrA, katG, rpoB, embB — flag for pipeline review"],
+        ["Ethambutol", "embB", "pncA, katG, rpoB — flag for pipeline review"],
+        ["Fluoroquinolones", "gyrA, gyrB", "inhA, embB, katG — flag for pipeline review"],
+        ["Aminoglycosides / injectables", "rrs, eis, tlyA", "rpoB, pncA — flag for pipeline review"],
+    ]
+    gene_drug_ref_table = Table(
+        wrap_rows(gene_drug_ref_rows),
+        colWidths=fit_col_widths([1.2 * inch, 1.6 * inch, 3.5 * inch], fill=True),
+        repeatRows=1,
+    )
+    gene_drug_ref_table.setStyle(standard_table_style(font_size=7.2, header=True))
+    append_table_with_caption(
+        gene_drug_ref_table,
+        "Minimum expected gene-drug mapping reference (WHO/standard TB resistance catalogue). "
+        "Pairings outside the Expected genes column indicate pipeline misconfiguration and must be resolved before clinical reporting. "
+        "Validate all calls against WHO TB mutation catalogue v2 or equivalent.",
+        spacer_after=0.08,
+    )
     mutation_rows = [["Case", "Drug", "Mutation", "Gene", "Gene-drug status", "Confidence", "Predicted", "DST"]]
     for base in mutation_rows_raw:
         case_id = str(base.get("case_id") or "")
@@ -2441,16 +2908,119 @@ def outbreak_report(db: Session = Depends(get_db)):
     else:
         story.append(Paragraph("No structured resistance-mutation details found.", styles["Normal"]))
 
-    story.append(Spacer(1, 0.2 * inch))
+    # ── Phenotypic DST Reconciliation ──────────────────────────────────────────
+    section_divider()
+    story.append(Paragraph("Phenotypic DST Reconciliation", styles["Heading3"]))
+    story.append(Paragraph(
+        "Genomic resistance predictions must be reconciled against phenotypic drug susceptibility testing (DST) "
+        "before any clinical or operational decision is made. "
+        "Discordance (e.g. genomic resistance predicted but phenotypic DST sensitive) requires immediate laboratory and clinical review. "
+        "<b>Phenotypic DST data is NOT recorded in this system extract.</b> "
+        "Until phenotypic results are integrated, all genomic resistance signals must be treated as preliminary flags only. "
+        "Populate the cases or tb_interpretation table with phenotypic DST results to enable automated reconciliation.",
+        section_note_style,
+    ))
+    _dst_recon_rows = [["Case", "Drug", "WGS prediction", "Phenotypic DST", "Agreement", "Action"]]
+    _seen_case_drug = set()
+
+    def _dst_action(drug_name: str, pred_val: str) -> str:
+        """Return a prioritised action string based on the genomic call."""
+        pred = str(pred_val or "").lower()
+        drug_l = str(drug_name or "").lower()
+        is_resistant = "resistant" in pred or pred == "r"
+        is_rif   = "rifamp" in drug_l or "rifabutin" in drug_l or "rif" == drug_l
+        is_inh   = "isoniazid" in drug_l or "inh" == drug_l
+        is_fq    = "fluoroquinolone" in drug_l or "moxiflox" in drug_l or "levoflox" in drug_l
+        is_inj   = "amikacin" in drug_l or "kanamycin" in drug_l or "capreomycin" in drug_l
+        if is_resistant:
+            if is_rif or is_inh:
+                return "HIGH PRIORITY — MDR risk: confirm by phenotypic DST immediately"
+            if is_fq or is_inj:
+                return "URGENT — XDR risk: phenotypic DST required before regimen change"
+            return "URGENT — confirm resistance phenotypically before clinical decision"
+        return "Confirm susceptibility phenotypically before de-escalation"
+
+    for _dr_base in mutation_rows_raw:
+        _dr_case = _short_case_id(str(_dr_base.get("case_id") or ""))
+        _dr_pred = _dr_base.get("predicted_drug_resistance")
+        if not _dr_pred:
+            continue
+        if isinstance(_dr_pred, str):
+            try:
+                import json as _json_mod
+                _dr_pred = _json_mod.loads(_dr_pred)
+            except Exception:
+                _dr_pred = {}
+        if isinstance(_dr_pred, dict):
+            # Collect per-case drug predictions; surface resistant first for readability
+            _drug_items = sorted(
+                _dr_pred.items(),
+                key=lambda kv: (0 if ("resistant" in str(kv[1]).lower() or str(kv[1]).lower() == "r") else 1, kv[0]),
+            )
+            for _drug_class, _pred_val in _drug_items:
+                _key = (_dr_case, str(_drug_class))
+                if _key in _seen_case_drug:
+                    continue
+                _seen_case_drug.add(_key)
+                _pred_str = str(_pred_val).capitalize() if _pred_val else "No call"
+                _is_res = "resistant" in str(_pred_val).lower() or str(_pred_val).lower() == "r"
+                _concordance = "Not determinable — HIGH PRIORITY" if _is_res else "Not determinable"
+                _dst_recon_rows.append([
+                    _dr_case,
+                    str(_drug_class).capitalize(),
+                    _pred_str,
+                    "Awaiting lab result",
+                    _concordance,
+                    _dst_action(_drug_class, _pred_val),
+                ])
+                if len(_dst_recon_rows) >= 35:
+                    break
+        if len(_dst_recon_rows) >= 35:
+            break
+
+    if len(_dst_recon_rows) > 1:
+        _dst_tbl = Table(
+            wrap_rows(_dst_recon_rows),
+            colWidths=fit_col_widths([0.60*inch, 1.05*inch, 1.05*inch, 1.10*inch, 1.20*inch, 2.25*inch], fill=True),
+            repeatRows=1,
+        )
+        _dst_tbl.setStyle(standard_table_style(font_size=7.0, header=True, valign_top=True))
+        # Highlight resistant rows in pale red
+        for _ri, _dst_row in enumerate(_dst_recon_rows[1:], start=1):
+            if "urgent" in str(_dst_row[5]).lower() or "high priority" in str(_dst_row[5]).lower():
+                _dst_tbl.setStyle(TableStyle([
+                    ("BACKGROUND", (0, _ri), (-1, _ri), C_ALERT_BG),
+                ]))
+        story.append(_dst_tbl)
+        append_numbered_caption(
+            "Phenotypic DST reconciliation table. WGS predictions are from TBProfiler pipeline output "
+            "(predicted_drug_resistance field). Phenotypic DST column will be populated when laboratory "
+            "results are integrated into cases or tb_interpretation table. Resistant predictions are sorted "
+            "first and highlighted; do not use genomic calls alone for prescribing decisions."
+        )
+    else:
+        story.append(Paragraph(
+            "No genomic resistance predictions available for reconciliation table.",
+            styles["Normal"],
+        ))
+
+    section_divider()
     story.append(Paragraph("Cluster Epidemiology Summary", styles["Heading3"]))
+    story.append(Paragraph(
+        "The cluster tracker is presented in two tables: a genomic summary (dates, SNP distances, resistance burden) "
+        "and an operational tracker (investigation lead, epi link, contact tracing, LTBI, DST, next step).",
+        small_style,
+    ))
     if cluster_epi_rows:
-        cluster_rows = [["Cluster", "Cases", "First", "Latest", "Med.SNP", "Max SNP", "RR/MDR", "Index", "Recent(30/60/90d)", "Status", "Cluster lead", "Epi link status", "Setting type", "Contact tracing", "LTBI screening", "DST status", "Next step"]]
         cluster_outgoing = {}
         for edge in transmission_edges:
             src = str(edge.get("source") or "")
             src_cluster = str((case_by_id.get(src) or {}).get("cluster_id") or "")
             if src_cluster and float(edge.get("probability") or 0.0) >= 0.70:
                 cluster_outgoing[src_cluster] = cluster_outgoing.get(src_cluster, 0) + 1
+
+        cluster_genomic_rows = [["Cluster", "Cases", "First", "Latest", "Med SNP", "Max SNP", "RR/MDR", "Index case", "Recent 30/60/90d"]]
+        cluster_ops_rows = [["Cluster", "Status", "Lead", "Epi link", "Setting", "Contact tracing", "LTBI screen", "DST status", "Next step"]]
 
         for row in cluster_epi_rows:
             cluster_id = str(row.get("cluster_id") or "")
@@ -2459,8 +3029,9 @@ def outbreak_report(db: Session = Depends(get_db)):
             status = str(row.get("investigation_status") or "unknown")
             if cluster_outgoing.get(cluster_id, 0) > 0 and status == "open":
                 status = "open+linked"
-            cluster_rows.append([
-                _short_case_id(cluster_id),
+            short_cid = _short_case_id(cluster_id)
+            cluster_genomic_rows.append([
+                short_cid,
                 str(int(row.get("cases") or 0)),
                 str(row.get("first_specimen") or "n/a"),
                 str(row.get("latest_specimen") or "n/a"),
@@ -2469,6 +3040,9 @@ def outbreak_report(db: Session = Depends(get_db)):
                 rr_mdr,
                 _short_case_id(str(row.get("suspected_index_case") or "")),
                 recent,
+            ])
+            cluster_ops_rows.append([
+                short_cid,
                 status,
                 str(row.get("cluster_lead") or "Pending"),
                 str(row.get("epi_link_status") or "Pending"),
@@ -2478,22 +3052,180 @@ def outbreak_report(db: Session = Depends(get_db)):
                 str(row.get("dst_status") or "Pending"),
                 str(row.get("recommended_next_step") or "Review at MDT"),
             ])
-        cluster_table = Table(
-            wrap_rows(cluster_rows),
-            colWidths=fit_col_widths([0.58*inch, 0.54*inch, 0.75*inch, 0.75*inch, 0.62*inch, 0.62*inch, 0.58*inch, 0.58*inch, 0.9*inch, 0.76*inch, 0.82*inch, 0.84*inch, 0.78*inch, 0.84*inch, 0.78*inch, 0.74*inch, 1.0*inch], fill=True),
+
+        cluster_genomic_table = Table(
+            wrap_rows(cluster_genomic_rows),
+            colWidths=fit_col_widths([0.68*inch, 0.56*inch, 0.82*inch, 0.82*inch, 0.68*inch, 0.68*inch, 0.62*inch, 0.72*inch, 0.95*inch], fill=True),
             repeatRows=1,
         )
-        cluster_table.setStyle(standard_table_style(font_size=5.8, header=True))
+        cluster_genomic_table.setStyle(standard_table_style(font_size=7.2, header=True))
         append_table_with_caption(
-            cluster_table,
-            "Cluster-level epidemiology and operational investigation tracker. Operational fields (cluster lead, epi link status, setting, contact tracing, LTBI screening, DST status, next step) are pre-populated as 'Pending' and must be completed by the responsible clinician/investigator before MDT circulation.",
+            cluster_genomic_table,
+            "Cluster genomic summary: case counts, specimen date range, SNP distance range, RR/MDR case burden, index case, and recent case counts (30/60/90 days).",
+            spacer_after=0.12,
+            keep_together=False,
+        )
+
+        cluster_ops_table = Table(
+            wrap_rows(cluster_ops_rows),
+            colWidths=fit_col_widths([0.65*inch, 0.75*inch, 0.88*inch, 0.88*inch, 0.8*inch, 0.9*inch, 0.72*inch, 0.72*inch, 1.0*inch], fill=True),
+            repeatRows=1,
+        )
+        cluster_ops_table.setStyle(standard_table_style(font_size=7.2, header=True))
+        append_table_with_caption(
+            cluster_ops_table,
+            "Cluster operational tracker: investigation lead, epi link status, setting, contact tracing, LTBI screening, DST status, recommended next step. "
+            "Fields pre-populated as 'Pending' must be completed by the responsible clinician or investigator before MDT circulation.",
             spacer_after=0.0,
             keep_together=False,
         )
     else:
         story.append(Paragraph("No cluster-level epidemiology rows available.", styles["Normal"]))
 
-    story.append(Spacer(1, 0.2 * inch))
+    # ── Cluster Growth Status ──────────────────────────────────────────────────
+    section_divider()
+    story.append(Paragraph("Cluster Growth Status", styles["Heading3"]))
+    story.append(Paragraph(
+        "Cluster growth status classifies whether each cluster is actively accumulating new cases based on recent specimen dates. "
+        "Active clusters (last case <90 days ago) require heightened investigation priority. "
+        "Clusters with no new cases for >180 days may be approaching natural closure but require formal MDT sign-off.",
+        interp_style,
+    ))
+    import datetime as _dt
+    _today = _dt.date.today()
+    _growth_rows = [["Cluster", "Cases", "Last case", "Cases 30d", "Cases 60d", "Cases 90d", "Growth status"]]
+    for _cr in cluster_epi_rows:
+        _cid = _short_case_id(str(_cr.get("cluster_id") or ""))
+        _n_cases = int(_cr.get("cases") or 0)
+        _latest_raw = _cr.get("latest_specimen")
+        # Handle date objects or strings
+        if _latest_raw is None:
+            _latest_str = "n/a"
+            _days_since = None
+        elif hasattr(_latest_raw, "isoformat"):
+            _latest_str = _latest_raw.isoformat()[:10]
+            try:
+                _days_since = (_today - _latest_raw.date() if hasattr(_latest_raw, "date") else _today - _latest_raw).days
+            except Exception:
+                _days_since = None
+        else:
+            _latest_str = str(_latest_raw)[:10]
+            try:
+                _days_since = (_today - _dt.date.fromisoformat(_latest_str)).days
+            except Exception:
+                _days_since = None
+        _r30 = int(_cr.get("recent_30d") or 0)
+        _r60 = int(_cr.get("recent_60d") or 0)
+        _r90 = int(_cr.get("recent_90d") or 0)
+        if _days_since is None:
+            _status = "Unknown"
+        elif _days_since < 90:
+            _status = "Active"
+        elif _days_since < 180:
+            _status = "Slowing"
+        else:
+            _status = "Likely inactive"
+        _growth_rows.append([_cid, str(_n_cases), _latest_str, str(_r30), str(_r60), str(_r90), _status])
+    if len(_growth_rows) > 1:
+        _growth_tbl = Table(
+            wrap_rows(_growth_rows),
+            colWidths=fit_col_widths([0.9*inch, 0.6*inch, 1.05*inch, 0.82*inch, 0.82*inch, 0.82*inch, 1.15*inch], fill=True),
+            repeatRows=1,
+        )
+        _growth_tbl.setStyle(standard_table_style(font_size=7.5, header=True))
+        append_table_with_caption(
+            _growth_tbl,
+            "Cluster growth status. Cases 30d/60d/90d = cases with specimen date within that window of today. "
+            "Active = last case <90 days ago; Slowing = 90–180 days; Likely inactive = >180 days. "
+            "Status does not imply transmission has stopped; formal closure requires MDT sign-off against cluster closure criteria.",
+            spacer_after=0.0,
+            keep_together=False,
+        )
+    else:
+        story.append(Paragraph("No cluster growth data available.", styles["Normal"]))
+
+    # ── Epi-Link Evidence Summary ──────────────────────────────────────────────
+    section_divider()
+    story.append(Paragraph("Epi-Link Evidence Summary", styles["Heading3"]))
+    story.append(Paragraph(
+        "Genomic cluster membership is necessary but not sufficient for establishing a transmission chain. "
+        "Epidemiological links — shared contacts, common exposure settings, overlapping timelines — provide independent corroboration. "
+        "The table below summarises epi-link status for all model-prioritised pairs from this run's output.",
+        interp_style,
+    ))
+    # Corroborated = explicit epi link present; NOT corroborated = unknown/not confirmed/not recorded/none/empty
+    _UNCONFIRMED_EPI = {"unknown", "not recorded", "none", "no link", "not confirmed", ""}
+    _epi_bins: dict = {}
+    _epi_corroborated = 0
+    _epi_total = 0
+    _epi_path = os.path.join("exports", "transmission_pairs.csv")
+    if os.path.exists(_epi_path):
+        import csv as _csv2
+        with open(_epi_path, newline="", encoding="utf-8") as _ef:
+            for _epi_row in _csv2.DictReader(_ef):
+                _epi_link = str(_epi_row.get("Epi link") or "not recorded").strip().lower()
+                _epi_bins[_epi_link] = _epi_bins.get(_epi_link, 0) + 1
+                _epi_total += 1
+                if _epi_link not in _UNCONFIRMED_EPI:
+                    _epi_corroborated += 1
+    _epi_unconfirmed = _epi_total - _epi_corroborated
+    _epi_summary_rows = [["Epi-link category", "Pair count", "% of all pairs", "Corroborated?"]]
+    for _elink, _ecount in sorted(_epi_bins.items(), key=lambda x: -x[1]):
+        _epi_pct = f"{round(100 * _ecount / _epi_total, 1)}%" if _epi_total else "n/a"
+        _is_corroborated = "No" if _elink in _UNCONFIRMED_EPI else "Yes"
+        _epi_summary_rows.append([_elink.title(), str(_ecount), _epi_pct, _is_corroborated])
+    if not _epi_bins:
+        _epi_summary_rows.append(["No epi-link data found in this extract", "—", "—", "—"])
+    _epi_tbl = Table(
+        wrap_rows(_epi_summary_rows),
+        colWidths=fit_col_widths([2.1*inch, 0.85*inch, 0.85*inch, 0.85*inch], fill=True),
+        repeatRows=1,
+    )
+    _epi_tbl.setStyle(standard_table_style(font_size=7.5, header=True))
+    story.append(_epi_tbl)
+    if _epi_total > 0:
+        story.append(Spacer(1, 0.06 * inch))
+        _epi_corr_pct = round(100 * _epi_corroborated / _epi_total, 1)
+        story.append(Paragraph(
+            f"Recorded epi-status available for {_epi_total}/{_epi_total} pairs. "
+            f"Corroborated epi-link present for {_epi_corroborated}/{_epi_total} pairs ({_epi_corr_pct}%). "
+            f"{_epi_unconfirmed} pair{'s' if _epi_unconfirmed != 1 else ''} remain not confirmed and require "
+            "field investigation before operational escalation.",
+            small_style,
+        ))
+
+    # ── Contact-Tracing Yield ──────────────────────────────────────────────────
+    section_divider()
+    story.append(Paragraph("Contact-Tracing Yield — pending field data", styles["Heading3"]))
+    story.append(Paragraph(
+        "<b>Contact-tracing yield: not available in current extract.</b> "
+        "Contact tracing data are not recorded in this system. "
+        "Field investigation teams should record: contacts identified, contacts screened, active TB cases found, LTBI cases found, and yield percentage per index cluster. "
+        "Re-ingest after populating the case management system to enable automated yield reporting here. "
+        "The expected table structure when data are available is shown below.",
+        section_note_style,
+    ))
+    _ct_header_rows = [
+        ["Cluster", "Contacts identified", "Contacts screened", "Active TB", "LTBI", "Yield %", "Completion"],
+        ["(pending)", "—", "—", "—", "—", "—", "Awaiting field data"],
+    ]
+    _ct_tbl = Table(
+        wrap_rows(_ct_header_rows),
+        colWidths=fit_col_widths([0.82*inch, 1.2*inch, 1.15*inch, 0.75*inch, 0.65*inch, 0.68*inch, 1.25*inch], fill=True),
+        repeatRows=1,
+    )
+    _ct_ts = standard_table_style(font_size=7.2, header=True)
+    _ct_ts.add("TEXTCOLOR", (0, 1), (-1, -1), colors.HexColor("#888888"))
+    _ct_tbl.setStyle(_ct_ts)
+    story.append(_ct_tbl)
+    story.append(Spacer(1, 0.04 * inch))
+    story.append(Paragraph(
+        "Yield % = (active TB + LTBI) / contacts screened × 100. "
+        "Completion = proportion of contacts with outcome recorded.",
+        small_style,
+    ))
+
+    section_divider()
     story.append(Paragraph("Geographical Cluster Spread", styles["Heading3"]))
     if cluster_epi_rows:
         _UK_ONLY_LABELS = {"united kingdom", "uk", "unknown"}
@@ -2534,7 +3266,7 @@ def outbreak_report(db: Session = Depends(get_db)):
                 section_note_style,
             ))
 
-    story.append(Spacer(1, 0.2 * inch))
+    section_divider()
     story.append(Paragraph("Missing-Data Dashboard", styles["Heading3"]))
     if completeness_row:
         total = int(completeness_row.get("total_cases") or 0)
@@ -2568,7 +3300,60 @@ def outbreak_report(db: Session = Depends(get_db)):
             spacer_after=0.0,
         )
 
-    story.append(Spacer(1, 0.2 * inch))
+    # ── Cluster Closure Criteria ───────────────────────────────────────────────
+    section_divider()
+    story.append(Paragraph("Cluster Closure Criteria", styles["Heading3"]))
+    story.append(Paragraph(
+        "Clusters should not be closed on genomic evidence alone. The following criteria define the minimum standards for cluster closure, "
+        "based on ECDC/PHE TB cluster management guidance. "
+        "All criteria should be met before a cluster is formally closed at MDT. Closure is documented with MDT sign-off and rationale.",
+        interp_style,
+    ))
+    _closure_rows = [
+        ["Criterion", "Standard", "How to assess", "Met in this report?"],
+        ["No new linked cases",
+         "No genomically linked new case within preceding 12 months",
+         "Review cluster growth status table; confirm last case >365 days ago",
+         "Review cluster growth status table"],
+        ["All contacts traced",
+         "All known contacts identified, assessed, and outcome recorded",
+         "Contact-tracing yield table shows 100% contacts assessed",
+         "Contact tracing data not recorded in this extract"],
+        ["Index case identified or excluded",
+         "Probable index case or documented exclusion of identifiable source",
+         "Transmission network and MDT review",
+         "Probable index case may be noted in cluster operational tracker"],
+        ["Transmission links resolved",
+         "All SNP-linked pairs adjudicated (epi confirmed or excluded)",
+         "Epi-link evidence summary: all pairs have documented epi outcome",
+         "Epi-link data partially available — see epi-link summary section"],
+        ["Drug resistance resolved",
+         "Phenotypic DST completed for all resistance-predicted cases",
+         "Phenotypic DST reconciliation table: no 'Awaiting' entries",
+         "Phenotypic DST not recorded in this extract"],
+        ["MDT sign-off documented",
+         "Formal MDT discussion with closure rationale recorded",
+         "Case management system or minutes reference",
+         "Out of scope for automated report"],
+    ]
+    _closure_tbl = Table(
+        wrap_rows(_closure_rows),
+        colWidths=fit_col_widths([1.35*inch, 1.6*inch, 1.9*inch, 1.9*inch], fill=True),
+        repeatRows=1,
+    )
+    _closure_ts = standard_table_style(font_size=7.0, header=True, valign_top=True)
+    _closure_ts.add("TOPPADDING", (0, 0), (-1, -1), 2)
+    _closure_ts.add("BOTTOMPADDING", (0, 0), (-1, -1), 2)
+    _closure_tbl.setStyle(_closure_ts)
+    story.append(_closure_tbl)
+    story.append(Spacer(1, 0.06 * inch))
+    story.append(Paragraph(
+        "Cluster closure must be documented in the case management system with date, responsible clinician, and rationale. "
+        "Genomic surveillance should continue after closure to detect re-emergence.",
+        small_style,
+    ))
+
+    section_divider()
     story.append(Paragraph("Model Reliability Diagnostics", styles["Heading3"]))
     story.append(Paragraph(
         "MCMC convergence diagnostics indicate whether the Bayesian sampler has explored the parameter space adequately. "
@@ -2629,7 +3414,7 @@ def outbreak_report(db: Session = Depends(get_db)):
             interp_style,
         ))
 
-    story.append(Spacer(1, 0.2 * inch))
+    section_divider()
     story.append(Paragraph("Transmission Routes Reference", styles["Heading3"]))
     # ── TB Transmission Routes — Background ───────────────────────────────────
     story.append(Paragraph("Understanding TB Transmission Routes from WGS", styles["Heading3"]))
@@ -2729,7 +3514,7 @@ def outbreak_report(db: Session = Depends(get_db)):
         spacer_after=0.0,
     )
 
-    story.append(Spacer(1, 0.2 * inch))
+    section_divider()
     story.append(Paragraph("Diagnostic Graphics", styles["Heading3"]))
     story.append(Paragraph(
         "The following plots are generated by outbreaker2 and the platform's supplementary visualisation pipeline. "
@@ -2783,25 +3568,46 @@ def outbreak_report(db: Session = Depends(get_db)):
     if existing_graphics:
         for fig_num, name in enumerate(existing_graphics, start=2):
             image_path = os.path.join("exports", name)
-            story.append(build_report_image(image_path))
+            fig_parts = [build_report_image(image_path)]
+            if name in {"outbreaker_tree.png", "outbreaker_phylo.png"}:
+                legend_rows = [
+                    [Paragraph("<b>Embedded legend</b>", small_style), Paragraph("<b>Encoding</b>", small_style)],
+                    [Paragraph("Node colour", small_style), Paragraph("Cluster", small_style)],
+                    [Paragraph("Red border", small_style), Paragraph("QC unresolved", small_style)],
+                    [Paragraph("Dotted edge", small_style), Paragraph("SNP >12", small_style)],
+                    [Paragraph("Grey edge", small_style), Paragraph("SNP unavailable", small_style)],
+                    [Paragraph("Solid edge", small_style), Paragraph("SNP ≤12 and QC pass", small_style)],
+                    [Paragraph("RR/MDR marker", small_style), Paragraph("Predicted resistance; confirm with DST", small_style)],
+                ]
+                legend_tbl = Table(
+                    legend_rows,
+                    colWidths=[1.5 * inch, 3.2 * inch],
+                    repeatRows=1,
+                )
+                legend_tbl.setStyle(TableStyle([
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eef4fb")),
+                    ("BOX", (0, 0), (-1, -1), 0.6, C_STEEL),
+                    ("INNERGRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#c8d8ec")),
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                    ("TOPPADDING", (0, 0), (-1, -1), 3),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+                ]))
+                fig_parts.append(Spacer(1, 0.03 * inch))
+                fig_parts.append(legend_tbl)
             caption_text = FIGURE_CAPTIONS.get(name)
             if not caption_text:
                 label = name.replace("outbreaker_", "").replace(".png", "").replace("_", " ").title()
                 caption_text = f"Figure. {label} — generated by the outbreaker2 analysis pipeline."
-            story.append(Paragraph(caption_text, caption_style))
-            story.append(Spacer(1, 0.15 * inch))
+            fig_parts.append(Paragraph(caption_text, caption_style))
+            story.append(KeepTogether(fig_parts))
+            story.append(Spacer(1, 0.1 * inch))
     else:
         story.append(Paragraph("No outbreak graphics found in exports/.", styles["Normal"]))
 
     # ── Lineage Clinical Reference ─────────────────────────────────────────────
-    story.append(Spacer(1, 0.2 * inch))
-    story.append(Paragraph("M. tuberculosis Lineage Reference", styles["Heading3"]))
-    story.append(Paragraph(
-        "Lineage classification places a strain within the global phylogeny of M. tuberculosis. Lineage influences "
-        "drug-resistance acquisition patterns and geographic origin. The following table provides clinical and "
-        "epidemiological context for lineages commonly observed in Northern Ireland.",
-        interp_style,
-    ))
+    story.append(Spacer(1, 0.12 * inch))
     lineage_ref_rows = [
         [Paragraph("Lineage", cell_hdr_style), Paragraph("Name / Origin", cell_hdr_style),
          Paragraph("DR Association", cell_hdr_style), Paragraph("NI Relevance", cell_hdr_style),
@@ -2836,17 +3642,28 @@ def outbreak_report(db: Session = Depends(get_db)):
         colWidths=fit_col_widths([0.65 * inch, 1.45 * inch, 1.45 * inch, 1.5 * inch, 2.3 * inch], fill=True),
     )
     lin_table.setStyle(standard_table_style(font_size=7.3, header=True, valign_top=True))
-    story.append(lin_table)
-    append_numbered_caption(
-        "M. tuberculosis lineage reference for clinical and epidemiological context. "
-        "DR = drug resistance; MDR = multidrug-resistant; XDR = extensively drug-resistant. "
-        "Lineage assignment should be combined with phenotypic DST and clinical judgment. "
-        "Source: Coll et al. (2014) Nature Genetics; WHO Global TB Report 2023.",
-        style=caption_style,
-    )
+    table_counter["value"] += 1
+    story.append(KeepTogether([
+        Paragraph("M. tuberculosis Lineage Reference", styles["Heading3"]),
+        Paragraph(
+            "Lineage classification places a strain within the global phylogeny of M. tuberculosis. "
+            "The table below provides context for lineages commonly observed in Northern Ireland.",
+            small_style,
+        ),
+        lin_table,
+        Paragraph(
+            _format_table_caption(
+                "M. tuberculosis lineage reference. DR = drug resistance; MDR = multidrug-resistant; XDR = extensively drug-resistant. "
+                "Lineage assignment should be combined with phenotypic DST and clinical judgment. "
+                "Source: Coll et al. (2014) Nature Genetics; WHO Global TB Report 2023.",
+                table_counter["value"],
+            ),
+            caption_style,
+        ),
+    ]))
 
     # ── Clinical Action Summary ────────────────────────────────────────────────
-    story.append(Spacer(1, 0.2 * inch))
+    section_divider()
     story.append(Paragraph("Clinical and Public Health Action Summary", styles["Heading3"]))
     story.append(Paragraph(
         "The table below maps genomic findings to recommended clinical and public health actions. "
@@ -2963,18 +3780,18 @@ def outbreak_report(db: Session = Depends(get_db)):
             + "; ".join(unpopulated_fields[:6])
             + (f" (and {len(unpopulated_fields) - 6} more)" if len(unpopulated_fields) > 6 else "")
             + ". External/formal circulation is blocked until these are completed. "
-            "In particular, the random seed must be recorded to ensure the run is reproducible. "
-            "Until then, retain this report as development/internal draft only. Contact the pipeline administrator to obtain the required values.",
+            "Random seed must be recorded to ensure reproducibility. "
+            "Contact the pipeline administrator before proceeding.",
             section_note_style,
         ))
 
-    story.append(Spacer(1, 0.08 * inch))
+    story.append(Spacer(1, 0.06 * inch))
     story.append(Paragraph(
-        "<b>Layout usability note:</b> Several operational tables are intentionally dense for completeness. "
-        "Before circulation, provide Appendix A and Appendix B as Excel-compatible CSV companions. "
-        "This report now writes exports/appendix_a_case_level_actions.csv and exports/appendix_b_full_discordance_review.csv. "
-        "For MDT use, include the one-page action sheet (Appendix C).",
-        section_note_style,
+        "<b>Companion files:</b> "
+        "exports/appendix_a_case_level_actions.csv \u2014 full case-level actions; "
+        "exports/appendix_b_full_discordance_review.csv \u2014 full discordance table; "
+        "exports/transmission_pairs.csv \u2014 all model-prioritised pairs with owner/due fields.",
+        small_style,
     ))
 
     # ── APPENDIX ───────────────────────────────────────────────────────────────────────────────
@@ -2989,31 +3806,73 @@ def outbreak_report(db: Session = Depends(get_db)):
         else:
             story.append(PageBreak())
 
-    if case_table_for_appendix:
+    if case_classif_table_for_appendix or case_actions_b_table_for_appendix:
         start_appendix_page()
         story.append(Paragraph("Appendix A: Case-Level Operational Action Details", styles["Heading2"]))
         story.append(Paragraph(
-            "This appendix contains the detailed case-level operational action table showing all sequenced cases, their cluster assignments, "
-            "quality control status, and recommended investigations. This table supports line-by-line operational review of all active cases.",
-            interp_style,
+            "Table A1a \u2014 classification (cluster, SNP, QC, tier).  "
+            "Table A1b \u2014 actions (likely link, warning code, action code).  "
+            "Full 10-column data: exports/appendix_a_case_level_actions.csv.",
+            small_style,
         ))
-        story.append(Spacer(1, 0.15 * inch))
-        table_obj, table_caption = case_table_for_appendix
-        story.append(table_obj)
-        append_numbered_caption(table_caption)
+        story.append(Spacer(1, 0.08 * inch))
+        if case_classif_table_for_appendix:
+            tbl_obj, _tbl_cap = case_classif_table_for_appendix
+            story.append(KeepTogether([
+                Paragraph("Table A1a \u2014 Case Classification", styles["Heading3"]),
+                tbl_obj,
+            ]))
+            append_appendix_caption("Table A1a. Case classification: cluster assignment, pairwise SNP availability, nearest-neighbour SNP, outbreaker2 posterior, confidence tier, and QC status.")
+            story.append(Spacer(1, 0.15 * inch))
+        if case_actions_b_table_for_appendix:
+            story.append(Paragraph("Table A1b \u2014 Case Actions", styles["Heading3"]))
+            story.append(Paragraph(
+                "<b>Warning codes:</b> "
+                "SNP-missing/QC \u2014 QC unresolved, pairwise SNP unavailable; "
+                "Model-only \u2014 outbreaker2 link, no pairwise SNP; "
+                "SNP-linked \u2014 SNP \u226412, epi corroboration still required; "
+                "SNP>12 \u2014 pairwise SNP above transmission threshold.  "
+                "<b>Action codes:</b> "
+                "Repeat/QC \u2014 repeat or verify sequence before any transmission interpretation; "
+                "Validate SNP+epi \u2014 confirm with pairwise SNP and epidemiology before operational action.  "
+                "Full text is in exports/appendix_a_case_level_actions.csv.",
+                small_style,
+            ))
+            story.append(Paragraph("Table A1b. Case actions (coded).", caption_style))
+            story.append(Spacer(1, 0.05 * inch))
+            tbl_obj, _tbl_caption = case_actions_b_table_for_appendix
+            story.append(tbl_obj)
 
     if discordance_table_for_appendix:
         start_appendix_page()
         story.append(Paragraph("Appendix B: Full Discordance Review", styles["Heading2"]))
         story.append(Paragraph(
-            "This appendix contains the full discordance table to support structured MDT adjudication. "
-            "The main report includes only a condensed summary and top examples.",
+            "Discordance codes classify pairs where pairwise SNP evidence and outbreaker2 linkage disagree. "
+            "Full data including verbose interpretation is in exports/appendix_b_full_discordance_review.csv.",
             interp_style,
         ))
-        story.append(Spacer(1, 0.15 * inch))
+        story.append(Spacer(1, 0.1 * inch))
+        story.append(Paragraph("Discordance Code Definitions", styles["Heading3"]))
+        disc_code_rows = [
+            [Paragraph("Code", cell_hdr_style), Paragraph("Meaning", cell_hdr_style)],
+            [Paragraph("D1", cell_bold_style), Paragraph("Model-linked (outbreaker2 \u22650.70) AND pairwise SNP >12 \u2014 genomically discordant; unlikely direct recent transmission. Do not escalate without further review.", cell_body_style)],
+            [Paragraph("D2", cell_bold_style), Paragraph("Model-linked (outbreaker2 \u22650.70) AND pairwise SNP unavailable \u2014 requires sequencing/SNP analysis before transmission interpretation.", cell_body_style)],
+            [Paragraph("D3", cell_bold_style), Paragraph("Pairwise SNP \u226412 but NOT model-prioritised \u2014 possible older or shared-source linkage; review epidemiology to determine significance.", cell_body_style)],
+        ]
+        disc_code_tbl = Table(
+            disc_code_rows,
+            colWidths=fit_col_widths([0.55 * inch, 9.2 * inch], fill=True, page_width=10.69 * inch),
+            repeatRows=1,
+        )
+        _dct_ts = standard_table_style(font_size=7.5, header=True, valign_top=True)
+        _dct_ts.add("TOPPADDING", (0, 0), (-1, -1), 2)
+        _dct_ts.add("BOTTOMPADDING", (0, 0), (-1, -1), 2)
+        disc_code_tbl.setStyle(_dct_ts)
+        story.append(disc_code_tbl)
+        story.append(Spacer(1, 0.05 * inch))
         disc_obj, disc_caption = discordance_table_for_appendix
         story.append(disc_obj)
-        append_numbered_caption(disc_caption)
+        append_appendix_caption("Table B1. Discordant pairs (coded). Full data including verbose interpretation in exports/appendix_b_full_discordance_review.csv.")
 
     # Optional one-page MDT action sheet to support rapid governance review.
     start_appendix_page()
@@ -3027,7 +3886,7 @@ def outbreak_report(db: Session = Depends(get_db)):
         ["Priority area", "Current signal", "Required MDT action", "Owner", "When"],
         ["Circulation readiness", circulation_label, "Complete mandatory reproducibility metadata before external circulation", "Pipeline + Governance", "Before circulation"],
         ["Model reliability", model_reliability, "Treat directionality as exploratory until diagnostics are complete", "Bioinformatics + MDT", "Current cycle"],
-        ["High-priority open clusters", str(high_priority_open_clusters), "Review shared exposures and complete epidemiological fields", "MDT + Field team", "Next MDT"],
+        [f"Open clusters: {int(open_clusters or 0)}; high-priority (>10): {high_priority_open_clusters}", f"{int(open_clusters or 0)} total / {high_priority_open_clusters} >10", "Ensure MDT review and epidemiological data completion for all open clusters. Do not infer source-recipient direction from model output alone.", "MDT + Field team", "Next MDT"],
         ["Discordant model links", str(len(discordant_pairs) if discordant_pairs else 0), "Use pairwise SNP + epidemiology adjudication pathway", "MDT", "Next MDT"],
         ["Geography completeness", "UK-only extract", "Populate HSC Trust, PHA locality, council area; use postcode district only with governance approval", "Data management", "Next ingest"],
     ]
@@ -3038,7 +3897,20 @@ def outbreak_report(db: Session = Depends(get_db)):
     )
     mdt_table.setStyle(standard_table_style(font_size=7.4, header=True, valign_top=True))
     story.append(mdt_table)
-    append_numbered_caption("Table A3. Condensed MDT action sheet for immediate governance and operational review.")
+    append_appendix_caption("Table C1. Condensed MDT action sheet for governance and operational review.")
+
+    # ── Appendix D: Key Concepts ───────────────────────────────────────────────
+    start_appendix_page()
+    story.append(Paragraph("Appendix D: TB Genomics Key Concepts", styles["Heading2"]))
+    story.append(Paragraph(
+        "Reference definitions for genomic terminology used throughout this report.",
+        interp_style,
+    ))
+    story.append(Spacer(1, 0.1 * inch))
+    _bg_table = Table(_key_concepts_rows, colWidths=fit_col_widths([2.0 * inch, 7.6 * inch], fill=True))
+    _bg_table.setStyle(standard_table_style(font_size=8.0, header=True, valign_top=True))
+    story.append(_bg_table)
+    append_appendix_caption("Table D1. TB genomics reference — key terms (WHO/UK TB genomic surveillance guidance).")
 
     output_path = report_path
     try:

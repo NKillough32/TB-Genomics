@@ -1,26 +1,25 @@
 Case,Cluster,Pairwise SNP?,NN SNP,Likely link,Posterior,Tier,QC,Warning,Recommended action
-0ecf0e24,beaf2790,yes,15,none,n/a,Exploratory,pass,Outbreaker-only link: requires genomic validation.,Model-prioritised exposure review — confirm with pairwise SNP and epidemiology before action.
-2a73489e,beaf2790,yes,17,none,n/a,Exploratory,pass,Outbreaker-only link: requires genomic validation.,Model-prioritised exposure review — confirm with pairwise SNP and epidemiology before action.
-6710e899,none,yes,883,none,n/a,Exploratory,fail,Pairwise SNP required before transmission interpretation.,Repeat/verify sequence before action
-04d7e497,beaf2790,yes,13,none,n/a,Exploratory,pass,Outbreaker-only link: requires genomic validation.,Model-prioritised exposure review — confirm with pairwise SNP and epidemiology before action.
-3ae6688f,none,yes,864,none,n/a,Exploratory,fail +contam,Pairwise SNP required before transmission interpretation.,Repeat/verify sequence before action
-70edb9bb,19fe8a23,yes,15,none,n/a,Exploratory,fail,Pairwise SNP required before transmission interpretation.,Repeat/verify sequence before action
-36c3b0da,c1866e42,yes,22,none,n/a,Exploratory,fail,Pairwise SNP required before transmission interpretation.,Repeat/verify sequence before action
-cdb5fb06,19fe8a23,yes,13,none,n/a,Exploratory,pass,Outbreaker-only link: requires genomic validation.,Model-prioritised exposure review — confirm with pairwise SNP and epidemiology before action.
-7738ebde,none,yes,879,none,n/a,Exploratory,pass,Outbreaker-only link: requires genomic validation.,Model-prioritised exposure review — confirm with pairwise SNP and epidemiology before action.
-418c2ce7,none,yes,864,none,n/a,Exploratory,fail,Pairwise SNP required before transmission interpretation.,Repeat/verify sequence before action
-ef129da7,19fe8a23,yes,13,none,n/a,Exploratory,pass,Outbreaker-only link: requires genomic validation.,Model-prioritised exposure review — confirm with pairwise SNP and epidemiology before action.
-b5362f14,19fe8a23,yes,15,none,n/a,Exploratory,pass,Outbreaker-only link: requires genomic validation.,Model-prioritised exposure review — confirm with pairwise SNP and epidemiology before action.
-595ae5db,beaf2790,yes,16,none,n/a,Exploratory,pass,Outbreaker-only link: requires genomic validation.,Model-prioritised exposure review — confirm with pairwise SNP and epidemiology before action.
-f725e941,none,no,n/a,none,n/a,Exploratory,not_reported,Pairwise SNP required before transmission interpretation.,Repeat/verify sequence before action
-904922b5,19fe8a23,yes,22,none,n/a,Exploratory,fail,Pairwise SNP required before transmission interpretation.,Repeat/verify sequence before action
-dc8cd7db,19fe8a23,yes,17,none,n/a,Exploratory,pass,Outbreaker-only link: requires genomic validation.,Model-prioritised exposure review — confirm with pairwise SNP and epidemiology before action.
-3d2c3020,c1866e42,yes,22,none,n/a,Exploratory,pass,Outbreaker-only link: requires genomic validation.,Model-prioritised exposure review — confirm with pairwise SNP and epidemiology before action.
-1d4bc976,none,yes,884,none,n/a,Exploratory,pass,Outbreaker-only link: requires genomic validation.,Model-prioritised exposure review — confirm with pairwise SNP and epidemiology before action.
-bf942bbf,beaf2790,yes,16,none,n/a,Exploratory,fail,Pairwise SNP required before transmission interpretation.,Repeat/verify sequence before action
-35310178,none,no,n/a,none,n/a,Exploratory,not_reported,Pairwise SNP required before transmission interpretation.,Repeat/verify sequence before action
-60ac41f7,none,no,n/a,none,n/a,Exploratory,not_reported,Pairwise SNP required before transmission interpretation.,Repeat/verify sequence before action
-4166bfbe,none,yes,884,none,n/a,Exploratory,fail,Pairwise SNP required before transmission interpretation.,Repeat/verify sequence before action
-d2cd1214,none,no,n/a,none,n/a,Exploratory,not_reported,Pairwise SNP required before transmission interpretation.,Repeat/verify sequence before action
-424bfbd1,beaf2790,yes,13,none,n/a,Exploratory,pass,Outbreaker-only link: requires genomic validation.,Model-prioritised exposure review — confirm with pairwise SNP and epidemiology before action.
-53978835,none,no,n/a,none,n/a,Exploratory,not_reported,Pairwise SNP required before transmission interpretation.,Repeat/verify sequence before action
+631bcffb,04e65e42,yes,15,e10f9dde -> 631bcffb,1.000,Moderate confidence,pass,Pairwise SNP distance is too high for direct transmission interpretation.,Model-prioritised exposure review — confirm with pairwise SNP and epidemiology before action.
+6f306409,04e65e42,yes,17,e10f9dde -> 6f306409,1.000,Moderate confidence,pass,Pairwise SNP distance is too high for direct transmission interpretation.,Model-prioritised exposure review — confirm with pairwise SNP and epidemiology before action.
+9ab6c0d9,none,yes,883,e10f9dde -> 9ab6c0d9,0.880,Exploratory,fail,Pairwise SNP required before transmission interpretation.,Repeat/verify sequence before action.
+e10f9dde,04e65e42,yes,13,a8d08022 -> e10f9dde,1.000,Moderate confidence,pass,Pairwise SNP distance is too high for direct transmission interpretation.,Model-prioritised exposure review — confirm with pairwise SNP and epidemiology before action.
+e5ffea1d,none,yes,864,716130a0 -> e5ffea1d,1.000,Exploratory,fail +contam,Pairwise SNP required before transmission interpretation.,Repeat/verify sequence before action.
+0ab71d84,39be6563,yes,15,905ea01d -> 0ab71d84,1.000,Exploratory,fail,Pairwise SNP required before transmission interpretation.,Repeat/verify sequence before action.
+1a574171,604b7f43,yes,22,b6530faa -> 1a574171,1.000,Exploratory,fail,Pairwise SNP required before transmission interpretation.,Repeat/verify sequence before action.
+905ea01d,39be6563,yes,13,f17d7f92 -> 905ea01d,1.000,Moderate confidence,pass,Pairwise SNP distance is too high for direct transmission interpretation.,Model-prioritised exposure review — confirm with pairwise SNP and epidemiology before action.
+b4218364,none,yes,879,a8d08022 -> b4218364,1.000,Exploratory,pass,Pairwise SNP distance is too high for direct transmission interpretation.,Model-prioritised exposure review — confirm with pairwise SNP and epidemiology before action.
+716130a0,none,yes,864,716130a0 -> e5ffea1d,1.000,Exploratory,fail,Pairwise SNP required before transmission interpretation.,Repeat/verify sequence before action.
+f17d7f92,39be6563,yes,13,78e6e3e1 -> f17d7f92,1.000,Moderate confidence,pass,Pairwise SNP distance is too high for direct transmission interpretation.,Model-prioritised exposure review — confirm with pairwise SNP and epidemiology before action.
+78e6e3e1,39be6563,yes,15,fb419fc3 -> 78e6e3e1,1.000,Moderate confidence,pass,Pairwise SNP distance is too high for direct transmission interpretation.,Model-prioritised exposure review — confirm with pairwise SNP and epidemiology before action.
+a8d08022,04e65e42,yes,16,a8d08022 -> b4218364,1.000,Exploratory,pass,Pairwise SNP distance is too high for direct transmission interpretation.,Model-prioritised exposure review — confirm with pairwise SNP and epidemiology before action.
+078d9814,none,no,n/a,3a23165b -> 078d9814,0.525,Exploratory,not_reported,Pairwise SNP required before transmission interpretation.,Repeat/verify sequence before action.
+b36fc4ca,39be6563,yes,22,fb419fc3 -> b36fc4ca,1.000,Exploratory,fail,Pairwise SNP required before transmission interpretation.,Repeat/verify sequence before action.
+fb419fc3,39be6563,yes,17,fb419fc3 -> b36fc4ca,1.000,Moderate confidence,pass,Pairwise SNP distance is too high for direct transmission interpretation.,Model-prioritised exposure review — confirm with pairwise SNP and epidemiology before action.
+b6530faa,604b7f43,yes,22,b6530faa -> 1a574171,1.000,Moderate confidence,pass,Pairwise SNP distance is too high for direct transmission interpretation.,Model-prioritised exposure review — confirm with pairwise SNP and epidemiology before action.
+b1548d7e,none,yes,884,e0b496a8 -> b1548d7e,0.994,Exploratory,pass,Outbreaker-only link: requires genomic validation.,Model-prioritised exposure review — confirm with pairwise SNP and epidemiology before action.
+ce1cd7ce,04e65e42,yes,16,3a23165b -> ce1cd7ce,1.000,Exploratory,fail,Pairwise SNP required before transmission interpretation.,Repeat/verify sequence before action.
+740131f2,none,no,n/a,24cc59c8 -> 740131f2,1.000,Exploratory,not_reported,Pairwise SNP required before transmission interpretation.,Repeat/verify sequence before action.
+e0b496a8,none,no,n/a,89f900c2 -> e0b496a8,1.000,Exploratory,not_reported,Pairwise SNP required before transmission interpretation.,Repeat/verify sequence before action.
+24cc59c8,none,yes,884,e0b496a8 -> 24cc59c8,1.000,Exploratory,fail,Pairwise SNP required before transmission interpretation.,Repeat/verify sequence before action.
+3a23165b,04e65e42,yes,13,89f900c2 -> 3a23165b,1.000,Exploratory,pass,Outbreaker-only link: requires genomic validation.,Model-prioritised exposure review — confirm with pairwise SNP and epidemiology before action.
+89f900c2,none,no,n/a,89f900c2 -> 3a23165b,1.000,Exploratory,not_reported,Pairwise SNP required before transmission interpretation.,Repeat/verify sequence before action.

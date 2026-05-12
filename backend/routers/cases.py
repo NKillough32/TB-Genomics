@@ -3,11 +3,12 @@ import json
 import re
 import csv
 import hashlib
+import logging
 from statistics import median
 from itertools import combinations
 
 from datetime import datetime
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import FileResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -17,6 +18,12 @@ from backend.data_safety import enforce_operational_dataset, get_data_safety_sta
 
 router = APIRouter(prefix="/cases", tags=["cases"])
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+logger = logging.getLogger(__name__)
+
+
+def _export_path(*parts: str) -> str:
+    """Return an absolute path under the repository export directory."""
+    return os.path.join(PROJECT_ROOT, "exports", *parts)
 
 
 def get_db():
@@ -266,30 +273,6 @@ def _resistance_profile_text(predicted_dr: object) -> str:
     return str(predicted_dr)[:64]
 
 
-def _validate_drug_gene_pair(drug: str, gene: str) -> tuple:
-    """Validate drug-gene combination against known TB resistance mapping. Returns (is_valid, message)."""
-    DRUG_GENE_MAPPING = {
-        "rifampicin": {"rpoB"},
-        "isoniazid": {"katG", "inhA", "fabG1"},
-        "pyrazinamide": {"pncA"},
-        "ethambutol": {"embB"},
-        "fluoroquinolone": {"gyrA", "gyrB"},
-        "aminoglycoside": {"rrs", "eis"},
-    }
-    if not drug or not gene or gene.lower() == "n/a":
-        return (None, "Gene not assigned")
-    drug_lower = drug.lower().strip()
-    gene_lower = gene.lower().strip()
-    for canonical_drug, expected_genes in DRUG_GENE_MAPPING.items():
-        if canonical_drug in drug_lower:
-            if any(g in gene_lower for g in expected_genes):
-                return (True, "Valid")
-            else:
-                expected_str = ", ".join(sorted(expected_genes))
-                return (False, f"Unusual: expect {expected_str}")
-    return (None, "Drug not in standard list")
-
-
 def _iter_resistance_mutations(mutations: object):
     """Yield normalized mutation rows from flexible JSON structures."""
     if not mutations:
@@ -474,7 +457,7 @@ def _sha256_of_file(path: str) -> str:
 
 
 def _write_csv_rows(path: str, rows: list[list[object]]) -> None:
-    """Write UTF-8 CSV rows for appendix companion files; swallow IO errors for report continuity."""
+    """Write UTF-8 CSV rows for appendix companion files without aborting report generation."""
     try:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w", newline="", encoding="utf-8") as handle:
@@ -482,8 +465,7 @@ def _write_csv_rows(path: str, rows: list[list[object]]) -> None:
             for row in rows:
                 writer.writerow(["" if value is None else str(value) for value in row])
     except Exception:
-        # Report generation must not fail if companion CSV export is unavailable.
-        pass
+        logger.exception("Unable to write companion CSV export to %s", path)
 
 
 def _confidence_tier(
@@ -514,23 +496,107 @@ def _format_table_caption(caption_text: str, table_number: int) -> str:
     return f"Table {table_number}. {raw}" if raw else f"Table {table_number}."
 
 
-@router.get("/")
-def list_cases(db: Session = Depends(get_db)):
-    return db.query(Case).all()
+def _to_int(value: object) -> int:
+    return int(value or 0)
 
-    eligible_cases = int(kpi_rows["eligible_cases"] or 0)
-    sequenced_cases = int(kpi_rows["sequenced_cases"] or 0)
-    qc_reported_cases = int(kpi_rows["qc_reported_cases"] or 0)
-    qc_pass_cases = int(kpi_rows["qc_pass_cases"] or 0)
 
-    sequenced_pct = None
-    if eligible_cases:
-        sequenced_pct = round((sequenced_cases / eligible_cases) * 100.0, 2)
+def _to_optional_pct(numerator: int, denominator: int) -> float | None:
+    if not denominator:
+        return None
+    return round((numerator / denominator) * 100.0, 2)
 
-    qc_pass_pct = None
-    if qc_reported_cases:
-        qc_pass_pct = round((qc_pass_cases / qc_reported_cases) * 100.0, 2)
 
+def _table_exists(db: Session, table_name: str) -> bool:
+    return bool(
+        db.execute(
+            text("SELECT to_regclass(:table_name) IS NOT NULL"),
+            {"table_name": f"public.{table_name}"},
+        ).scalar()
+    )
+
+
+def surveillance_kpis(weeks: int = 12, db: Session = Depends(get_db)) -> dict:
+    """Return programme surveillance KPIs for cases in the recent reporting window."""
+    weeks = max(1, min(int(weeks or 12), 104))
+    has_sequences = _table_exists(db, "consensus_sequences")
+    has_qc = _table_exists(db, "sample_qc_metrics")
+
+    sequence_join = (
+        "LEFT JOIN consensus_sequences cs ON cs.sample_id = c.pseudonymised_case_id"
+        if has_sequences
+        else ""
+    )
+    qc_join = (
+        "LEFT JOIN sample_qc_metrics sqm ON sqm.sample_id = c.pseudonymised_case_id"
+        if has_qc
+        else ""
+    )
+    sequenced_expr = "COUNT(DISTINCT cs.sample_id)::int" if has_sequences else "0::int"
+    qc_reported_expr = "COUNT(DISTINCT sqm.sample_id)::int" if has_qc else "0::int"
+    qc_pass_expr = (
+        "COUNT(DISTINCT sqm.sample_id) FILTER (WHERE LOWER(COALESCE(sqm.qc_status, '')) IN ('pass', 'passed'))::int"
+        if has_qc
+        else "0::int"
+    )
+    qc_fail_expr = (
+        "COUNT(DISTINCT sqm.sample_id) FILTER (WHERE sqm.qc_status IS NOT NULL AND LOWER(COALESCE(sqm.qc_status, '')) NOT IN ('pass', 'passed'))::int"
+        if has_qc
+        else "0::int"
+    )
+    contamination_expr = (
+        "COUNT(DISTINCT sqm.sample_id) FILTER (WHERE COALESCE(sqm.contamination_flag, false))::int"
+        if has_qc
+        else "0::int"
+    )
+    median_expr = (
+        "CAST(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (sqm.reported_at::timestamp - c.specimen_date::timestamp)) / 86400.0) "
+        "FILTER (WHERE sqm.reported_at IS NOT NULL AND c.specimen_date IS NOT NULL) AS float)"
+        if has_qc
+        else "NULL::float"
+    )
+
+    params = {"weeks": weeks}
+    kpi_rows = db.execute(
+        text(
+            f"""
+            SELECT
+                COUNT(DISTINCT c.pseudonymised_case_id)::int AS eligible_cases,
+                {sequenced_expr} AS sequenced_cases,
+                {qc_reported_expr} AS qc_reported_cases,
+                {qc_pass_expr} AS qc_pass_cases,
+                {qc_fail_expr} AS qc_fail_cases,
+                {contamination_expr} AS contamination_flag_cases,
+                {median_expr} AS median_days_specimen_to_qc
+            FROM cases c
+            {sequence_join}
+            {qc_join}
+            WHERE c.specimen_date >= CURRENT_DATE - (:weeks * INTERVAL '7 days')
+            """
+        ),
+        params,
+    ).mappings().first() or {}
+
+    region_rows = db.execute(
+        text(
+            f"""
+            SELECT
+                COALESCE(c.geographic_region, 'Unknown') AS region,
+                COUNT(DISTINCT c.pseudonymised_case_id)::int AS eligible_cases,
+                {sequenced_expr} AS sequenced_cases
+            FROM cases c
+            {sequence_join}
+            WHERE c.specimen_date >= CURRENT_DATE - (:weeks * INTERVAL '7 days')
+            GROUP BY COALESCE(c.geographic_region, 'Unknown')
+            ORDER BY eligible_cases DESC, region
+            """
+        ),
+        params,
+    ).mappings().all()
+
+    eligible_cases = _to_int(kpi_rows["eligible_cases"])
+    sequenced_cases = _to_int(kpi_rows["sequenced_cases"])
+    qc_reported_cases = _to_int(kpi_rows["qc_reported_cases"])
+    qc_pass_cases = _to_int(kpi_rows["qc_pass_cases"])
     median_days = kpi_rows["median_days_specimen_to_qc"]
     if median_days is not None:
         median_days = round(float(median_days), 2)
@@ -539,15 +605,37 @@ def list_cases(db: Session = Depends(get_db)):
         "window_weeks": weeks,
         "eligible_cases": eligible_cases,
         "sequenced_cases": sequenced_cases,
-        "sequenced_pct": sequenced_pct,
+        "sequenced_pct": _to_optional_pct(sequenced_cases, eligible_cases),
         "qc_reported_cases": qc_reported_cases,
         "qc_pass_cases": qc_pass_cases,
-        "qc_fail_cases": int(kpi_rows["qc_fail_cases"] or 0),
-        "qc_pass_pct": qc_pass_pct,
-        "contamination_flag_cases": int(kpi_rows["contamination_flag_cases"] or 0),
+        "qc_fail_cases": _to_int(kpi_rows["qc_fail_cases"]),
+        "qc_pass_pct": _to_optional_pct(qc_pass_cases, qc_reported_cases),
+        "contamination_flag_cases": _to_int(kpi_rows["contamination_flag_cases"]),
         "median_days_specimen_to_qc": median_days,
-        "representativeness_by_region": kpi_rows["representativeness_by_region"] or [],
+        "representativeness_by_region": [
+            {
+                "region": row["region"],
+                "eligible_cases": _to_int(row["eligible_cases"]),
+                "sequenced_cases": _to_int(row["sequenced_cases"]),
+                "sequenced_pct": _to_optional_pct(_to_int(row["sequenced_cases"]), _to_int(row["eligible_cases"])),
+            }
+            for row in region_rows
+        ],
     }
+
+
+@router.get("/")
+def list_cases(
+    limit: int = Query(100, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+):
+    return db.query(Case).offset(offset).limit(limit).all()
+
+
+@router.get("/kpis")
+def case_kpis(weeks: int = Query(12, ge=1, le=104), db: Session = Depends(get_db)):
+    return surveillance_kpis(weeks=weeks, db=db)
 
 
 @router.get("/regions")
@@ -565,7 +653,7 @@ def list_regions(db: Session = Depends(get_db)):
 
 @router.get("/outbreaker-status")
 def outbreaker_status():
-    summary_path = "exports/outbreaker_summary.json"
+    summary_path = _export_path("outbreaker_summary.json")
     provenance = None
     if os.path.exists(summary_path):
         try:
@@ -576,9 +664,9 @@ def outbreaker_status():
             provenance = None
 
     return {
-        "cases_export": os.path.exists("exports/cases.csv"),
-        "dna_export": os.path.exists("exports/dna.fasta"),
-        "results_rds": os.path.exists("exports/outbreaker2_results.rds"),
+        "cases_export": os.path.exists(_export_path("cases.csv")),
+        "dna_export": os.path.exists(_export_path("dna.fasta")),
+        "results_rds": os.path.exists(_export_path("outbreaker2_results.rds")),
         "provenance": provenance,
         "is_mock": provenance == "mock",
     }
@@ -629,7 +717,7 @@ def outbreaker_analysis():
     }
     
     # Check for analysis summary
-    summary_path = "exports/outbreaker_summary.json"
+    summary_path = _export_path("outbreaker_summary.json")
     if os.path.exists(summary_path):
         try:
             with open(summary_path, "r") as f:
@@ -643,7 +731,7 @@ def outbreaker_analysis():
             result["status"] = "error"
             result["message"] = str(e)
 
-    network_path = "exports/transmission_network.json"
+    network_path = _export_path("transmission_network.json")
     if os.path.exists(network_path):
         try:
             with open(network_path, "r", encoding="utf-8") as f:
@@ -656,7 +744,7 @@ def outbreaker_analysis():
         except Exception:
             result["transmission_network"] = None
 
-    secondary_path = "exports/secondary_engine_validation.json"
+    secondary_path = _export_path("secondary_engine_validation.json")
     if os.path.exists(secondary_path):
         try:
             with open(secondary_path, "r", encoding="utf-8") as f:
@@ -694,7 +782,7 @@ def lineage_dr_validation(db: Session = Depends(get_db)):
     analysis_summary = _lineage_analysis_summary(db)
     analysis_epi_summary = _lineage_epi_summary(db)
 
-    path = "exports/lineage_dr_validation.json"
+    path = _export_path("lineage_dr_validation.json")
     if not os.path.exists(path):
         return {
             "status": "no_results",
@@ -738,8 +826,8 @@ def outbreak_report(db: Session = Depends(get_db)):
     except Exception as e:
         return {"error": f"PDF generation dependency missing: {e}"}
 
-    os.makedirs("exports", exist_ok=True)
-    report_path = os.path.join("exports", "outbreaker_investigation_report.pdf")
+    os.makedirs(_export_path(), exist_ok=True)
+    report_path = _export_path("outbreaker_investigation_report.pdf")
 
     # Guard: if the PDF is already open (e.g. in a viewer), fail fast with a
     # clear 409 rather than a cryptic PermissionError deep inside ReportLab.
@@ -767,7 +855,7 @@ def outbreak_report(db: Session = Depends(get_db)):
     ).scalar() or 0
 
     summary_data = None
-    summary_path = os.path.join("exports", "outbreaker_summary.json")
+    summary_path = _export_path("outbreaker_summary.json")
     if os.path.exists(summary_path):
         try:
             with open(summary_path, "r", encoding="utf-8") as f:
@@ -776,7 +864,7 @@ def outbreak_report(db: Session = Depends(get_db)):
             summary_data = None
 
     transmission_data = None
-    transmission_path = os.path.join("exports", "transmission_network.json")
+    transmission_path = _export_path("transmission_network.json")
     if os.path.exists(transmission_path):
         try:
             with open(transmission_path, "r", encoding="utf-8") as f:
@@ -785,7 +873,7 @@ def outbreak_report(db: Session = Depends(get_db)):
             transmission_data = None
 
     def load_json_artifact(filename: str):
-        path = os.path.join("exports", filename)
+        path = _export_path(filename)
         if not os.path.exists(path):
             return None
         try:
@@ -1196,7 +1284,7 @@ def outbreak_report(db: Session = Depends(get_db)):
         "outbreaker_phylo.png",
         "outbreaker_resistance.png",
     ]
-    existing_graphics = [g for g in graphic_files if os.path.exists(os.path.join("exports", g))]
+    existing_graphics = [g for g in graphic_files if os.path.exists(_export_path(g))]
 
     def build_report_image(image_path: str):
         max_width = 6.4 * inch
@@ -1241,7 +1329,7 @@ def outbreak_report(db: Session = Depends(get_db)):
             plt.legend(loc="lower right", fontsize=8)
             plt.tight_layout()
 
-            chart_path = os.path.join("exports", "outbreaker_weekly_trends.png")
+            chart_path = _export_path("outbreaker_weekly_trends.png")
             plt.savefig(chart_path, dpi=140)
             plt.close()
             return chart_path
@@ -2332,7 +2420,7 @@ def outbreak_report(db: Session = Depends(get_db)):
         _actions_b_tbl.setStyle(_a1b_ts)
         case_classif_table_for_appendix = (_classif_tbl, "Table A1a. Case classification: cluster assignment, pairwise SNP availability, nearest-neighbour SNP, outbreaker2 posterior, confidence tier, and QC status.")
         case_actions_b_table_for_appendix = (_actions_b_tbl, "Table A1b. Case actions: likely genomic link, validation warning, and recommended action. Verify all links with pairwise SNP and epidemiology before field escalation.")
-        _write_csv_rows(os.path.join(PROJECT_ROOT, "exports", "appendix_a_case_level_actions.csv"), case_action_csv_rows)
+        _write_csv_rows(_export_path("appendix_a_case_level_actions.csv"), case_action_csv_rows)
         story.append(Paragraph(
             "Detailed case classification (Table A1a) and recommended actions (Table A1b) are in Appendix A. "
             "Full data exported to exports/appendix_a_case_level_actions.csv.",
@@ -2491,7 +2579,7 @@ def outbreak_report(db: Session = Depends(get_db)):
     build_pair_rows(genomically_discordant[:20], "Table 14. Genomically discordant model predictions (posterior >0.70 but pairwise SNP >12). SNP distance does not support direct recent transmission; likely reflects extended genetic relatedness or model misspecification.", "SNP>12 discordant")
     build_pair_rows(qc_resolution_pairs[:20], "Table 15. Model-prioritised pairs involving QC-failed or not-reported samples. Hold pending repeat sequencing or QC review.", "QC unresolved")
     if len(_pairs_csv_rows) > 1:
-        _write_csv_rows(os.path.join(PROJECT_ROOT, "exports", "transmission_pairs.csv"), _pairs_csv_rows)
+        _write_csv_rows(_export_path("transmission_pairs.csv"), _pairs_csv_rows)
 
     # ── Current Outbreak Interpretation & Top Actions ──────────────────────────────────
     section_divider()
@@ -2621,10 +2709,10 @@ def outbreak_report(db: Session = Depends(get_db)):
             full_disc_table,
             "Table A2. Discordant pairs (coded). See code definitions above. Full data including interpretation text is in exports/appendix_b_full_discordance_review.csv.",
         )
-        _write_csv_rows(os.path.join(PROJECT_ROOT, "exports", "appendix_b_full_discordance_review.csv"), full_disc_csv_rows)
+        _write_csv_rows(_export_path("appendix_b_full_discordance_review.csv"), full_disc_csv_rows)
     else:
         story.append(Paragraph("No discordant pairs identified from available outputs.", styles["Normal"]))
-        _write_csv_rows(os.path.join(PROJECT_ROOT, "exports", "appendix_b_full_discordance_review.csv"), full_disc_csv_rows)
+        _write_csv_rows(_export_path("appendix_b_full_discordance_review.csv"), full_disc_csv_rows)
 
     # ── Pairwise SNP Matrix Summary ───────────────────────────────────────────
     section_divider()
@@ -2636,7 +2724,7 @@ def outbreak_report(db: Session = Depends(get_db)):
         "unavailable SNP (QC-failed or no consensus sequence) requires repeat sequencing before inference.",
         interp_style,
     ))
-    _tp_path = os.path.join("exports", "transmission_pairs.csv")
+    _tp_path = _export_path("transmission_pairs.csv")
     _snp_bins = {"0–5 SNPs (direct)": 0, "6–12 SNPs (probable)": 0, "13–25 SNPs (possible shared source)": 0, ">25 SNPs (unlikely direct)": 0, "SNP unavailable (QC/sequence missing)": 0}
     _snp_pairs_rows = [["Pair", "SNP distance", "Category", "Epi link", "Flag"]]
     _snp_available = 0
@@ -3158,7 +3246,7 @@ def outbreak_report(db: Session = Depends(get_db)):
     _epi_bins: dict = {}
     _epi_corroborated = 0
     _epi_total = 0
-    _epi_path = os.path.join("exports", "transmission_pairs.csv")
+    _epi_path = _export_path("transmission_pairs.csv")
     if os.path.exists(_epi_path):
         import csv as _csv2
         with open(_epi_path, newline="", encoding="utf-8") as _ef:
@@ -3567,7 +3655,7 @@ def outbreak_report(db: Session = Depends(get_db)):
 
     if existing_graphics:
         for fig_num, name in enumerate(existing_graphics, start=2):
-            image_path = os.path.join("exports", name)
+            image_path = _export_path(name)
             fig_parts = [build_report_image(image_path)]
             if name in {"outbreaker_tree.png", "outbreaker_phylo.png"}:
                 legend_rows = [
@@ -3750,9 +3838,9 @@ def outbreak_report(db: Session = Depends(get_db)):
         ["outbreaker2 version", str(summary_data.get("analysis_engine_version") if summary_data else None) if (summary_data and summary_data.get("analysis_engine_version")) else f"Not recorded \u2014 engine: {summary_data.get('analysis_engine', 'outbreaker2') if summary_data else 'outbreaker2'} (mandatory before external circulation)"],
         ["Random seed", str(summary_data.get("random_seed") if summary_data else None) if (summary_data and summary_data.get("random_seed") is not None) else "Not set \u2014 run is non-reproducible without a fixed seed; mandatory before external circulation"],
         ["Model priors", str(summary_data.get("model_priors") if summary_data else None) if (summary_data and summary_data.get("model_priors")) else (f"Default outbreaker2 priors; MCMC: {summary_data.get('n_generations','?')} generations, burnin {summary_data.get('burnin','?')}, {summary_data.get('n_samples','?')} posterior samples" if summary_data else "Not recorded \u2014 populate before circulation")],
-        ["Input hash: exports/cases.csv", _sha256_of_file(os.path.join("exports", "cases.csv"))],
-        ["Input hash: exports/dna.fasta", _sha256_of_file(os.path.join("exports", "dna.fasta"))],
-        ["Input hash: exports/transmission_network.json", _sha256_of_file(os.path.join("exports", "transmission_network.json"))],
+        ["Input hash: exports/cases.csv", _sha256_of_file(_export_path("cases.csv"))],
+        ["Input hash: exports/dna.fasta", _sha256_of_file(_export_path("dna.fasta"))],
+        ["Input hash: exports/transmission_network.json", _sha256_of_file(_export_path("transmission_network.json"))],
     ]
     reproducibility_table = Table(
         wrap_rows(reproducibility_rows),
@@ -3919,7 +4007,7 @@ def outbreak_report(db: Session = Depends(get_db)):
         # If the default report file is open/locked (common on Windows),
         # generate a timestamped filename so report creation still succeeds.
         stamped_name = f"outbreaker_investigation_report_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.pdf"
-        output_path = os.path.join("exports", stamped_name)
+        output_path = _export_path(stamped_name)
         doc = build_doc(output_path)
         doc.build(list(story))
 
@@ -3933,7 +4021,7 @@ def outbreak_report(db: Session = Depends(get_db)):
 @router.get("/outbreaker-image/{filename}")
 def get_outbreaker_image(filename: str):
     """Serve outbreaker2 generated graphics."""
-    path = f"exports/{filename}"
+    path = _export_path(filename)
     
     # Security: only serve expected outbreaker2 images
     if not filename.startswith("outbreaker_") or not filename.endswith(".png"):

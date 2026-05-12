@@ -830,13 +830,16 @@ def _load_export_json(filename: str):
         return {"error": f"Could not read {filename}: {exc}"}
 
 
-def _load_export_csv(filename: str, limit: int = 50) -> list[dict]:
+def _load_export_csv(filename: str, limit: int | None = 50) -> list[dict]:
     path = _export_path(filename)
     if not os.path.exists(path):
         return []
     try:
         with open(path, "r", encoding="utf-8-sig", newline="") as f:
-            return [row for _, row in zip(range(limit), csv.DictReader(f))]
+            reader = csv.DictReader(f)
+            if limit is None:
+                return list(reader)
+            return [row for _, row in zip(range(limit), reader)]
     except Exception:
         return []
 
@@ -872,10 +875,8 @@ def _image_data_uri(path: str) -> str | None:
         return None
 
 
-@router.get("/outbreak-report.html", response_class=HTMLResponse)
-def outbreak_report_html(db: Session = Depends(get_db)):
-    """Generate and return a publication-friendly static HTML outbreak report."""
-    enforce_operational_dataset(db, "cases/outbreak-report.html")
+def _build_outbreak_report_html(db: Session, full: bool = False) -> str:
+    """Build a static HTML outbreak report from database counts and export artifacts."""
     os.makedirs(_export_path(), exist_ok=True)
 
     generated_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
@@ -897,8 +898,10 @@ def outbreak_report_html(db: Session = Depends(get_db)):
     except Exception as exc:
         kpi_data = {"warning": str(exc)}
 
-    action_rows = _load_export_csv("appendix_a_case_level_actions.csv", limit=25)
-    discordance_rows = _load_export_csv("appendix_b_full_discordance_review.csv", limit=25)
+    row_limit = None if full else 25
+    network_limit = None if full else 15
+    action_rows = _load_export_csv("appendix_a_case_level_actions.csv", limit=row_limit)
+    discordance_rows = _load_export_csv("appendix_b_full_discordance_review.csv", limit=row_limit)
 
     key_nodes = []
     if isinstance(transmission_data, dict):
@@ -916,7 +919,32 @@ def outbreak_report_html(db: Session = Depends(get_db)):
                 f'<figure><img src="{uri}" alt="{_safe_html(label)}"><figcaption>{_safe_html(label)}</figcaption></figure>'
             )
 
+    report_label = "Full HTML" if full else "Short HTML"
+    report_filename = (
+        "outbreaker_investigation_report_full.html"
+        if full
+        else "outbreaker_investigation_report.html"
+    )
+    action_heading = "Case-level operational actions (all rows)" if full else "Case-level operational actions (first 25 rows)"
+    discordance_heading = "Discordance review (all rows)" if full else "Discordance review (first 25 rows)"
+    priority_heading = "Priority nodes (all rows)" if full else "Priority nodes (first 15 rows)"
+    links_heading = "Transmission links (all rows)" if full else "Top transmission links (first 15 rows)"
+    raw_artifact_section = ""
+    if full:
+        raw_artifact_section = f"""
+  <section class="card" id="raw-artifacts">
+    <h2>Full machine-readable artifacts</h2>
+    <p class="muted">These sections mirror the JSON exports used to produce the report so reviewers can inspect the complete source artifacts alongside the summary tables.</p>
+    <h3>Outbreaker2 summary artifact</h3>
+    <pre>{_safe_html(json.dumps(summary_data, indent=2, default=str) if summary_data else 'No outbreaker summary artifact found.')}</pre>
+    <h3>Transmission network artifact</h3>
+    <pre>{_safe_html(json.dumps(transmission_data, indent=2, default=str) if transmission_data else 'No transmission network artifact found.')}</pre>
+    <h3>Sequence clustering summary artifact</h3>
+    <pre>{_safe_html(json.dumps(sequence_summary_data, indent=2, default=str) if sequence_summary_data else 'No sequence clustering summary artifact found.')}</pre>
+  </section>"""
+
     publication_notes = [
+        f"This is the {report_label.lower()} version of the browser report; the full and short versions are saved side by side in exports/ for review.",
         "Single-file HTML output is easier to publish online and review in browsers than a paginated PDF.",
         "Responsive tables and figures reduce the PDF wrapping and page-break formatting issues previously seen.",
         "Publish only after local information-governance review; this file may contain case-level operational details.",
@@ -940,7 +968,7 @@ def outbreak_report_html(db: Session = Depends(get_db)):
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Outbreak Investigation Report</title>
+  <title>Outbreak Investigation Report ({_safe_html(report_label)})</title>
   <style>{css}</style>
 </head>
 <body>
@@ -954,7 +982,7 @@ def outbreak_report_html(db: Session = Depends(get_db)):
     <ul>{''.join(f'<li>{_safe_html(note)}</li>' for note in publication_notes)}</ul>
   </section>
   <nav class="card toc" aria-label="Report sections">
-    <a href="#summary">Executive summary</a><a href="#outbreaker">Outbreaker2</a><a href="#transmission">Transmission network</a><a href="#lineage">Lineage/DR</a><a href="#quality">Quality and methods</a><a href="#actions">Action appendices</a><a href="#figures">Figures</a>
+    <a href="#summary">Executive summary</a><a href="#outbreaker">Outbreaker2</a><a href="#transmission">Transmission network</a><a href="#lineage">Lineage/DR</a><a href="#quality">Quality and methods</a><a href="#actions">Action appendices</a>{'<a href="#raw-artifacts">Raw artifacts</a>' if full else ''}<a href="#figures">Figures</a>
   </nav>
   <section class="card" id="summary">
     <h2>Executive summary</h2>
@@ -962,7 +990,7 @@ def outbreak_report_html(db: Session = Depends(get_db)):
       <div class="metric"><span>Total cases</span><strong>{_safe_html(total_cases)}</strong></div>
       <div class="metric"><span>Clustered cases</span><strong>{_safe_html(clustered_cases)}</strong></div>
       <div class="metric"><span>Open clusters</span><strong>{_safe_html(open_clusters)}</strong></div>
-      <div class="metric"><span>Report format</span><strong>HTML</strong></div>
+      <div class="metric"><span>Report format</span><strong>{_safe_html(report_label)}</strong></div>
     </div>
     <h3>Surveillance KPIs</h3>
     {_html_kv_table(kpi_data if isinstance(kpi_data, dict) else None, [('Eligible cases','eligible_cases'),('Sequenced cases','sequenced_cases'),('Sequencing coverage %','sequencing_coverage_pct'),('QC pass %','qc_pass_pct'),('Warning','warning')])}
@@ -974,10 +1002,10 @@ def outbreak_report_html(db: Session = Depends(get_db)):
   <section class="card" id="transmission">
     <h2>Transmission network</h2>
     {_html_kv_table(transmission_data if isinstance(transmission_data, dict) else None, [('Generated at','generated_at'),('Inference source','inference_source'),('Provenance','provenance'),('Node count','node_count'),('Edge count','edge_count'),('High-confidence edges','high_confidence_edges')])}
-    <h3>Priority nodes</h3>
-    {_html_data_table(key_nodes[:15], [('Case','case_id'),('Cluster','cluster_id'),('Region','region'),('Risk score','risk_score'),('Risk band','risk_band'),('Outgoing','outgoing_links'),('Incoming','incoming_links')], 'No priority-node data available.')}
-    <h3>Top transmission links</h3>
-    {_html_data_table(edges[:15], [('From','source'),('To','target'),('Probability','probability'),('Confidence','confidence'),('Inference','inference')], 'No transmission-link data available.')}
+    <h3>{_safe_html(priority_heading)}</h3>
+    {_html_data_table(key_nodes if network_limit is None else key_nodes[:network_limit], [('Case','case_id'),('Cluster','cluster_id'),('Region','region'),('Risk score','risk_score'),('Risk band','risk_band'),('Outgoing','outgoing_links'),('Incoming','incoming_links')], 'No priority-node data available.')}
+    <h3>{_safe_html(links_heading)}</h3>
+    {_html_data_table(edges if network_limit is None else edges[:network_limit], [('From','source'),('To','target'),('Probability','probability'),('Confidence','confidence'),('Inference','inference')], 'No transmission-link data available.')}
   </section>
   <section class="card" id="lineage">
     <h2>Lineage and drug-resistance readiness</h2>
@@ -996,11 +1024,12 @@ def outbreak_report_html(db: Session = Depends(get_db)):
   </section>
   <section class="card" id="actions">
     <h2>Action appendices</h2>
-    <h3>Case-level operational actions (first 25 rows)</h3>
+    <h3>{_safe_html(action_heading)}</h3>
     {_html_data_table(action_rows, [('Case','Case'),('Cluster','Cluster'),('Pairwise SNP?','Pairwise SNP?'),('Posterior','Posterior'),('Tier','Tier'),('QC','QC'),('Recommended action','Recommended action')], 'No case-level action export found.')}
-    <h3>Discordance review (first 25 rows)</h3>
+    <h3>{_safe_html(discordance_heading)}</h3>
     {_html_data_table(discordance_rows, [('Case pair','Case Pair'),('Pairwise SNP result','Pairwise SNP result'),('Outbreaker2','Outbreaker2'),('Pairwise SNP','Pairwise SNP'),('Posterior','Posterior'),('Code','Code'),('Interpretation','Interpretation')], 'No discordance-review export found.')}
   </section>
+  {raw_artifact_section}
   <section class="card" id="figures">
     <h2>Figures</h2>
     <div class="figures">{''.join(graphics_html) if graphics_html else '<p class="muted">No outbreak graphics found in exports/.</p>'}</div>
@@ -1012,10 +1041,24 @@ def outbreak_report_html(db: Session = Depends(get_db)):
 </body>
 </html>"""
 
-    output_path = _export_path("outbreaker_investigation_report.html")
+    output_path = _export_path(report_filename)
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(html)
-    return HTMLResponse(content=html)
+    return html
+
+
+@router.get("/outbreak-report.html", response_class=HTMLResponse)
+def outbreak_report_html(db: Session = Depends(get_db)):
+    """Generate and return the short publication-friendly static HTML outbreak report."""
+    enforce_operational_dataset(db, "cases/outbreak-report.html")
+    return HTMLResponse(content=_build_outbreak_report_html(db, full=False))
+
+
+@router.get("/outbreak-report.full.html", response_class=HTMLResponse)
+def outbreak_report_full_html(db: Session = Depends(get_db)):
+    """Generate and return the full static HTML outbreak report alongside the short version."""
+    enforce_operational_dataset(db, "cases/outbreak-report.full.html")
+    return HTMLResponse(content=_build_outbreak_report_html(db, full=True))
 
 
 @router.get("/outbreak-report")

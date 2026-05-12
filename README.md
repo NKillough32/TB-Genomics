@@ -164,9 +164,10 @@ Publication-friendly outbreak report
 The outbreak report is available in two formats:
 
 - GET /cases/outbreak-report for the existing PDF report.
-- GET /cases/outbreak-report.html for a browser-friendly HTML report that is saved to exports/outbreaker_investigation_report.html.
+- GET /cases/outbreak-report.html for the short browser-friendly HTML report that is saved to exports/outbreaker_investigation_report.html.
+- GET /cases/outbreak-report.full.html for the full browser-friendly HTML report that is saved alongside it as exports/outbreaker_investigation_report_full.html.
 
-Use the HTML report for online publication workflows after local information-governance review. The HTML output embeds outbreak graphics and uses responsive tables to reduce PDF-only wrapping and page-break formatting issues.
+Use the short HTML report for online publication workflows after local information-governance review, and use the full HTML report when reviewers need all action/discordance rows and complete JSON source artifacts alongside the summary. Both HTML outputs embed outbreak graphics and use responsive tables to reduce PDF-only wrapping and page-break formatting issues.
 
 TB surveillance KPI reporting
 -----------------------------

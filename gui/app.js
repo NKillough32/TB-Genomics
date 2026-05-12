@@ -307,6 +307,9 @@ function downloadOutbreakReport(){
 function openOutbreakReportHtml(){
 	window.open(`${API}/cases/outbreak-report.html`, '_blank');
 }
+function openFullOutbreakReportHtml(){
+	window.open(`${API}/cases/outbreak-report.full.html`, '_blank');
+}
 async function loadAuditTrail(){
 	const box=document.getElementById('auditTrail');
 	box.textContent='Loading audit trail...';

@@ -4,12 +4,15 @@ import re
 import csv
 import hashlib
 import logging
+import base64
+import html as html_lib
+from pathlib import Path
 from statistics import median
 from itertools import combinations
 
 from datetime import datetime
 from fastapi import APIRouter, Depends, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from backend.database import SessionLocal
@@ -809,6 +812,210 @@ def lineage_dr_validation(db: Session = Depends(get_db)):
     payload["analysis_epi_summary"] = analysis_epi_summary
     payload["effective_engines"] = _derive_effective_engine_status(payload)
     return payload
+
+
+def _safe_html(value) -> str:
+    """Escape a value for safe insertion into the static HTML report."""
+    return html_lib.escape("" if value is None else str(value), quote=True)
+
+
+def _load_export_json(filename: str):
+    path = _export_path(filename)
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as exc:
+        return {"error": f"Could not read {filename}: {exc}"}
+
+
+def _load_export_csv(filename: str, limit: int = 50) -> list[dict]:
+    path = _export_path(filename)
+    if not os.path.exists(path):
+        return []
+    try:
+        with open(path, "r", encoding="utf-8-sig", newline="") as f:
+            return [row for _, row in zip(range(limit), csv.DictReader(f))]
+    except Exception:
+        return []
+
+
+def _html_kv_table(mapping: dict | None, fields: list[tuple[str, str]]) -> str:
+    if not mapping:
+        return '<p class="muted">No data available.</p>'
+    rows = []
+    for label, key in fields:
+        value = mapping.get(key)
+        if isinstance(value, float):
+            value = f"{value:.2f}"
+        rows.append(f"<tr><th>{_safe_html(label)}</th><td>{_safe_html(value if value is not None else 'Not available')}</td></tr>")
+    return '<table class="kv"><tbody>' + ''.join(rows) + '</tbody></table>'
+
+
+def _html_data_table(rows: list[dict], columns: list[tuple[str, str]], empty_message: str) -> str:
+    if not rows:
+        return f'<p class="muted">{_safe_html(empty_message)}</p>'
+    header = ''.join(f'<th>{_safe_html(label)}</th>' for label, _ in columns)
+    body = []
+    for row in rows:
+        body.append('<tr>' + ''.join(f'<td>{_safe_html(row.get(key, ""))}</td>' for _, key in columns) + '</tr>')
+    return '<table><thead><tr>' + header + '</tr></thead><tbody>' + ''.join(body) + '</tbody></table>'
+
+
+def _image_data_uri(path: str) -> str | None:
+    try:
+        with open(path, "rb") as f:
+            encoded = base64.b64encode(f.read()).decode("ascii")
+        return f"data:image/png;base64,{encoded}"
+    except Exception:
+        return None
+
+
+@router.get("/outbreak-report.html", response_class=HTMLResponse)
+def outbreak_report_html(db: Session = Depends(get_db)):
+    """Generate and return a publication-friendly static HTML outbreak report."""
+    enforce_operational_dataset(db, "cases/outbreak-report.html")
+    os.makedirs(_export_path(), exist_ok=True)
+
+    generated_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+    total_cases = db.execute(text("SELECT COUNT(*) FROM cases")).scalar() or 0
+    clustered_cases = db.execute(text("SELECT COUNT(DISTINCT sample_id) FROM case_clusters")).scalar() or 0
+    open_clusters = db.execute(
+        text("SELECT COUNT(*) FROM clusters WHERE investigation_status = 'open'")
+    ).scalar() or 0
+
+    summary_data = _load_export_json("outbreaker_summary.json")
+    transmission_data = _load_export_json("transmission_network.json")
+    lineage_dr_data = _load_export_json("lineage_dr_validation.json")
+    secondary_validation_data = _load_export_json("secondary_engine_validation.json")
+    method_comparison_data = _load_export_json("cluster_method_comparison.json")
+    sequence_summary_data = _load_export_json("sequence_clustering_summary.json")
+
+    try:
+        kpi_data = surveillance_kpis(weeks=12, db=db)
+    except Exception as exc:
+        kpi_data = {"warning": str(exc)}
+
+    action_rows = _load_export_csv("appendix_a_case_level_actions.csv", limit=25)
+    discordance_rows = _load_export_csv("appendix_b_full_discordance_review.csv", limit=25)
+
+    key_nodes = []
+    if isinstance(transmission_data, dict):
+        key_nodes = transmission_data.get("key_nodes") or []
+    edges = []
+    if isinstance(transmission_data, dict):
+        edges = transmission_data.get("edges") or transmission_data.get("transmission_edges") or []
+
+    graphics_html = []
+    for image_path in sorted(Path(_export_path()).glob("outbreaker_*.png")):
+        uri = _image_data_uri(str(image_path))
+        if uri:
+            label = image_path.stem.replace("outbreaker_", "").replace("_", " ").title()
+            graphics_html.append(
+                f'<figure><img src="{uri}" alt="{_safe_html(label)}"><figcaption>{_safe_html(label)}</figcaption></figure>'
+            )
+
+    publication_notes = [
+        "Single-file HTML output is easier to publish online and review in browsers than a paginated PDF.",
+        "Responsive tables and figures reduce the PDF wrapping and page-break formatting issues previously seen.",
+        "Publish only after local information-governance review; this file may contain case-level operational details.",
+    ]
+
+    css = """
+    :root{--navy:#16324f;--steel:#365f7f;--muted:#64748b;--line:#d8e0ea;--bg:#f6f8fb;--card:#fff;--accent:#0f766e;}
+    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:#172033;font-family:Arial,Helvetica,sans-serif;line-height:1.45}
+    header{background:linear-gradient(135deg,var(--navy),#254f78);color:white;padding:2.2rem 6vw} header p{max-width:70rem;margin:.3rem 0 0;color:#e6eef7}
+    main{max-width:1180px;margin:0 auto;padding:1.5rem 1rem 3rem}.card{background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:0 8px 22px rgba(21,38,64,.07);margin:1rem 0;padding:1.2rem}
+    h1{font-size:2rem;margin:0 0 .2rem} h2{color:var(--navy);font-size:1.25rem;margin:.2rem 0 .8rem;border-bottom:2px solid var(--line);padding-bottom:.35rem} h3{color:var(--steel);font-size:1rem;margin:1rem 0 .5rem}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.8rem}.metric{border-left:5px solid var(--accent);background:#f8fffd;border-radius:10px;padding:.85rem}.metric strong{display:block;font-size:1.5rem;color:var(--navy)}
+    table{width:100%;border-collapse:collapse;margin:.7rem 0;display:block;overflow-x:auto} th,td{border:1px solid var(--line);padding:.5rem;text-align:left;vertical-align:top} th{background:#eaf1f8;color:#17324f}.kv{display:table}.kv th{width:32%}
+    .muted{color:var(--muted)} .note{background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:.75rem}.toc a{display:inline-block;margin:.2rem .7rem .2rem 0;color:#0f4c81}.figures{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem}.figures img{width:100%;height:auto;border:1px solid var(--line);border-radius:8px;background:white}.figures figcaption{text-align:center;color:var(--muted);font-size:.9rem;margin-top:.3rem}
+    pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:10px;padding:1rem;overflow:auto}.footer{font-size:.88rem;color:var(--muted)}
+    @media print{body{background:white}.card{box-shadow:none;break-inside:avoid} header{background:white;color:#172033;border-bottom:2px solid var(--line)} header p{color:#334155}}
+    """
+
+    html = f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Outbreak Investigation Report</title>
+  <style>{css}</style>
+</head>
+<body>
+<header>
+  <h1>NI TB Genomic Surveillance</h1>
+  <p>Outbreak Investigation Report — generated {_safe_html(generated_at)}</p>
+</header>
+<main>
+  <section class="card note">
+    <strong>HTML publication note:</strong>
+    <ul>{''.join(f'<li>{_safe_html(note)}</li>' for note in publication_notes)}</ul>
+  </section>
+  <nav class="card toc" aria-label="Report sections">
+    <a href="#summary">Executive summary</a><a href="#outbreaker">Outbreaker2</a><a href="#transmission">Transmission network</a><a href="#lineage">Lineage/DR</a><a href="#quality">Quality and methods</a><a href="#actions">Action appendices</a><a href="#figures">Figures</a>
+  </nav>
+  <section class="card" id="summary">
+    <h2>Executive summary</h2>
+    <div class="grid">
+      <div class="metric"><span>Total cases</span><strong>{_safe_html(total_cases)}</strong></div>
+      <div class="metric"><span>Clustered cases</span><strong>{_safe_html(clustered_cases)}</strong></div>
+      <div class="metric"><span>Open clusters</span><strong>{_safe_html(open_clusters)}</strong></div>
+      <div class="metric"><span>Report format</span><strong>HTML</strong></div>
+    </div>
+    <h3>Surveillance KPIs</h3>
+    {_html_kv_table(kpi_data if isinstance(kpi_data, dict) else None, [('Eligible cases','eligible_cases'),('Sequenced cases','sequenced_cases'),('Sequencing coverage %','sequencing_coverage_pct'),('QC pass %','qc_pass_pct'),('Warning','warning')])}
+  </section>
+  <section class="card" id="outbreaker">
+    <h2>Outbreaker2 summary</h2>
+    {_html_kv_table(summary_data if isinstance(summary_data, dict) else None, [('Analysis engine','analysis_engine'),('Generated at','generated_at'),('Case count','case_count'),('Posterior samples','posterior_samples'),('Likelihood mean','likelihood_mean'),('Likelihood SD','likelihood_sd')])}
+  </section>
+  <section class="card" id="transmission">
+    <h2>Transmission network</h2>
+    {_html_kv_table(transmission_data if isinstance(transmission_data, dict) else None, [('Generated at','generated_at'),('Inference source','inference_source'),('Provenance','provenance'),('Node count','node_count'),('Edge count','edge_count'),('High-confidence edges','high_confidence_edges')])}
+    <h3>Priority nodes</h3>
+    {_html_data_table(key_nodes[:15], [('Case','case_id'),('Cluster','cluster_id'),('Region','region'),('Risk score','risk_score'),('Risk band','risk_band'),('Outgoing','outgoing_links'),('Incoming','incoming_links')], 'No priority-node data available.')}
+    <h3>Top transmission links</h3>
+    {_html_data_table(edges[:15], [('From','source'),('To','target'),('Probability','probability'),('Confidence','confidence'),('Inference','inference')], 'No transmission-link data available.')}
+  </section>
+  <section class="card" id="lineage">
+    <h2>Lineage and drug-resistance readiness</h2>
+    {_html_kv_table(lineage_dr_data if isinstance(lineage_dr_data, dict) else None, [('Generated at','generated_at'),('Status','status'),('Scaffold version','scaffold_version')])}
+    <h3>Raw validation artifact</h3>
+    <pre>{_safe_html(json.dumps(lineage_dr_data, indent=2, default=str) if lineage_dr_data else 'No lineage/DR validation artifact found.')}</pre>
+  </section>
+  <section class="card" id="quality">
+    <h2>Quality, validation, and method comparison</h2>
+    <h3>Secondary engine validation</h3>
+    <pre>{_safe_html(json.dumps(secondary_validation_data, indent=2, default=str) if secondary_validation_data else 'No secondary engine validation artifact found.')}</pre>
+    <h3>Cross-method clustering comparison</h3>
+    <pre>{_safe_html(json.dumps(method_comparison_data, indent=2, default=str) if method_comparison_data else 'No method comparison artifact found.')}</pre>
+    <h3>Sequence clustering snapshot</h3>
+    {_html_kv_table(sequence_summary_data if isinstance(sequence_summary_data, dict) else None, [('Status','status'),('Method','method'),('Threshold SNP distance','threshold_snp_distance'),('Sequenced cases','sequenced_cases'),('Clustered cases','clustered_cases'),('Cluster count','cluster_count')])}
+  </section>
+  <section class="card" id="actions">
+    <h2>Action appendices</h2>
+    <h3>Case-level operational actions (first 25 rows)</h3>
+    {_html_data_table(action_rows, [('Case','Case'),('Cluster','Cluster'),('Pairwise SNP?','Pairwise SNP?'),('Posterior','Posterior'),('Tier','Tier'),('QC','QC'),('Recommended action','Recommended action')], 'No case-level action export found.')}
+    <h3>Discordance review (first 25 rows)</h3>
+    {_html_data_table(discordance_rows, [('Case pair','Case Pair'),('Pairwise SNP result','Pairwise SNP result'),('Outbreaker2','Outbreaker2'),('Pairwise SNP','Pairwise SNP'),('Posterior','Posterior'),('Code','Code'),('Interpretation','Interpretation')], 'No discordance-review export found.')}
+  </section>
+  <section class="card" id="figures">
+    <h2>Figures</h2>
+    <div class="figures">{''.join(graphics_html) if graphics_html else '<p class="muted">No outbreak graphics found in exports/.</p>'}</div>
+  </section>
+  <section class="card footer">
+    <p>Generated from TB Genomics backend artifacts. For operational use, interpret genomic findings with clinical history, contact tracing, epidemiology, QC status, and local governance review.</p>
+  </section>
+</main>
+</body>
+</html>"""
+
+    output_path = _export_path("outbreaker_investigation_report.html")
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write(html)
+    return HTMLResponse(content=html)
 
 
 @router.get("/outbreak-report")

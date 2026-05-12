@@ -19,6 +19,20 @@ function openDemoModeDialog(){
 	setTimeout(()=>input.focus(),0);
 }
 
+
+function escapeHtml(value){
+	return String(value??'')
+		.replace(/&/g,'&amp;')
+		.replace(/</g,'&lt;')
+		.replace(/>/g,'&gt;')
+		.replace(/"/g,'&quot;')
+		.replace(/'/g,'&#39;');
+}
+
+function escapeAttr(value){
+	return escapeHtml(value).replace(/`/g,'&#96;');
+}
+
 function closeDemoModeDialog(){
 	const modal=document.getElementById('demoModeModal');
 	if(!modal) return;
@@ -223,27 +237,27 @@ async function loadOutbreakerResults(){
 		
 		// Summary stats
 		html+='<h4>Case Summary</h4>';
-		html+=`<p>Total: ${summary.total_cases} | Clustered: ${summary.clustered_cases} | Unclustered: ${summary.unclustered_cases}</p>`;
+		html+=`<p>Total: ${escapeHtml(summary.total_cases)} | Clustered: ${escapeHtml(summary.clustered_cases)} | Unclustered: ${escapeHtml(summary.unclustered_cases)}</p>`;
 		
 		// Outbreaker analysis
 		html+='<h4>Outbreak Analysis</h4>';
-		html+=`<p>Status: ${analysis.status}</p>`;
+		html+=`<p>Status: ${escapeHtml(analysis.status)}</p>`;
 		if(analysis.summary){
 			const posteriorSamples=(analysis.summary.n_samples??'n/a');
 			const caseCount=(analysis.summary.case_count??'n/a');
-			html+=`<div class="kpi-strip">Case count: ${caseCount} | Posterior samples (MCMC): ${posteriorSamples} | Mean Likelihood: ${analysis.summary.likelihood_mean?.toFixed(2)}</div>`;
+			html+=`<div class="kpi-strip">Case count: ${escapeHtml(caseCount)} | Posterior samples (MCMC): ${escapeHtml(posteriorSamples)} | Mean Likelihood: ${escapeHtml(analysis.summary.likelihood_mean?.toFixed(2))}</div>`;
 		}
 
 		if(analysis.transmission_network){
 			const net=analysis.transmission_network;
 			html+='<h4>Transmission Network Insights</h4>';
-			html+=`<div class="kpi-strip">Nodes: ${net.node_count||0} | Links: ${net.edge_count||0} | Clusters: ${net.cluster_count||0} | High-confidence links: ${net.high_confidence_edges||0}</div>`;
+			html+=`<div class="kpi-strip">Nodes: ${escapeHtml(net.node_count||0)} | Links: ${escapeHtml(net.edge_count||0)} | Clusters: ${escapeHtml(net.cluster_count||0)} | High-confidence links: ${escapeHtml(net.high_confidence_edges||0)}</div>`;
 			if(Array.isArray(net.key_nodes)&&net.key_nodes.length>0){
 				html+='<p><strong>Potential priority spreaders</strong></p>';
 				html+='<table class="data-table">';
 				html+='<tr><th>Case</th><th>Cluster</th><th>Region</th><th>Risk</th><th>Band</th><th>Out</th><th>In</th></tr>';
 				for(const n of net.key_nodes.slice(0,8)){
-					html+=`<tr><td>${n.case_id}</td><td>${(n.cluster_id||'').toString().slice(0,8)}</td><td>${n.region||'Unknown'}</td><td>${n.risk_score??0}</td><td>${n.risk_band||'low'}</td><td>${n.outgoing_links??0}</td><td>${n.incoming_links??0}</td></tr>`;
+					html+=`<tr><td>${escapeHtml(n.case_id)}</td><td>${escapeHtml((n.cluster_id||'').toString().slice(0,8))}</td><td>${escapeHtml(n.region||'Unknown')}</td><td>${escapeHtml(n.risk_score??0)}</td><td>${escapeHtml(n.risk_band||'low')}</td><td>${escapeHtml(n.outgoing_links??0)}</td><td>${escapeHtml(n.incoming_links??0)}</td></tr>`;
 				}
 				html+='</table>';
 			}
@@ -254,7 +268,7 @@ async function loadOutbreakerResults(){
 			html+='<h4>Diagnostic Plots</h4>';
 			for(const graphic of analysis.graphics){
 				const fullUrl=graphic.url.startsWith('http')?graphic.url:`${API}${graphic.url}`;
-				html+=`<img src="${fullUrl}" class="media-plot" alt="${graphic.type}"/>`;
+				html+=`<img src="${escapeAttr(fullUrl)}" class="media-plot" alt="${escapeAttr(graphic.type)}"/>`;
 			}
 		}
 		
@@ -271,16 +285,16 @@ async function loadLineageDrValidation(){
 		const r=await fetch(`${API}/cases/lineage-dr-validation`);
 		const payload=await r.json();
 		let html='<div class="result-panel">';
-		html+=`<h4>Validation status: ${payload.status||'unknown'}</h4>`;
+		html+=`<h4>Validation status: ${escapeHtml(payload.status||'unknown')}</h4>`;
 		const summary=payload.analysis_summary||{};
 		const epi=payload.analysis_epi_summary||{};
 		html+=`<div class="kpi-strip">Interpreted samples: ${summary.interpreted_samples||0} | With lineage: ${summary.samples_with_lineage||0} | With resistance calls: ${summary.samples_with_resistance_calls||0}</div>`;
 		html+=`<div class="kpi-strip">Any resistance signal: ${epi.samples_with_any_resistance_signal||0} | Rifampicin-resistant (suspected): ${epi.rifampicin_resistant_suspected||0} | MDR (suspected): ${epi.mdr_suspected||0}</div>`;
 		if(Array.isArray(epi.top_lineages)&&epi.top_lineages.length>0){
-			const topLineages=epi.top_lineages.slice(0,4).map(x=>`${x.lineage}: ${x.count}`).join(' | ');
+			const topLineages=epi.top_lineages.slice(0,4).map(x=>`${escapeHtml(x.lineage)}: ${escapeHtml(x.count)}`).join(' | ');
 			html+=`<p><strong>Top lineages:</strong> ${topLineages}</p>`;
 		}
-		html+=`<pre class="log-box">${JSON.stringify(payload,null,2)}</pre>`;
+		html+=`<pre class="log-box">${escapeHtml(JSON.stringify(payload,null,2))}</pre>`;
 		html+='</div>';
 		box.innerHTML=html;
 	}catch(e){
@@ -326,12 +340,12 @@ async function advancedSearch(){
 		url+=params.join('&');
 		const r=await fetch(url);
 		const data=await r.json();
-		let html=`<div class="result-panel"><h4>Search Results: ${data.total_results} cases found</h4>`;
+		let html=`<div class="result-panel"><h4>Search Results: ${escapeHtml(data.total_results)} cases found</h4>`;
 		if(data.total_results>0){
 			html+='<table class="data-table">';
 			html+='<tr><th>Case ID</th><th>Date</th><th>Region</th><th>Lineage</th><th>Cluster</th><th>Action</th></tr>';
 			for(const c of data.cases){
-				html+=`<tr><td>${c.case_id}</td><td>${c.specimen_date}</td><td>${c.region}</td><td>${c.lineage}</td><td>${c.cluster_id||'-'}</td><td><button type="button" class="mini-btn" onclick="loadCaseHistory('${c.case_id}')">View history</button></td></tr>`;
+				html+=`<tr><td>${escapeHtml(c.case_id)}</td><td>${escapeHtml(c.specimen_date)}</td><td>${escapeHtml(c.region)}</td><td>${escapeHtml(c.lineage)}</td><td>${escapeHtml(c.cluster_id||'-')}</td><td><button type="button" class="mini-btn" onclick="loadCaseHistory(${escapeAttr(JSON.stringify(c.case_id||''))})">View history</button></td></tr>`;
 			}
 			html+='</table>';
 		}
@@ -352,13 +366,13 @@ async function loadCaseHistory(caseIdOverride){
 		const r=await fetch(`${API}/cases/case-history/${encodeURIComponent(caseId)}`);
 		const data=await r.json();
 		if(data.error){box.textContent=`Case not found: ${data.error}`;return;}
-		let html=`<div class="result-panel"><h4>Case ${data.case_id}</h4>`;
-		html+=`<div class="kpi-strip">Related Cases: ${data.related_cases} | Observation Span: ${data.observation_span_days} days</div>`;
+		let html=`<div class="result-panel"><h4>Case ${escapeHtml(data.case_id)}</h4>`;
+		html+=`<div class="kpi-strip">Related Cases: ${escapeHtml(data.related_cases)} | Observation Span: ${escapeHtml(data.observation_span_days)} days</div>`;
 		if(data.history.length>0){
 			html+='<table class="data-table">';
 			html+='<tr><th>Specimen Date</th><th>Region</th><th>Lineage</th><th>Status</th><th>Index?</th></tr>';
 			for(const h of data.history){
-				html+=`<tr><td>${h.specimen_date}</td><td>${h.region}</td><td>${h.lineage||'-'}</td><td>${h.status}</td><td>${h.is_index_case?'Y':''}</td></tr>`;
+				html+=`<tr><td>${escapeHtml(h.specimen_date)}</td><td>${escapeHtml(h.region)}</td><td>${escapeHtml(h.lineage||'-')}</td><td>${escapeHtml(h.status)}</td><td>${h.is_index_case?'Y':''}</td></tr>`;
 			}
 			html+='</table>';
 		}

@@ -875,17 +875,23 @@ def _image_data_uri(path: str) -> str | None:
         return None
 
 
-def _build_outbreak_report_html(db: Session, full: bool = False) -> str:
-    """Build a static HTML outbreak report from database counts and export artifacts."""
+def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa: C901
+    """Build a rich, PDF-aligned static HTML outbreak report from database counts and export artifacts."""
+    import datetime as _dt
+
     os.makedirs(_export_path(), exist_ok=True)
 
     generated_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+    today = _dt.date.today()
+
+    # ── Basic DB counts ────────────────────────────────────────────────────────
     total_cases = db.execute(text("SELECT COUNT(*) FROM cases")).scalar() or 0
     clustered_cases = db.execute(text("SELECT COUNT(DISTINCT sample_id) FROM case_clusters")).scalar() or 0
     open_clusters = db.execute(
         text("SELECT COUNT(*) FROM clusters WHERE investigation_status = 'open'")
     ).scalar() or 0
 
+    # ── Load export JSON artifacts ─────────────────────────────────────────────
     summary_data = _load_export_json("outbreaker_summary.json")
     transmission_data = _load_export_json("transmission_network.json")
     lineage_dr_data = _load_export_json("lineage_dr_validation.json")
@@ -898,18 +904,230 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:
     except Exception as exc:
         kpi_data = {"warning": str(exc)}
 
-    row_limit = None if full else 25
-    network_limit = None if full else 15
-    action_rows = _load_export_csv("appendix_a_case_level_actions.csv", limit=row_limit)
-    discordance_rows = _load_export_csv("appendix_b_full_discordance_review.csv", limit=row_limit)
+    # ── Weekly trends ──────────────────────────────────────────────────────────
+    qc_table_exists = db.execute(
+        text("SELECT to_regclass('public.sample_qc_metrics') IS NOT NULL")
+    ).scalar()
+    weekly_trends = []
+    try:
+        if qc_table_exists:
+            weekly_trends = db.execute(text("""
+                WITH ww AS (SELECT (DATE_TRUNC('week',CURRENT_DATE)-(s*INTERVAL '7 days'))::date AS ws
+                            FROM generate_series(11,0,-1) s),
+                wdata AS (SELECT ww.ws,COUNT(c.pseudonymised_case_id)::int AS eligible,
+                    COUNT(cs.sample_id)::int AS sequenced,
+                    COUNT(sqm.sample_id)::int AS qc_rep,
+                    COUNT(*) FILTER(WHERE LOWER(COALESCE(sqm.qc_status,'')) IN ('pass','passed'))::int AS qc_pass
+                    FROM ww LEFT JOIN cases c ON c.specimen_date>=ww.ws AND c.specimen_date<ww.ws+INTERVAL '7 days'
+                    LEFT JOIN consensus_sequences cs ON cs.sample_id=c.pseudonymised_case_id
+                    LEFT JOIN sample_qc_metrics sqm ON sqm.sample_id=c.pseudonymised_case_id
+                    GROUP BY ww.ws)
+                SELECT ws AS week_start,eligible,sequenced,
+                    CASE WHEN eligible=0 THEN NULL ELSE ROUND((sequenced::numeric/eligible::numeric)*100,1) END AS seq_pct,
+                    CASE WHEN qc_rep=0 THEN NULL ELSE ROUND((qc_pass::numeric/qc_rep::numeric)*100,1) END AS qc_pct
+                FROM wdata ORDER BY ws
+            """)).mappings().all()
+        else:
+            weekly_trends = db.execute(text("""
+                WITH ww AS (SELECT (DATE_TRUNC('week',CURRENT_DATE)-(s*INTERVAL '7 days'))::date AS ws
+                            FROM generate_series(11,0,-1) s)
+                SELECT ww.ws AS week_start,COUNT(c.pseudonymised_case_id)::int AS eligible,
+                    COUNT(cs.sample_id)::int AS sequenced,
+                    CASE WHEN COUNT(c.pseudonymised_case_id)=0 THEN NULL
+                         ELSE ROUND((COUNT(cs.sample_id)::numeric/COUNT(c.pseudonymised_case_id)::numeric)*100,1)
+                    END AS seq_pct, NULL::numeric AS qc_pct
+                FROM ww LEFT JOIN cases c ON c.specimen_date>=ww.ws AND c.specimen_date<ww.ws+INTERVAL '7 days'
+                LEFT JOIN consensus_sequences cs ON cs.sample_id=c.pseudonymised_case_id
+                GROUP BY ww.ws ORDER BY ww.ws
+            """)).mappings().all()
+    except Exception:
+        weekly_trends = []
 
-    key_nodes = []
-    if isinstance(transmission_data, dict):
-        key_nodes = transmission_data.get("key_nodes") or []
-    edges = []
-    if isinstance(transmission_data, dict):
-        edges = transmission_data.get("edges") or transmission_data.get("transmission_edges") or []
+    # ── Case-level detail query ────────────────────────────────────────────────
+    case_rows = []
+    try:
+        case_rows = db.execute(text("""
+            SELECT c.pseudonymised_case_id::text AS case_id, c.specimen_date, c.geographic_region,
+                c.case_status, cc.cluster_id::text AS cluster_id, cl.snp_distance, cl.investigation_status,
+                ti.lineage, ti.predicted_drug_resistance, ti.resistance_mutations, ti.interpretation_summary,
+                cs.sequence, sqm.qc_status, sqm.coverage_breadth, sqm.mean_depth,
+                sqm.contamination_flag, sqm.ambiguous_base_percent
+            FROM cases c
+            LEFT JOIN case_clusters cc ON cc.sample_id=c.pseudonymised_case_id
+            LEFT JOIN clusters cl ON cl.cluster_id=cc.cluster_id
+            LEFT JOIN tb_interpretation ti ON ti.sample_id=c.pseudonymised_case_id
+            LEFT JOIN consensus_sequences cs ON cs.sample_id=c.pseudonymised_case_id
+            LEFT JOIN sample_qc_metrics sqm ON sqm.sample_id=c.pseudonymised_case_id
+            ORDER BY c.specimen_date DESC NULLS LAST, c.pseudonymised_case_id
+        """)).mappings().all()
+    except Exception:
+        case_rows = []
 
+    case_by_id = {str(r.get("case_id")): r for r in case_rows if r.get("case_id")}
+    sequence_by_case = {
+        str(r.get("case_id")): str(r.get("sequence") or "").strip().upper()
+        for r in case_rows if r.get("case_id") and r.get("sequence")
+    }
+    pairwise_snp_matrix = _pairwise_matrix(sequence_by_case)
+
+    # ── QC status counts ───────────────────────────────────────────────────────
+    qc_status_counts = {"pass": 0, "fail": 0, "not_reported": 0, "contamination": 0}
+    for r in case_rows:
+        st = str(r.get("qc_status") or "not_reported").lower()
+        if bool(r.get("contamination_flag")):
+            qc_status_counts["contamination"] += 1
+        if st in ("pass", "passed"):
+            qc_status_counts["pass"] += 1
+        elif st in ("", "not_reported", "na", "n/a", "unknown"):
+            qc_status_counts["not_reported"] += 1
+        else:
+            qc_status_counts["fail"] += 1
+    excluded_from_outbreaker = sum(
+        1 for r in case_rows
+        if str(r.get("qc_status") or "").lower() not in ("pass", "passed") or bool(r.get("contamination_flag"))
+    )
+
+    # ── Transmission edge data ─────────────────────────────────────────────────
+    transmission_edges = (transmission_data or {}).get("edges") or (transmission_data or {}).get("transmission_edges") or []
+    best_incoming: dict = {}
+    best_outgoing: dict = {}
+    outbreaker_pair_prob: dict = {}
+    for edge in transmission_edges:
+        src = str(edge.get("source") or "")
+        tgt = str(edge.get("target") or "")
+        if not src or not tgt:
+            continue
+        prob = float(edge.get("probability") or 0.0)
+        if tgt not in best_incoming or prob > best_incoming[tgt]["probability"]:
+            best_incoming[tgt] = {"source": src, "probability": prob}
+        if src not in best_outgoing or prob > best_outgoing[src]["probability"]:
+            best_outgoing[src] = {"target": tgt, "probability": prob}
+        pk = tuple(sorted([src, tgt]))
+        if pk not in outbreaker_pair_prob or prob > outbreaker_pair_prob[pk]:
+            outbreaker_pair_prob[pk] = prob
+
+    high_confidence_edges = [e for e in transmission_edges if float(e.get("probability") or 0.0) >= 0.70]
+    high_confidence_all_count = len(high_confidence_edges)
+    high_confidence_snapshot_count = int((transmission_data or {}).get("high_confidence_edges", 0) or 0)
+
+    sequence_cluster_members: dict = {}
+    for r in case_rows:
+        cid = str(r.get("cluster_id") or "")
+        cid_case = str(r.get("case_id") or "")
+        if cid and cid_case:
+            sequence_cluster_members.setdefault(cid, []).append(cid_case)
+
+    nearest_neighbor_snp: dict = {}
+    nearest_neighbor_partner: dict = {}
+    for case_id, seq in sequence_by_case.items():
+        relevant = []
+        for other_id in sequence_by_case:
+            if other_id == case_id:
+                continue
+            dist = pairwise_snp_matrix.get(_pair_key(case_id, other_id))
+            if dist is not None:
+                relevant.append((dist, other_id))
+        if relevant:
+            bd, bp = sorted(relevant)[0]
+            nearest_neighbor_snp[case_id] = int(bd)
+            nearest_neighbor_partner[case_id] = bp
+
+    pairwise_links_le_12 = sum(1 for d in pairwise_snp_matrix.values() if d <= 12)
+    sequence_pair_set = {pair for pair, d in pairwise_snp_matrix.items() if d <= 12}
+
+    # ── Cluster action priority (from DB) ─────────────────────────────────────
+    cluster_action_rows = []
+    try:
+        cluster_action_rows = db.execute(text("""
+            WITH cs AS (SELECT cc.cluster_id,COUNT(*)::int AS case_count,
+                MAX(c.specimen_date) AS most_recent_specimen,
+                COUNT(DISTINCT c.geographic_region)::int AS region_count,
+                COALESCE(cl.investigation_status,'unknown') AS investigation_status,
+                EXTRACT(DAY FROM (CURRENT_DATE::timestamp-MAX(c.specimen_date)::timestamp))::int AS recency_days
+                FROM case_clusters cc JOIN cases c ON c.pseudonymised_case_id=cc.sample_id
+                LEFT JOIN clusters cl ON cl.cluster_id=cc.cluster_id
+                GROUP BY cc.cluster_id,cl.investigation_status)
+            SELECT cluster_id,case_count,region_count,most_recent_specimen,recency_days,investigation_status,
+                ((case_count*2)+(region_count*3)+CASE WHEN recency_days<=14 THEN 3 WHEN recency_days<=30 THEN 2
+                 WHEN recency_days<=60 THEN 1 ELSE 0 END+CASE WHEN investigation_status='open' THEN 3 ELSE 0 END)::int AS priority_score
+            FROM cs ORDER BY priority_score DESC,case_count DESC,most_recent_specimen DESC LIMIT 10
+        """)).mappings().all()
+    except Exception:
+        cluster_action_rows = []
+
+    # ── Cluster epidemiology ───────────────────────────────────────────────────
+    cluster_epi_rows = []
+    try:
+        cluster_epi_rows = db.execute(text("""
+            WITH base AS (SELECT cc.cluster_id::text AS cluster_id,c.pseudonymised_case_id::text AS case_id,
+                c.specimen_date,c.geographic_region,COALESCE(cl.investigation_status,'unknown') AS investigation_status,
+                cl.snp_distance,LOWER(CAST(ti.predicted_drug_resistance AS text)) AS dr_text
+                FROM case_clusters cc JOIN cases c ON c.pseudonymised_case_id=cc.sample_id
+                LEFT JOIN clusters cl ON cl.cluster_id=cc.cluster_id
+                LEFT JOIN tb_interpretation ti ON ti.sample_id=cc.sample_id),
+            idx AS (SELECT DISTINCT ON(cluster_id) cluster_id,case_id AS suspected_index_case
+                    FROM base ORDER BY cluster_id,specimen_date ASC NULLS LAST,case_id)
+            SELECT b.cluster_id,COUNT(*)::int AS cases,
+                MIN(b.specimen_date) AS first_specimen,MAX(b.specimen_date) AS latest_specimen,
+                ROUND(AVG(COALESCE(b.snp_distance,0))::numeric,1) AS median_snp_proxy,
+                MAX(COALESCE(b.snp_distance,0))::int AS max_snp_proxy,
+                COUNT(*) FILTER(WHERE b.dr_text LIKE '%rifamp%' AND (b.dr_text LIKE '%resistant%' OR b.dr_text LIKE '%"r"%'))::int AS rr_cases,
+                COUNT(*) FILTER(WHERE b.dr_text LIKE '%rifamp%' AND b.dr_text LIKE '%isoniazid%' AND (b.dr_text LIKE '%resistant%' OR b.dr_text LIKE '%"r"%'))::int AS mdr_cases,
+                COUNT(*) FILTER(WHERE b.specimen_date>=CURRENT_DATE-INTERVAL '30 days')::int AS recent_30d,
+                COUNT(*) FILTER(WHERE b.specimen_date>=CURRENT_DATE-INTERVAL '60 days')::int AS recent_60d,
+                COUNT(*) FILTER(WHERE b.specimen_date>=CURRENT_DATE-INTERVAL '90 days')::int AS recent_90d,
+                MAX(b.investigation_status) AS investigation_status, i.suspected_index_case
+            FROM base b LEFT JOIN idx i ON i.cluster_id=b.cluster_id
+            GROUP BY b.cluster_id,i.suspected_index_case ORDER BY cases DESC,latest_specimen DESC LIMIT 20
+        """)).mappings().all()
+    except Exception:
+        cluster_epi_rows = []
+
+    # ── Mutation validation rows ───────────────────────────────────────────────
+    mutation_rows_raw = []
+    try:
+        mutation_rows_raw = db.execute(text("""
+            SELECT sample_id::text AS case_id,resistance_mutations,predicted_drug_resistance
+            FROM tb_interpretation WHERE resistance_mutations IS NOT NULL
+            AND resistance_mutations::text NOT IN ('null','{}','[]')
+            ORDER BY sample_id LIMIT 80
+        """)).mappings().all()
+    except Exception:
+        mutation_rows_raw = []
+
+    # ── Run-level QC ───────────────────────────────────────────────────────────
+    run_qc_rows_db = []
+    if qc_table_exists:
+        try:
+            run_qc_rows_db = [dict(r._mapping) for r in db.execute(text("""
+                SELECT CAST(reported_at AS DATE) AS run_date,COUNT(*) AS total_samples,
+                    SUM(CASE WHEN LOWER(qc_status) IN ('pass','passed') THEN 1 ELSE 0 END) AS pass_count,
+                    SUM(CASE WHEN LOWER(qc_status) NOT IN ('pass','passed') THEN 1 ELSE 0 END) AS fail_count,
+                    ROUND(CAST(AVG(mean_depth) AS NUMERIC),1) AS mean_depth_avg,
+                    ROUND(CAST(AVG(coverage_breadth) AS NUMERIC),1) AS mean_coverage_avg
+                FROM sample_qc_metrics WHERE reported_at IS NOT NULL
+                GROUP BY CAST(reported_at AS DATE) ORDER BY CAST(reported_at AS DATE) DESC LIMIT 20
+            """)).fetchall()]
+        except Exception:
+            run_qc_rows_db = []
+
+    # ── Reproduce metadata gate ────────────────────────────────────────────────
+    required_repro_metadata = [
+        ("Reference genome", (summary_data or {}).get("reference_genome")),
+        ("SNP-calling pipeline/version", (summary_data or {}).get("snp_pipeline_version")),
+        ("Resistance catalogue/version", (lineage_dr_data or {}).get("resistance_catalogue_version")),
+        ("Lineage-calling tool/version", (lineage_dr_data or {}).get("lineage_tool_version")),
+        ("outbreaker2 version", (summary_data or {}).get("analysis_engine_version")),
+        ("Random seed", (summary_data or {}).get("random_seed")),
+    ]
+    missing_repro = [label for label, v in required_repro_metadata if v is None or (isinstance(v, str) and not v.strip())]
+    circulation_ok = not missing_repro
+
+    # ── Lineage epi summary ────────────────────────────────────────────────────
+    analysis_summary = _lineage_analysis_summary(db)
+    analysis_epi_summary = _lineage_epi_summary(db)
+
+    # ── Graphics ───────────────────────────────────────────────────────────────
     graphics_html = []
     for image_path in sorted(Path(_export_path()).glob("outbreaker_*.png")):
         uri = _image_data_uri(str(image_path))
@@ -919,125 +1137,1024 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:
                 f'<figure><img src="{uri}" alt="{_safe_html(label)}"><figcaption>{_safe_html(label)}</figcaption></figure>'
             )
 
+    # ── Pair categorisation ────────────────────────────────────────────────────
+    genomic_pairs = []
+    model_only_pairs = []
+    qc_resolution_pairs = []
+    genomically_discordant = []
+    for edge in sorted(high_confidence_edges, key=lambda x: float(x.get("probability") or 0.0), reverse=True)[:40]:
+        src = str(edge.get("source") or "")
+        tgt = str(edge.get("target") or "")
+        prob = float(edge.get("probability") or 0.0)
+        src_case = case_by_id.get(src) or {}
+        tgt_case = case_by_id.get(tgt) or {}
+        src_cluster = str(src_case.get("cluster_id") or "")
+        tgt_cluster = str(tgt_case.get("cluster_id") or "")
+        same_cluster = bool(src_cluster and src_cluster == tgt_cluster)
+        pairwise_distance = pairwise_snp_matrix.get(_pair_key(src, tgt))
+        src_qc = str(src_case.get("qc_status") or "not_reported")
+        tgt_qc = str(tgt_case.get("qc_status") or "not_reported")
+        qc_problem = (src_qc.lower() not in ("pass", "passed") or tgt_qc.lower() not in ("pass", "passed")
+                      or bool(src_case.get("contamination_flag")) or bool(tgt_case.get("contamination_flag")))
+        validation_flag = (
+            "SNP-linked" if pairwise_distance is not None and pairwise_distance <= 12 and same_cluster and not qc_problem
+            else ("QC-unresolved" if qc_problem
+                  else ("D1: SNP>12" if pairwise_distance is not None and pairwise_distance > 12 else "Model-only"))
+        )
+        record = {
+            "pair": f"{_short_case_id(src)}\u2192{_short_case_id(tgt)}",
+            "posterior": prob,
+            "pairwise": str(pairwise_distance) if pairwise_distance is not None else "n/a",
+            "qc": f"{src_qc}/{tgt_qc}",
+            "validation_flag": validation_flag,
+        }
+        if qc_problem:
+            qc_resolution_pairs.append(record)
+        elif pairwise_distance is not None and pairwise_distance <= 12 and same_cluster:
+            genomic_pairs.append(record)
+        elif pairwise_distance is not None and pairwise_distance > 12:
+            genomically_discordant.append(record)
+        else:
+            model_only_pairs.append(record)
+
+    # ── Discordant pairs ───────────────────────────────────────────────────────
+    discordant_pairs = []
+    for pair in sequence_pair_set.union(set(outbreaker_pair_prob.keys())):
+        in_seq = pair in sequence_pair_set
+        in_out = pair in outbreaker_pair_prob
+        if in_seq == in_out:
+            continue
+        left, right = pair
+        post = float(outbreaker_pair_prob.get(pair) or 0.0)
+        pairwise_distance = pairwise_snp_matrix.get(pair)
+        disc_code = "D1" if in_out and not in_seq and pairwise_distance is not None and int(pairwise_distance) > 12 else ("D2" if in_out and not in_seq else "D3")
+        interp = ("Temporal support without pairwise SNP support" if in_out and not in_seq
+                  else "Pairwise SNP support without outbreaker linkage")
+        discordant_pairs.append({
+            "pair": f"{_short_case_id(str(left))}-{_short_case_id(str(right))}",
+            "pairwise": pairwise_distance,
+            "posterior": post,
+            "interpretation": interp,
+            "disc_code": disc_code,
+        })
+
+    # ── Action CSV rows (for load) ─────────────────────────────────────────────
+    row_limit = None if full else 25
+    action_rows_csv = _load_export_csv("appendix_a_case_level_actions.csv", limit=row_limit)
+    discordance_rows_csv = _load_export_csv("appendix_b_full_discordance_review.csv", limit=row_limit)
+
+    # ── Key nodes & edges from network JSON ────────────────────────────────────
+    key_nodes = (transmission_data or {}).get("key_nodes") or []
+    network_edges = (transmission_data or {}).get("edges") or (transmission_data or {}).get("transmission_edges") or []
+
+    # ── Report metadata ────────────────────────────────────────────────────────
     report_label = "Full HTML" if full else "Short HTML"
-    report_filename = (
-        "outbreaker_investigation_report_full.html"
-        if full
-        else "outbreaker_investigation_report.html"
+    report_filename = "outbreaker_investigation_report_full.html" if full else "outbreaker_investigation_report.html"
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Helper: render badge chip HTML
+    # ─────────────────────────────────────────────────────────────────────────
+    def _badge(text: str) -> str:
+        cls = {
+            "SNP-linked": "badge-green",
+            "Model-only": "badge-amber",
+            "QC-unresolved": "badge-red",
+            "D1: SNP>12": "badge-orange",
+        }.get(text, "badge-grey")
+        return f'<span class="badge {cls}">{_safe_html(text)}</span>'
+
+    def _progress(value, label="") -> str:
+        if value is None:
+            return f'<span class="muted">n/a</span>'
+        pct = min(100.0, max(0.0, float(value)))
+        colour = "#2a9d8f" if pct >= 80 else ("#f4a261" if pct >= 60 else "#e63946")
+        return (f'<div class="prog-wrap" title="{label}">'
+                f'<div class="prog-bar" style="width:{pct:.1f}%;background:{colour}"></div>'
+                f'<span class="prog-label">{pct:.1f}%</span></div>')
+
+    def _metric_card(label: str, value: str, sub: str = "", alert: bool = False) -> str:
+        cls = " metric-alert" if alert else ""
+        return (f'<div class="metric{cls}"><div class="metric-label">{_safe_html(label)}</div>'
+                f'<div class="metric-value">{_safe_html(value)}</div>'
+                f'{"<div class=metric-sub>" + _safe_html(sub) + "</div>" if sub else ""}</div>')
+
+    def _kv_rows_html(mapping, fields) -> str:
+        if not isinstance(mapping, dict):
+            return '<tr><td colspan="2" class="muted">No data available.</td></tr>'
+        rows = ""
+        for label, key in fields:
+            v = mapping.get(key)
+            if v is not None:
+                rows += f"<tr><th>{_safe_html(label)}</th><td>{_safe_html(str(v))}</td></tr>"
+        return rows or '<tr><td colspan="2" class="muted">No entries.</td></tr>'
+
+    def _data_table_html(rows, columns, empty_msg="No data available.") -> str:
+        if not rows:
+            return f'<p class="muted">{_safe_html(empty_msg)}</p>'
+        header = "".join(f"<th>{_safe_html(lbl)}</th>" for lbl, _ in columns)
+        body = ""
+        for row in rows:
+            body += "<tr>" + "".join(f"<td>{_safe_html(str(row.get(k, '')))}</td>" for _, k in columns) + "</tr>"
+        return f"<div class='tbl-wrap'><table><thead><tr>{header}</tr></thead><tbody>{body}</tbody></table></div>"
+
+    def _pair_table_html(records, title, category_class="") -> str:
+        if not records:
+            return ""
+        rows = ""
+        for item in records:
+            rows += (f"<tr><td class='mono'>{_safe_html(item['pair'])}</td>"
+                     f"<td>{_safe_html(f\"{item['posterior']:.3f}\")}</td>"
+                     f"<td>{_safe_html(item['pairwise'])}</td>"
+                     f"<td>{_safe_html(item['qc'])}</td>"
+                     f"<td>{_badge(item['validation_flag'])}</td></tr>")
+        return (f"<h4>{_safe_html(title)}</h4>"
+                f"<div class='tbl-wrap'><table><thead><tr><th>Pair</th><th>Posterior</th><th>SNP dist</th>"
+                f"<th>QC src/rec</th><th>Flag</th></tr></thead><tbody>{rows}</tbody></table></div>")
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Computed summary values
+    # ─────────────────────────────────────────────────────────────────────────
+    summary_total = int((kpi_data or {}).get("eligible_cases", total_cases))
+    summary_sequenced = int((kpi_data or {}).get("sequenced_cases", len(sequence_by_case)))
+    seq_pct = (kpi_data or {}).get("sequenced_pct")
+    qc_pass_pct = (kpi_data or {}).get("qc_pass_pct")
+    summary_coverage = f"{float(seq_pct):.1f}%" if seq_pct is not None else (
+        f"{(summary_sequenced/summary_total)*100:.1f}%" if summary_total else "n/a")
+    summary_qc_pass = f"{float(qc_pass_pct):.1f}%" if qc_pass_pct is not None else "n/a"
+
+    model_reliability = "Exploratory"
+    if summary_data and summary_data.get("convergence_diagnostic") is not None:
+        try:
+            model_reliability = "Operationally stronger" if float(summary_data["convergence_diagnostic"]) <= 1.1 else "Exploratory"
+        except Exception:
+            model_reliability = "Exploratory"
+
+    high_priority_open = sum(
+        1 for r in cluster_action_rows
+        if str(r.get("investigation_status") or "").lower() == "open" and int(r.get("priority_score") or 0) > 10
     )
-    action_heading = "Case-level operational actions (all rows)" if full else "Case-level operational actions (first 25 rows)"
-    discordance_heading = "Discordance review (all rows)" if full else "Discordance review (first 25 rows)"
-    priority_heading = "Priority nodes (all rows)" if full else "Priority nodes (first 15 rows)"
-    links_heading = "Transmission links (all rows)" if full else "Top transmission links (first 15 rows)"
-    raw_artifact_section = ""
-    if full:
-        raw_artifact_section = f"""
-  <section class="card" id="raw-artifacts">
-    <h2>Full machine-readable artifacts</h2>
-    <p class="muted">These sections mirror the JSON exports used to produce the report so reviewers can inspect the complete source artifacts alongside the summary tables.</p>
-    <h3>Outbreaker2 summary artifact</h3>
-    <pre>{_safe_html(json.dumps(summary_data, indent=2, default=str) if summary_data else 'No outbreaker summary artifact found.')}</pre>
-    <h3>Transmission network artifact</h3>
-    <pre>{_safe_html(json.dumps(transmission_data, indent=2, default=str) if transmission_data else 'No transmission network artifact found.')}</pre>
-    <h3>Sequence clustering summary artifact</h3>
-    <pre>{_safe_html(json.dumps(sequence_summary_data, indent=2, default=str) if sequence_summary_data else 'No sequence clustering summary artifact found.')}</pre>
-  </section>"""
 
-    publication_notes = [
-        f"This is the {report_label.lower()} version of the browser report; the full and short versions are saved side by side in exports/ for review.",
-        "Single-file HTML output is easier to publish online and review in browsers than a paginated PDF.",
-        "Responsive tables and figures reduce the PDF wrapping and page-break formatting issues previously seen.",
-        "Publish only after local information-governance review; this file may contain case-level operational details.",
-    ]
-
+    # ─────────────────────────────────────────────────────────────────────────
+    # CSS
+    # ─────────────────────────────────────────────────────────────────────────
     css = """
-    :root{--navy:#16324f;--steel:#365f7f;--muted:#64748b;--line:#d8e0ea;--bg:#f6f8fb;--card:#fff;--accent:#0f766e;}
-    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:#172033;font-family:Arial,Helvetica,sans-serif;line-height:1.45}
-    header{background:linear-gradient(135deg,var(--navy),#254f78);color:white;padding:2.2rem 6vw} header p{max-width:70rem;margin:.3rem 0 0;color:#e6eef7}
-    main{max-width:1180px;margin:0 auto;padding:1.5rem 1rem 3rem}.card{background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:0 8px 22px rgba(21,38,64,.07);margin:1rem 0;padding:1.2rem}
-    h1{font-size:2rem;margin:0 0 .2rem} h2{color:var(--navy);font-size:1.25rem;margin:.2rem 0 .8rem;border-bottom:2px solid var(--line);padding-bottom:.35rem} h3{color:var(--steel);font-size:1rem;margin:1rem 0 .5rem}
-    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.8rem}.metric{border-left:5px solid var(--accent);background:#f8fffd;border-radius:10px;padding:.85rem}.metric strong{display:block;font-size:1.5rem;color:var(--navy)}
-    table{width:100%;border-collapse:collapse;margin:.7rem 0;display:block;overflow-x:auto} th,td{border:1px solid var(--line);padding:.5rem;text-align:left;vertical-align:top} th{background:#eaf1f8;color:#17324f}.kv{display:table}.kv th{width:32%}
-    .muted{color:var(--muted)} .note{background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:.75rem}.toc a{display:inline-block;margin:.2rem .7rem .2rem 0;color:#0f4c81}.figures{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem}.figures img{width:100%;height:auto;border:1px solid var(--line);border-radius:8px;background:white}.figures figcaption{text-align:center;color:var(--muted);font-size:.9rem;margin-top:.3rem}
-    pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:10px;padding:1rem;overflow:auto}.footer{font-size:.88rem;color:var(--muted)}
-    @media print{body{background:white}.card{box-shadow:none;break-inside:avoid} header{background:white;color:#172033;border-bottom:2px solid var(--line)} header p{color:#334155}}
-    """
+:root{
+  --navy:#1d3557;--steel:#457b9d;--sky:#a8c8e1;--cloud:#eef4f9;
+  --teal:#2a9d8f;--teal-bg:#e8f6f4;--alert:#e63946;--alert-bg:#fde8e8;
+  --amber:#f4a261;--amber-bg:#fff4ec;--green:#16a34a;--green-bg:#f0fdf4;
+  --ink:#1c2b3a;--muted:#5a7080;--rule:#c5d5e4;--bg:#f4f7fb;--card:#fff;
+  --sidebar:260px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:system-ui,Arial,sans-serif;line-height:1.5;display:flex;flex-direction:column;min-height:100vh}
 
+/* ── Header ── */
+header{background:linear-gradient(135deg,var(--navy) 0%,#254f78 100%);color:#fff;padding:1.6rem 2rem}
+header h1{font-size:1.6rem;font-weight:700;letter-spacing:-.02em}
+header p{color:#c8ddf0;font-size:.9rem;margin-top:.25rem}
+.status-banner{display:inline-block;margin-top:.5rem;padding:.2rem .75rem;border-radius:20px;font-size:.78rem;font-weight:600;letter-spacing:.03em}
+.status-draft{background:#e63946;color:#fff}
+.status-ready{background:#16a34a;color:#fff}
+
+/* ── Layout ── */
+.layout{display:flex;flex:1;align-items:flex-start}
+
+/* ── Sidebar TOC ── */
+nav.sidebar{width:var(--sidebar);flex-shrink:0;position:sticky;top:0;max-height:100vh;overflow-y:auto;
+  background:var(--navy);color:#c8ddf0;padding:1rem .75rem;font-size:.82rem;scrollbar-width:thin}
+nav.sidebar h3{font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:#7fa8c8;margin:.9rem 0 .3rem .2rem}
+nav.sidebar a{display:block;padding:.28rem .5rem;border-radius:5px;color:#c8ddf0;text-decoration:none;transition:background .15s}
+nav.sidebar a:hover,nav.sidebar a.active{background:rgba(255,255,255,.12);color:#fff}
+nav.sidebar .sub{padding-left:1rem;font-size:.78rem}
+
+/* ── Main content ── */
+main{flex:1;min-width:0;padding:1.4rem 1.6rem 3rem;max-width:1100px}
+
+/* ── Cards ── */
+.card{background:var(--card);border:1px solid var(--rule);border-radius:12px;box-shadow:0 4px 14px rgba(21,38,64,.06);margin:1rem 0;padding:1.25rem 1.4rem;scroll-margin-top:1rem}
+.card-note{background:var(--teal-bg);border-color:var(--teal)}
+.card-warn{background:var(--amber-bg);border-color:var(--amber)}
+.card-alert{background:var(--alert-bg);border-color:var(--alert)}
+
+/* ── Section headings ── */
+h2{font-size:1.18rem;font-weight:700;color:var(--navy);border-bottom:2px solid var(--rule);padding-bottom:.35rem;margin-bottom:.9rem}
+h3{font-size:.98rem;font-weight:700;color:var(--steel);margin:1rem 0 .45rem}
+h4{font-size:.88rem;font-weight:600;color:var(--muted);margin:.8rem 0 .35rem}
+
+/* ── Metric dashboard grid ── */
+.metrics-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.7rem;margin:.75rem 0}
+.metric{background:var(--cloud);border:1px solid var(--rule);border-radius:10px;padding:.8rem .9rem;position:relative;overflow:hidden}
+.metric::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--teal);border-radius:4px 0 0 4px}
+.metric-alert::before{background:var(--alert)}
+.metric-label{font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.metric-value{font-size:1.5rem;font-weight:700;color:var(--navy);line-height:1.2;margin:.15rem 0}
+.metric-sub{font-size:.73rem;color:var(--muted)}
+
+/* ── Progress bar ── */
+.prog-wrap{position:relative;background:#e2eaf3;border-radius:20px;height:14px;overflow:hidden;min-width:80px}
+.prog-bar{height:100%;border-radius:20px;transition:width .3s}
+.prog-label{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:.68rem;font-weight:600;color:var(--ink)}
+
+/* ── Badges ── */
+.badge{display:inline-block;padding:.15rem .5rem;border-radius:12px;font-size:.73rem;font-weight:600;white-space:nowrap}
+.badge-green{background:var(--green-bg);color:var(--green);border:1px solid #86efac}
+.badge-amber{background:var(--amber-bg);color:#c2410c;border:1px solid #fed7aa}
+.badge-red{background:var(--alert-bg);color:var(--alert);border:1px solid #fca5a5}
+.badge-orange{background:#fff7ed;color:#c2410c;border:1px solid #fdba74}
+.badge-grey{background:#f1f5f9;color:#475569;border:1px solid #cbd5e1}
+
+/* ── Tables ── */
+.tbl-wrap{overflow-x:auto;margin:.5rem 0}
+table{width:100%;border-collapse:collapse;font-size:.83rem;min-width:400px}
+th,td{border:1px solid var(--rule);padding:.42rem .6rem;text-align:left;vertical-align:top}
+th{background:#dde9f4;color:var(--navy);font-weight:600;font-size:.78rem;white-space:nowrap}
+tbody tr:nth-child(even){background:var(--cloud)}
+.kv-table th{width:38%;background:var(--cloud);font-weight:600;color:var(--steel)}
+.mono{font-family:monospace;font-size:.78rem}
+
+/* ── Collapsible details ── */
+details{border:1px solid var(--rule);border-radius:8px;margin:.6rem 0;overflow:hidden}
+details summary{padding:.65rem 1rem;background:var(--cloud);cursor:pointer;font-weight:600;color:var(--navy);font-size:.9rem;user-select:none;list-style:none}
+details summary::before{content:'▶ ';font-size:.7rem;color:var(--steel)}
+details[open] summary::before{content:'▼ '}
+details > div{padding:.9rem 1rem}
+
+/* ── Figures ── */
+.figures-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem;margin:.6rem 0}
+.figures-grid figure{border:1px solid var(--rule);border-radius:8px;background:#fff;overflow:hidden}
+.figures-grid img{width:100%;height:auto;display:block}
+.figures-grid figcaption{text-align:center;color:var(--muted);font-size:.8rem;padding:.4rem .5rem .5rem}
+
+/* ── Utilities ── */
+.muted{color:var(--muted);font-size:.85rem}
+pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padding:1rem;overflow:auto;font-size:.78rem}
+.callout{background:var(--teal-bg);border-left:4px solid var(--teal);border-radius:0 8px 8px 0;padding:.7rem 1rem;margin:.5rem 0;font-size:.87rem}
+.callout-warn{background:var(--amber-bg);border-left-color:var(--amber)}
+.callout-alert{background:var(--alert-bg);border-left-color:var(--alert)}
+.section-note{background:var(--cloud);border:1px solid var(--sky);border-radius:8px;padding:.65rem .9rem;margin:.5rem 0;font-size:.84rem;color:var(--ink)}
+.tag{display:inline-flex;align-items:center;gap:.25rem;background:var(--cloud);border:1px solid var(--rule);border-radius:6px;padding:.1rem .45rem;font-size:.72rem;font-weight:600;color:var(--muted);margin:.1rem}
+
+/* ── Print ── */
+@media print{
+  nav.sidebar{display:none}
+  .layout{display:block}
+  main{padding:.5rem;max-width:none}
+  header{background:white;color:var(--ink);border-bottom:2px solid var(--rule);padding:.8rem 1rem}
+  header p{color:var(--muted)}
+  .card{box-shadow:none;page-break-inside:avoid;border:1px solid var(--rule)}
+  details{border:1px solid var(--rule)}
+  details summary{background:white}
+  details > div{display:block !important}
+  .prog-wrap{border:1px solid var(--rule)}
+}
+
+/* ── Responsive ── */
+@media(max-width:780px){
+  nav.sidebar{display:none}
+  main{padding:1rem .75rem}
+}
+"""
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Build HTML sections
+    # ─────────────────────────────────────────────────────────────────────────
+
+    # 1. Status banner
+    if missing_repro:
+        status_html = f'<span class="status-banner status-draft">DRAFT — {len(missing_repro)} reproducibility field(s) missing</span>'
+    else:
+        status_html = '<span class="status-banner status-ready">Governance gate passed — eligible for circulation</span>'
+
+    # 2. Dashboard cards
+    dashboard_html = f"""
+<div class="metrics-grid">
+  {_metric_card("Total cases", str(summary_total), f"{summary_sequenced} sequenced")}
+  {_metric_card("Sequencing coverage", summary_coverage, "target ≥80%", alert=seq_pct is not None and float(seq_pct) < 80)}
+  {_metric_card("QC pass rate", summary_qc_pass, "target ≥90%", alert=qc_pass_pct is not None and float(qc_pass_pct) < 90)}
+  {_metric_card("QC unresolved", str(qc_status_counts['fail'] + qc_status_counts['not_reported'] + qc_status_counts['contamination']), f"{qc_status_counts['pass']} passed", alert=(qc_status_counts['fail'] + qc_status_counts['contamination']) > 0)}
+  {_metric_card("Open clusters", str(open_clusters), f"{high_priority_open} priority >10")}
+  {_metric_card("Model links ≥0.70", str(high_confidence_all_count), "Posterior ≥0.70 — validate with SNP+epi")}
+  {_metric_card("SNP links ≤12", str(pairwise_links_le_12), "Direct transmission candidates")}
+  {_metric_card("Model reliability", model_reliability, "MCMC convergence", alert=model_reliability=="Exploratory")}
+</div>"""
+
+    # Progress bars for coverage/QC
+    seq_pct_bar = _progress(seq_pct, "Sequencing coverage %")
+    qc_bar = _progress(qc_pass_pct, "QC pass rate %")
+
+    # 3. Top Actions Due Now table
+    top_actions_html = """
+<div class="tbl-wrap"><table>
+<thead><tr><th>Priority</th><th>Action</th><th>Owner</th><th>Due</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>Repeat sequencing / QC review for failed/unresolved samples</td><td>Laboratory</td><td>48 h</td></tr>
+<tr><td>2</td><td>Validate drug-resistance pipeline gene-drug mapping</td><td>Bioinformatics / Microbiology</td><td>Immediate</td></tr>
+<tr><td>3</td><td>Confirm phenotypic DST for all genomic resistance signals</td><td>TB Microbiology / MDT</td><td>Immediate</td></tr>
+<tr><td>4</td><td>Review open genomic clusters with epi data</td><td>TB MDT / PHA</td><td>Next MDT</td></tr>
+<tr><td>5</td><td>Do not escalate model-only links to field without SNP+epi validation</td><td>HPT / TB Nurses</td><td>Ongoing</td></tr>
+</tbody></table></div>"""
+
+    # 4. MDT Governance table
+    mdt_rows = [
+        ("Circulation readiness", "Governance ready" if circulation_ok else "BLOCKED", "Complete mandatory reproducibility metadata before external circulation"),
+        ("Model reliability", model_reliability, "Treat directionality as exploratory; diagnostics may be unavailable"),
+        ("Open clusters", f"{int(open_clusters)} total / {high_priority_open} priority >10", "MDT review and epi data completion for all open clusters"),
+        ("Discordant model links", f"{len(discordant_pairs)} identified", "Pairwise SNP + epi adjudication required"),
+    ]
+    mdt_table_body = "".join(f"<tr><td>{_safe_html(a)}</td><td>{_safe_html(b)}</td><td>{_safe_html(c)}</td></tr>" for a, b, c in mdt_rows)
+    mdt_html = f"""<div class="tbl-wrap"><table><thead><tr><th>Priority area</th><th>Current signal</th><th>Required MDT action</th></tr></thead>
+<tbody>{mdt_table_body}</tbody></table></div>"""
+
+    # 5. KPI table with progress bars
+    kpi_kv = ""
+    if isinstance(kpi_data, dict):
+        kpi_fields = [
+            ("Eligible cases (12 wks)", str(kpi_data.get("eligible_cases", "n/a"))),
+            ("Sequenced cases", str(kpi_data.get("sequenced_cases", "n/a"))),
+            ("Sequencing coverage", seq_pct_bar),
+            ("QC reported cases", str(kpi_data.get("qc_reported_cases", "n/a"))),
+            ("QC pass cases", str(kpi_data.get("qc_pass_cases", "n/a"))),
+            ("QC fail cases", str(kpi_data.get("qc_fail_cases", "n/a"))),
+            ("QC pass rate", qc_bar),
+            ("Contamination flags", str(kpi_data.get("contamination_flag_cases", "n/a"))),
+            ("Median days specimen→QC", str(kpi_data.get("median_days_specimen_to_qc", "n/a"))),
+        ]
+        if kpi_data.get("warning"):
+            kpi_kv += f'<p class="muted">Warning: {_safe_html(str(kpi_data["warning"]))}</p>'
+        kpi_kv += '<table class="kv-table"><tbody>' + "".join(
+            f"<tr><th>{_safe_html(k)}</th><td>{v}</td></tr>" for k, v in kpi_fields
+        ) + "</tbody></table>"
+
+    # Regional representativeness
+    region_rows_html = ""
+    for row in ((kpi_data or {}).get("representativeness_by_region") or [])[:10]:
+        region_rows_html += (f"<tr><td>{_safe_html(str(row.get('region','Unknown')))}</td>"
+                             f"<td>{_safe_html(str(row.get('eligible_cases',0)))}</td>"
+                             f"<td>{_safe_html(str(row.get('sequenced_cases',0)))}</td>"
+                             f"<td>{_progress(row.get('sequenced_pct'))}</td></tr>")
+    region_html = ""
+    if region_rows_html:
+        region_html = (f"<h3>Regional sequencing representativeness</h3>"
+                       f"<div class='tbl-wrap'><table><thead><tr><th>Region</th><th>Eligible</th><th>Sequenced</th><th>Coverage</th></tr></thead>"
+                       f"<tbody>{region_rows_html}</tbody></table></div>")
+
+    # 6. Weekly trends table
+    trend_rows_html = ""
+    for r in weekly_trends:
+        trend_rows_html += (f"<tr><td>{_safe_html(str(r.get('week_start','')))}</td>"
+                            f"<td>{_safe_html(str(r.get('eligible',r.get('eligible_cases',0))))}</td>"
+                            f"<td>{_safe_html(str(r.get('sequenced',r.get('sequenced_cases',0))))}</td>"
+                            f"<td>{_progress(r.get('seq_pct',r.get('sequenced_pct')))}</td>"
+                            f"<td>{_progress(r.get('qc_pct',r.get('qc_pass_pct')))}</td></tr>")
+    weekly_html = ""
+    if trend_rows_html:
+        weekly_html = (f"<div class='tbl-wrap'><table><thead><tr>"
+                       f"<th>Week</th><th>Eligible</th><th>Sequenced</th><th>Coverage %</th><th>QC pass %</th>"
+                       f"</tr></thead><tbody>{trend_rows_html}</tbody></table></div>")
+    else:
+        weekly_html = '<p class="muted">Weekly trend data unavailable.</p>'
+
+    # 7. Analysis summary table
+    analysis_keys = [
+        ("Posterior samples", "n_samples"), ("MCMC iterations", "n_iter"), ("MCMC iterations", "n_generations"),
+        ("Burn-in", "burnin"), ("Mean log-likelihood", "likelihood_mean"), ("Likelihood SD", "likelihood_sd"),
+        ("Transmission probability", "transmission_probability"), ("Generation time mean (days)", "generation_time_mean"),
+        ("Generation time SD (days)", "generation_time_sd"), ("Sampling probability", "sampling_probability"),
+        ("Convergence diagnostic", "convergence_diagnostic"),
+    ]
+    analysis_html = ""
+    if isinstance(summary_data, dict):
+        rows_out = ""
+        for label, key in analysis_keys:
+            if key in summary_data:
+                v = summary_data[key]
+                fv = f"{float(v):.3f}" if isinstance(v, float) and abs(float(v)) < 10 else (f"{float(v):.2f}" if isinstance(v, float) else str(v))
+                rows_out += f"<tr><th>{_safe_html(label)}</th><td>{_safe_html(fv)}</td></tr>"
+        if rows_out:
+            analysis_html = f"<table class='kv-table'><tbody>{rows_out}</tbody></table>"
+    if not analysis_html:
+        analysis_html = '<p class="muted">No outbreaker2 analysis artifact found.</p>'
+
+    # 8. Cluster prioritisation table
+    cluster_pri_html = ""
+    if cluster_action_rows:
+        cluster_pri_rows = "".join(
+            f"<tr><td class='mono'>{_safe_html(str(r.get('cluster_id',''))[:12])}</td>"
+            f"<td>{_safe_html(str(r.get('case_count',0)))}</td>"
+            f"<td>{_safe_html(str(r.get('region_count',0)))}</td>"
+            f"<td>{_safe_html(str(r.get('most_recent_specimen','n/a')))}</td>"
+            f"<td>{_safe_html(str(r.get('investigation_status','unknown')))}</td>"
+            f"<td><strong>{_safe_html(str(r.get('priority_score',0)))}</strong></td></tr>"
+            for r in cluster_action_rows
+        )
+        cluster_pri_html = (f"<div class='tbl-wrap'><table><thead><tr>"
+                            f"<th>Cluster</th><th>Cases</th><th>Regions</th><th>Most recent</th><th>Status</th><th>Priority score</th>"
+                            f"</tr></thead><tbody>{cluster_pri_rows}</tbody></table></div>")
+    else:
+        cluster_pri_html = '<p class="muted">No cluster action data available.</p>'
+
+    # 9. Lineage/DR summary
+    interpreted = int(analysis_summary.get("interpreted_samples", 0) or 0)
+    with_lineage = int(analysis_summary.get("samples_with_lineage", 0) or 0)
+    with_resist = int(analysis_summary.get("samples_with_resistance_calls", 0) or 0)
+    lin_cov = f"{(with_lineage/interpreted*100):.1f}%" if interpreted else "n/a"
+    res_cov = f"{(with_resist/interpreted*100):.1f}%" if interpreted else "n/a"
+    lin_kv_rows = [
+        ("Interpreted samples", str(interpreted)),
+        ("Samples with lineage", str(with_lineage)),
+        ("Lineage coverage", lin_cov),
+        ("Samples with resistance calls", str(with_resist)),
+        ("Resistance coverage", res_cov),
+        ("Any resistance signal", str(analysis_epi_summary.get("samples_with_any_resistance_signal", 0))),
+        ("Rifampicin-resistant (suspected)", str(analysis_epi_summary.get("rifampicin_resistant_suspected", 0))),
+        ("Isoniazid-resistant (suspected)", str(analysis_epi_summary.get("isoniazid_resistant_suspected", 0))),
+        ("MDR (suspected)", str(analysis_epi_summary.get("mdr_suspected", 0))),
+        ("FQ-resistant (suspected)", str(analysis_epi_summary.get("fluoroquinolone_resistant_suspected", 0))),
+    ]
+    lineage_table_html = "<table class='kv-table'><tbody>" + "".join(
+        f"<tr><th>{_safe_html(k)}</th><td>{_safe_html(v)}</td></tr>" for k, v in lin_kv_rows
+    ) + "</tbody></table>"
+    top_lineages = analysis_epi_summary.get("top_lineages") or []
+    if top_lineages:
+        lineage_table_html += "<p style='margin-top:.5rem'><strong>Top lineages: </strong>" + ", ".join(
+            f"{_safe_html(x.get('lineage','?'))}: {_safe_html(str(x.get('count',0)))}" for x in top_lineages[:5]
+        ) + "</p>"
+
+    # 10. QC drill-down table
+    qc_detail_rows = [r for r in case_rows if str(r.get("qc_status") or "").lower() not in ("pass", "passed") or bool(r.get("contamination_flag"))]
+    if not qc_detail_rows:
+        qc_detail_rows = [r for r in case_rows if r.get("qc_status")][:15]
+    qc_detail_html = ""
+    if qc_detail_rows:
+        qc_trows = ""
+        for r in qc_detail_rows[:30]:
+            cov_raw = r.get("coverage_breadth")
+            dep_raw = r.get("mean_depth")
+            cov = f"{float(cov_raw):.1f}" if cov_raw is not None else "n/a"
+            dep = f"{float(dep_raw):.1f}" if dep_raw is not None else "n/a"
+            contam = "yes" if bool(r.get("contamination_flag")) else "no"
+            qc_st = str(r.get("qc_status") or "not_reported")
+            repeat = "yes" if qc_st.lower() not in ("pass", "passed") or contam == "yes" else "no"
+            row_class = ' style="background:var(--alert-bg)"' if repeat == "yes" else ""
+            qc_trows += (f"<tr{row_class}><td class='mono'>{_safe_html(_short_case_id(str(r.get('case_id',''))))}</td>"
+                         f"<td>{_safe_html(qc_st)}</td><td>{_safe_html(cov)}</td><td>{_safe_html(dep)}</td>"
+                         f"<td>{_safe_html(contam)}</td>"
+                         f"<td>{'<span class=\"badge badge-red\">Repeat</span>' if repeat=='yes' else '<span class=\"badge badge-green\">OK</span>'}</td></tr>")
+        qc_detail_html = (f"<div class='tbl-wrap'><table><thead><tr><th>Sample</th><th>QC status</th><th>Coverage %</th>"
+                          f"<th>Mean depth</th><th>Contamination</th><th>Action</th></tr></thead><tbody>{qc_trows}</tbody></table></div>")
+    else:
+        qc_detail_html = '<p class="muted">No QC details available.</p>'
+
+    # QC summary cards
+    qc_summary_html = f"""
+<div class="metrics-grid">
+  {_metric_card("QC pass", str(qc_status_counts['pass']), f"{summary_qc_pass} pass rate")}
+  {_metric_card("QC fail", str(qc_status_counts['fail']), "Low coverage / threshold breach", alert=qc_status_counts['fail']>0)}
+  {_metric_card("Contamination", str(qc_status_counts['contamination']), "Mixed signal — exclude pending repeat", alert=qc_status_counts['contamination']>0)}
+  {_metric_card("Not reported", str(qc_status_counts['not_reported']), "QC metadata absent — treat as unresolved")}
+  {_metric_card("Excluded from inference", str(excluded_from_outbreaker), "QC fail or contamination", alert=excluded_from_outbreaker>0)}
+</div>"""
+
+    # 11. Run-level QC table
+    run_qc_html = ""
+    if run_qc_rows_db:
+        run_rows_out = ""
+        for rl in run_qc_rows_db:
+            total = int(rl.get("total_samples") or 0)
+            fail = int(rl.get("fail_count") or 0)
+            fail_pct = f"{round(100*fail/total,1)}%" if total else "n/a"
+            alert_style = ' style="background:var(--alert-bg)"' if total and (fail/total) > 0.2 else ""
+            run_rows_out += (f"<tr{alert_style}><td>{_safe_html(str(rl.get('run_date','n/a')))}</td>"
+                             f"<td>{_safe_html(str(total))}</td><td>{_safe_html(str(int(rl.get('pass_count',0))))}</td>"
+                             f"<td>{_safe_html(str(fail))}</td><td>{_safe_html(fail_pct)}</td>"
+                             f"<td>{_safe_html(str(rl.get('mean_depth_avg','n/a')))}</td>"
+                             f"<td>{_safe_html(str(rl.get('mean_coverage_avg','n/a')))}</td></tr>")
+        run_qc_html = (f"<div class='tbl-wrap'><table><thead><tr><th>Run date (proxy)</th><th>Samples</th>"
+                       f"<th>Pass</th><th>Fail</th><th>Fail %</th><th>Mean depth</th><th>Mean coverage %</th>"
+                       f"</tr></thead><tbody>{run_rows_out}</tbody></table></div>"
+                       "<p class='muted'>Rows highlighted red have fail rate &gt;20%. Assign run_id to enable full run-level audit.</p>")
+    else:
+        run_qc_html = '<p class="muted">Run-level QC unavailable — reported_at or run_id not recorded.</p>'
+
+    # 12. Drug-resistance mutation table
+    mut_rows_html = ""
+    mut_count = 0
+    for base in mutation_rows_raw:
+        case_id_mut = str(base.get("case_id") or "")
+        for mut in _iter_resistance_mutations(base.get("resistance_mutations")):
+            drug = str(mut.get("drug") or "n/a")
+            gene = str(mut.get("gene") or "n/a")
+            validity = _drug_gene_status_label(drug, gene)
+            pred_text = _resistance_profile_text(base.get("predicted_drug_resistance"))
+            badge_class = "badge-green" if "Valid" in validity else ("badge-red" if "Unusual" in validity else "badge-grey")
+            mut_rows_html += (f"<tr><td class='mono'>{_safe_html(_short_case_id(case_id_mut))}</td>"
+                              f"<td>{_safe_html(drug)}</td><td class='mono'>{_safe_html(str(mut.get('mutation','n/a')))}</td>"
+                              f"<td class='mono'>{_safe_html(gene)}</td>"
+                              f"<td><span class='badge {badge_class}'>{_safe_html(validity)}</span></td>"
+                              f"<td>{_safe_html(str(mut.get('confidence','n/a')))}</td>"
+                              f"<td>{_safe_html(pred_text)}</td></tr>")
+            mut_count += 1
+            if mut_count >= 60:
+                break
+        if mut_count >= 60:
+            break
+    dr_table_html = ""
+    if mut_rows_html:
+        dr_table_html = (f"<div class='tbl-wrap'><table><thead><tr><th>Case</th><th>Drug</th><th>Mutation</th>"
+                         f"<th>Gene</th><th>Gene-drug status</th><th>Confidence</th><th>Predicted profile</th>"
+                         f"</tr></thead><tbody>{mut_rows_html}</tbody></table></div>")
+    else:
+        dr_table_html = '<p class="muted">No structured resistance-mutation details found.</p>'
+
+    # 13. Cluster epidemiology tables
+    cluster_epi_html = ""
+    if cluster_epi_rows:
+        cepi_rows = ""
+        for r in cluster_epi_rows:
+            cid = _short_case_id(str(r.get("cluster_id") or ""))
+            rr_mdr = f"{int(r.get('rr_cases') or 0)}/{int(r.get('mdr_cases') or 0)}"
+            recent = f"{int(r.get('recent_30d') or 0)}/{int(r.get('recent_60d') or 0)}/{int(r.get('recent_90d') or 0)}"
+            cepi_rows += (f"<tr><td class='mono'>{_safe_html(cid)}</td><td>{_safe_html(str(r.get('cases',0)))}</td>"
+                          f"<td>{_safe_html(str(r.get('first_specimen','n/a')))}</td><td>{_safe_html(str(r.get('latest_specimen','n/a')))}</td>"
+                          f"<td>{_safe_html(str(r.get('median_snp_proxy','n/a')))}</td><td>{_safe_html(str(r.get('max_snp_proxy','n/a')))}</td>"
+                          f"<td>{_safe_html(rr_mdr)}</td><td class='mono'>{_safe_html(_short_case_id(str(r.get('suspected_index_case','n/a'))))}</td>"
+                          f"<td>{_safe_html(recent)}</td></tr>")
+        cluster_epi_html = (f"<div class='tbl-wrap'><table><thead><tr><th>Cluster</th><th>Cases</th><th>First specimen</th>"
+                            f"<th>Latest specimen</th><th>Median SNP</th><th>Max SNP</th><th>RR/MDR cases</th><th>Index case</th><th>Recent 30/60/90d</th>"
+                            f"</tr></thead><tbody>{cepi_rows}</tbody></table></div>")
+        # Growth status
+        growth_rows = ""
+        for r in cluster_epi_rows:
+            cid = _short_case_id(str(r.get("cluster_id") or ""))
+            latest_raw = r.get("latest_specimen")
+            if latest_raw is None:
+                latest_str = "n/a"
+                days_since = None
+            elif hasattr(latest_raw, "isoformat"):
+                latest_str = latest_raw.isoformat()[:10]
+                try:
+                    days_since = (today - (latest_raw.date() if hasattr(latest_raw, "date") else latest_raw)).days
+                except Exception:
+                    days_since = None
+            else:
+                latest_str = str(latest_raw)[:10]
+                try:
+                    days_since = (today - _dt.date.fromisoformat(latest_str)).days
+                except Exception:
+                    days_since = None
+            if days_since is None:
+                status = "Unknown"
+                badge = "badge-grey"
+            elif days_since < 90:
+                status = "Active"
+                badge = "badge-red"
+            elif days_since < 180:
+                status = "Slowing"
+                badge = "badge-amber"
+            else:
+                status = "Likely inactive"
+                badge = "badge-green"
+            growth_rows += (f"<tr><td class='mono'>{_safe_html(cid)}</td><td>{_safe_html(str(r.get('cases',0)))}</td>"
+                            f"<td>{_safe_html(latest_str)}</td><td>{_safe_html(str(r.get('recent_30d',0)))}</td>"
+                            f"<td>{_safe_html(str(r.get('recent_60d',0)))}</td><td>{_safe_html(str(r.get('recent_90d',0)))}</td>"
+                            f"<td><span class='badge {badge}'>{_safe_html(status)}</span></td></tr>")
+        cluster_epi_html += (f"<h3>Cluster growth status</h3>"
+                             f"<div class='tbl-wrap'><table><thead><tr><th>Cluster</th><th>Cases</th><th>Last case</th>"
+                             f"<th>Cases 30d</th><th>Cases 60d</th><th>Cases 90d</th><th>Growth status</th>"
+                             f"</tr></thead><tbody>{growth_rows}</tbody></table></div>"
+                             "<p class='muted'>Active = last case &lt;90 days; Slowing = 90–180 days; Likely inactive = &gt;180 days. Formal closure requires MDT sign-off.</p>")
+    else:
+        cluster_epi_html = '<p class="muted">No cluster epidemiology data available.</p>'
+
+    # 14. Method comparison
+    comp_html = ""
+    if isinstance(method_comparison_data, dict):
+        coverage = method_comparison_data.get("coverage") or {}
+        agreement = method_comparison_data.get("agreement") or {}
+        comp_kv = [
+            ("Sequence assigned cases", str(coverage.get("sequence_assigned_cases", 0))),
+            ("Outbreaker assigned cases", str(coverage.get("outbreaker_assigned_cases", 0))),
+            ("Overlap cases", str(coverage.get("overlap_cases", 0))),
+            ("Pairwise precision", str(round(float(agreement.get("pairwise_precision_outbreaker_vs_sequence", 0.0)), 3))),
+            ("Pairwise recall", str(round(float(agreement.get("pairwise_recall_outbreaker_vs_sequence", 0.0)), 3))),
+            ("Pairwise Jaccard", str(round(float(agreement.get("pairwise_jaccard", 0.0)), 3))),
+        ]
+        comp_html = "<table class='kv-table'><tbody>" + "".join(f"<tr><th>{_safe_html(k)}</th><td>{_safe_html(v)}</td></tr>" for k, v in comp_kv) + "</tbody></table>"
+    else:
+        comp_html = '<p class="muted">No cluster method comparison artifact found.</p>'
+
+    # 15. Sequence clustering snapshot
+    seq_cluster_html = ""
+    if isinstance(sequence_summary_data, dict):
+        seq_kv = [(k.replace("_", " ").title(), str(sequence_summary_data[k])) for k in ["total_sequences", "assigned_sequences", "cluster_count", "largest_cluster_size", "singleton_count"] if k in sequence_summary_data]
+        seq_cluster_html = "<table class='kv-table'><tbody>" + "".join(f"<tr><th>{_safe_html(k)}</th><td>{_safe_html(v)}</td></tr>" for k, v in seq_kv) + "</tbody></table>"
+    else:
+        seq_cluster_html = '<p class="muted">No sequence clustering summary artifact.</p>'
+
+    # 16. Case-level actions (from CSV)
+    action_limit_label = "all rows" if full else "first 25 rows"
+    actions_csv_html = _data_table_html(
+        action_rows_csv,
+        [("Case", "Case"), ("Cluster", "Cluster"), ("Pairwise SNP?", "Pairwise SNP?"),
+         ("NN SNP", "NN SNP"), ("Likely link", "Likely link"), ("Posterior", "Posterior"),
+         ("Tier", "Tier"), ("QC", "QC"), ("Recommended action", "Recommended action")],
+        "No case-level action export found. Generate the PDF report first to populate exports/appendix_a_case_level_actions.csv."
+    )
+    discordance_csv_html = _data_table_html(
+        discordance_rows_csv,
+        [("Case pair", "Case Pair"), ("Pairwise SNP result", "Pairwise SNP result"),
+         ("Outbreaker2", "Outbreaker2"), ("Pairwise SNP", "Pairwise SNP"),
+         ("Posterior", "Posterior"), ("Code", "Code"), ("Interpretation", "Interpretation")],
+        "No discordance review export found."
+    )
+
+    # 17. Transmission network section
+    key_nodes_html = _data_table_html(
+        key_nodes[:15 if not full else None],
+        [("Case", "case_id"), ("Cluster", "cluster_id"), ("Region", "region"),
+         ("Risk score", "risk_score"), ("Risk band", "risk_band"),
+         ("Outgoing", "outgoing_links"), ("Incoming", "incoming_links")],
+        "No priority-node data."
+    )
+    network_edges_html = _data_table_html(
+        network_edges[:15 if not full else None],
+        [("From", "source"), ("To", "target"), ("Probability", "probability"),
+         ("Confidence", "confidence"), ("Inference", "inference")],
+        "No transmission-link data."
+    )
+    network_meta_html = ""
+    if isinstance(transmission_data, dict):
+        net_kv = [(l, k) for l, k in [("Generated at", "generated_at"), ("Inference source", "inference_source"),
+                   ("Provenance", "provenance"), ("Node count", "node_count"), ("Edge count", "edge_count"),
+                   ("High-confidence edges", "high_confidence_edges")] if transmission_data.get(k) is not None]
+        network_meta_html = "<table class='kv-table'><tbody>" + "".join(
+            f"<tr><th>{_safe_html(l)}</th><td>{_safe_html(str(transmission_data.get(k)))}</td></tr>" for l, k in net_kv
+        ) + "</tbody></table>"
+
+    # 18. Discordant pair summary table (from computed data)
+    disc_computed_html = ""
+    if discordant_pairs:
+        disc_rows_out = "".join(
+            f"<tr><td class='mono'>{_safe_html(d['pair'])}</td>"
+            f"<td>{_safe_html(str(d['pairwise']) if d['pairwise'] is not None else 'n/a')}</td>"
+            f"<td>{_safe_html(f\"{d['posterior']:.3f}\" if d['posterior'] else 'n/a')}</td>"
+            f"<td><span class='badge badge-orange'>{_safe_html(d['disc_code'])}</span></td>"
+            f"<td>{_safe_html(d['interpretation'])}</td></tr>"
+            for d in sorted(discordant_pairs, key=lambda x: x["posterior"], reverse=True)[:40 if full else 10]
+        )
+        disc_computed_html = (f"<div class='tbl-wrap'><table><thead><tr>"
+                              f"<th>Pair</th><th>SNP dist</th><th>Posterior</th><th>Code</th><th>Interpretation</th>"
+                              f"</tr></thead><tbody>{disc_rows_out}</tbody></table></div>"
+                              "<p class='muted'>D1: outbreaker-linked, SNP&gt;12. D2: outbreaker-linked, SNP unavailable. D3: SNP-linked, no outbreaker direction.</p>")
+    else:
+        disc_computed_html = '<p class="muted">No discordant pairs identified from available outputs.</p>'
+
+    # 19. Data provenance section
+    prov_rows = "".join(
+        f"<tr class='{'style=\"background:var(--alert-bg)\"' if v is None or (isinstance(v,str) and not v.strip()) else ''}'>"
+        f"<th>{_safe_html(lbl)}</th>"
+        f"<td>{'<span class=\"badge badge-red\">Missing — required</span>' if v is None or (isinstance(v,str) and not v.strip()) else _safe_html(str(v))}</td></tr>"
+        for lbl, v in required_repro_metadata
+    )
+    prov_html = f"<table class='kv-table'><tbody>{prov_rows}</tbody></table>"
+
+    # 20. Key concepts reference
+    concepts = [
+        ("Whole-Genome Sequencing (WGS)", "Reads the complete ~4.4 Mb genome of M. tuberculosis. More informative than conventional typing (MIRU, spoligotyping)."),
+        ("SNP", "A single base-pair difference. Closely related strains share few SNPs. Used as a genetic distance metric."),
+        ("SNP threshold for transmission", "≤12 SNPs: potentially linked (UK NICE). ≤5 SNPs: recent direct transmission likely. >50 SNPs: recent shared transmission effectively ruled out."),
+        ("Lineage", "M. tuberculosis classified into 7+ major lineages (L1–L7). Influences drug-resistance patterns and transmissibility."),
+        ("Cluster", "Cases genetically similar within the SNP threshold. Does not prove direct transmission — epidemiological linkage required to confirm routes."),
+        ("outbreaker2", "Bayesian MCMC method combining SNP distances with collection dates to probabilistically infer who-infected-whom. Posterior probabilities are hypotheses, not proofs."),
+        ("MCMC convergence", "Convergence diagnostic near 1.0 = reliable. Values >1.1 = interpret cautiously."),
+        ("Drug resistance", "Genomic mutations predict resistance. MDR-TB = resistant to isoniazid + rifampicin. XDR-TB = additional resistance. Genomic DR requires phenotypic DST confirmation."),
+    ]
+    concepts_html = "".join(
+        f"<details><summary>{_safe_html(term)}</summary><div><p>{_safe_html(defn)}</p></div></details>"
+        for term, defn in concepts
+    )
+
+    # 21. Raw artifacts section (full only)
+    raw_artifacts_html = ""
+    if full:
+        raw_artifacts_html = f"""
+<div class="card" id="raw-artifacts">
+  <h2>Full machine-readable artifacts</h2>
+  <p class="muted">Complete JSON exports used to produce this report.</p>
+  <details><summary>Outbreaker2 summary artifact</summary><div><pre>{_safe_html(json.dumps(summary_data, indent=2, default=str) if summary_data else 'No artifact found.')}</pre></div></details>
+  <details><summary>Transmission network artifact</summary><div><pre>{_safe_html(json.dumps(transmission_data, indent=2, default=str) if transmission_data else 'No artifact found.')}</pre></div></details>
+  <details><summary>Sequence clustering summary</summary><div><pre>{_safe_html(json.dumps(sequence_summary_data, indent=2, default=str) if sequence_summary_data else 'No artifact found.')}</pre></div></details>
+  <details><summary>Lineage/DR validation</summary><div><pre>{_safe_html(json.dumps(lineage_dr_data, indent=2, default=str) if lineage_dr_data else 'No artifact found.')}</pre></div></details>
+</div>"""
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Assemble final HTML
+    # ─────────────────────────────────────────────────────────────────────────
     html = f"""<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Outbreak Investigation Report ({_safe_html(report_label)})</title>
+  <title>Outbreak Investigation Report — NI TB Genomic Surveillance</title>
   <style>{css}</style>
 </head>
 <body>
 <header>
   <h1>NI TB Genomic Surveillance</h1>
-  <p>Outbreak Investigation Report — generated {_safe_html(generated_at)}</p>
+  <p>Outbreak Investigation Report &mdash; generated {_safe_html(generated_at)} &nbsp;&middot;&nbsp; {_safe_html(report_label)}</p>
+  {status_html}
 </header>
-<main>
-  <section class="card note">
-    <strong>HTML publication note:</strong>
-    <ul>{''.join(f'<li>{_safe_html(note)}</li>' for note in publication_notes)}</ul>
-  </section>
-  <nav class="card toc" aria-label="Report sections">
-    <a href="#summary">Executive summary</a><a href="#outbreaker">Outbreaker2</a><a href="#transmission">Transmission network</a><a href="#lineage">Lineage/DR</a><a href="#quality">Quality and methods</a><a href="#actions">Action appendices</a>{'<a href="#raw-artifacts">Raw artifacts</a>' if full else ''}<a href="#figures">Figures</a>
+
+<div class="layout">
+  <!-- ── Sticky sidebar nav ── -->
+  <nav class="sidebar" aria-label="Report sections">
+    <h3>Overview</h3>
+    <a href="#executive">Executive summary</a>
+    <a href="#actions-now">Top actions due now</a>
+    <a href="#mdt">MDT governance</a>
+    <h3>Analysis</h3>
+    <a href="#analysis">outbreaker2 analysis</a>
+    <a href="#transmission">Transmission network</a>
+    <a href="#snp-summary">Pairwise SNP summary</a>
+    <a href="#interpretation">Outbreak interpretation</a>
+    <h3>Sequencing &amp; QC</h3>
+    <a href="#kpis">Programme KPIs</a>
+    <a href="#weekly">Weekly trends</a>
+    <a href="#qc">QC drill-down</a>
+    <a href="#run-qc">Run-level QC</a>
+    <h3>Resistance</h3>
+    <a href="#lineage">Lineage/DR summary</a>
+    <a href="#mutations">Mutation details</a>
+    <h3>Clusters</h3>
+    <a href="#clusters">Cluster epidemiology</a>
+    <a href="#cluster-pri">Cluster prioritisation</a>
+    <h3>Methods</h3>
+    <a href="#methods">Method comparison</a>
+    <a href="#provenance">Data provenance</a>
+    <h3>Appendices</h3>
+    <a href="#appendix-a">Appendix A — Case actions</a>
+    <a href="#appendix-b">Appendix B — Discordance</a>
+    <a href="#figures">Figures</a>
+    <a href="#concepts">Key concepts</a>
+    {'<a href="#raw-artifacts">Raw artifacts</a>' if full else ''}
   </nav>
-  <section class="card" id="summary">
-    <h2>Executive summary</h2>
-    <div class="grid">
-      <div class="metric"><span>Total cases</span><strong>{_safe_html(total_cases)}</strong></div>
-      <div class="metric"><span>Clustered cases</span><strong>{_safe_html(clustered_cases)}</strong></div>
-      <div class="metric"><span>Open clusters</span><strong>{_safe_html(open_clusters)}</strong></div>
-      <div class="metric"><span>Report format</span><strong>{_safe_html(report_label)}</strong></div>
-    </div>
-    <h3>Surveillance KPIs</h3>
-    {_html_kv_table(kpi_data if isinstance(kpi_data, dict) else None, [('Eligible cases','eligible_cases'),('Sequenced cases','sequenced_cases'),('Sequencing coverage %','sequencing_coverage_pct'),('QC pass %','qc_pass_pct'),('Warning','warning')])}
-  </section>
-  <section class="card" id="outbreaker">
-    <h2>Outbreaker2 summary</h2>
-    {_html_kv_table(summary_data if isinstance(summary_data, dict) else None, [('Analysis engine','analysis_engine'),('Generated at','generated_at'),('Case count','case_count'),('Posterior samples','posterior_samples'),('Likelihood mean','likelihood_mean'),('Likelihood SD','likelihood_sd')])}
-  </section>
-  <section class="card" id="transmission">
-    <h2>Transmission network</h2>
-    {_html_kv_table(transmission_data if isinstance(transmission_data, dict) else None, [('Generated at','generated_at'),('Inference source','inference_source'),('Provenance','provenance'),('Node count','node_count'),('Edge count','edge_count'),('High-confidence edges','high_confidence_edges')])}
-    <h3>{_safe_html(priority_heading)}</h3>
-    {_html_data_table(key_nodes if network_limit is None else key_nodes[:network_limit], [('Case','case_id'),('Cluster','cluster_id'),('Region','region'),('Risk score','risk_score'),('Risk band','risk_band'),('Outgoing','outgoing_links'),('Incoming','incoming_links')], 'No priority-node data available.')}
-    <h3>{_safe_html(links_heading)}</h3>
-    {_html_data_table(edges if network_limit is None else edges[:network_limit], [('From','source'),('To','target'),('Probability','probability'),('Confidence','confidence'),('Inference','inference')], 'No transmission-link data available.')}
-  </section>
-  <section class="card" id="lineage">
-    <h2>Lineage and drug-resistance readiness</h2>
-    {_html_kv_table(lineage_dr_data if isinstance(lineage_dr_data, dict) else None, [('Generated at','generated_at'),('Status','status'),('Scaffold version','scaffold_version')])}
-    <h3>Raw validation artifact</h3>
-    <pre>{_safe_html(json.dumps(lineage_dr_data, indent=2, default=str) if lineage_dr_data else 'No lineage/DR validation artifact found.')}</pre>
-  </section>
-  <section class="card" id="quality">
-    <h2>Quality, validation, and method comparison</h2>
-    <h3>Secondary engine validation</h3>
-    <pre>{_safe_html(json.dumps(secondary_validation_data, indent=2, default=str) if secondary_validation_data else 'No secondary engine validation artifact found.')}</pre>
-    <h3>Cross-method clustering comparison</h3>
-    <pre>{_safe_html(json.dumps(method_comparison_data, indent=2, default=str) if method_comparison_data else 'No method comparison artifact found.')}</pre>
-    <h3>Sequence clustering snapshot</h3>
-    {_html_kv_table(sequence_summary_data if isinstance(sequence_summary_data, dict) else None, [('Status','status'),('Method','method'),('Threshold SNP distance','threshold_snp_distance'),('Sequenced cases','sequenced_cases'),('Clustered cases','clustered_cases'),('Cluster count','cluster_count')])}
-  </section>
-  <section class="card" id="actions">
-    <h2>Action appendices</h2>
-    <h3>{_safe_html(action_heading)}</h3>
-    {_html_data_table(action_rows, [('Case','Case'),('Cluster','Cluster'),('Pairwise SNP?','Pairwise SNP?'),('Posterior','Posterior'),('Tier','Tier'),('QC','QC'),('Recommended action','Recommended action')], 'No case-level action export found.')}
-    <h3>{_safe_html(discordance_heading)}</h3>
-    {_html_data_table(discordance_rows, [('Case pair','Case Pair'),('Pairwise SNP result','Pairwise SNP result'),('Outbreaker2','Outbreaker2'),('Pairwise SNP','Pairwise SNP'),('Posterior','Posterior'),('Code','Code'),('Interpretation','Interpretation')], 'No discordance-review export found.')}
-  </section>
-  {raw_artifact_section}
-  <section class="card" id="figures">
-    <h2>Figures</h2>
-    <div class="figures">{''.join(graphics_html) if graphics_html else '<p class="muted">No outbreak graphics found in exports/.</p>'}</div>
-  </section>
-  <section class="card footer">
-    <p>Generated from TB Genomics backend artifacts. For operational use, interpret genomic findings with clinical history, contact tracing, epidemiology, QC status, and local governance review.</p>
-  </section>
-</main>
+
+  <main>
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- EXECUTIVE SUMMARY -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <section class="card" id="executive">
+      <h2>Executive summary</h2>
+      {dashboard_html}
+      {'<div class="callout callout-alert"><strong>DRAFT REPORT:</strong> Missing reproducibility fields: ' + _safe_html(', '.join(missing_repro)) + '. External circulation is blocked until these are populated.</div>' if missing_repro else '<div class="callout"><strong>Governance gate passed.</strong> Reproducibility metadata is complete. Publish only after information-governance review.</div>'}
+    </section>
+
+    <!-- TOP ACTIONS -->
+    <section class="card" id="actions-now">
+      <h2>Top actions due now</h2>
+      <div class="section-note">Items marked <strong>model-only</strong> or <strong>exploratory</strong> require genomic validation and epidemiological corroboration before operational action.</div>
+      {top_actions_html}
+    </section>
+
+    <!-- MDT GOVERNANCE -->
+    <section class="card" id="mdt">
+      <h2>MDT governance summary</h2>
+      {mdt_html}
+      <p class="muted" style="margin-top:.5rem">Full MDT action sheet with final discordant-pair counts is in Appendix B.</p>
+    </section>
+
+    <!-- ABOUT -->
+    <section class="card" id="about">
+      <h2>About this report</h2>
+      <p style="font-size:.87rem">This report is produced by the Northern Ireland TB Genomic Surveillance platform using whole-genome sequencing (WGS) data and epidemiological case records. It supports TB programme staff and public health investigators by providing genomic evidence for transmission clusters, drug-resistance profiles, and programme performance metrics.</p>
+      <div class="callout-warn callout" style="margin-top:.6rem"><strong>Decision-support tool only.</strong> All findings must be reviewed and acted on by a qualified clinician or public health professional. No automated decisions are made.</div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- ANALYSIS -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <section class="card" id="analysis">
+      <h2>outbreaker2 analysis summary</h2>
+      {analysis_html}
+      <div class="section-note" style="margin-top:.7rem">
+        <strong>How to interpret:</strong> Pairs with high posterior transmission probability are model-prioritised hypotheses only.
+        They should not be interpreted as direct transmission unless supported by pairwise SNP distance ≤12, QC pass status, and epidemiological corroboration.
+      </div>
+    </section>
+
+    <!-- TRANSMISSION NETWORK -->
+    <section class="card" id="transmission">
+      <h2>Transmission network</h2>
+      {network_meta_html}
+      <h3>Priority nodes</h3>
+      {key_nodes_html}
+      <h3>Transmission links</h3>
+      {network_edges_html}
+    </section>
+
+    <!-- MODEL-PRIORITISED PAIRS -->
+    <section class="card" id="pairs">
+      <h2>Model-prioritised transmission hypotheses</h2>
+      <div class="callout callout-alert">
+        <strong>Do not escalate model-only or genomically discordant links to field investigation</strong> without genomic and epidemiological corroboration.
+        Posterior probability &ge;0.70 indicates a plausible transmission event, but genomic validation is essential.
+      </div>
+      <div style="margin:.6rem 0">
+        <span class="tag">{_safe_html(str(len(genomic_pairs)))} SNP-linked</span>
+        <span class="tag">{_safe_html(str(len(model_only_pairs)))} Model-only</span>
+        <span class="tag">{_safe_html(str(len(genomically_discordant)))} D1: SNP&gt;12</span>
+        <span class="tag">{_safe_html(str(len(qc_resolution_pairs)))} QC-unresolved</span>
+      </div>
+      {_pair_table_html(genomic_pairs[:20 if not full else None], "Genomically supported (SNP ≤12, shared cluster)")}
+      {_pair_table_html(model_only_pairs[:20 if not full else None], "Model-only — no pairwise SNP data")}
+      {_pair_table_html(genomically_discordant[:20 if not full else None], "Genomically discordant (posterior ≥0.70, SNP >12)")}
+      {_pair_table_html(qc_resolution_pairs[:20 if not full else None], "QC-unresolved — hold pending repeat sequencing")}
+      {('<p class="muted">No high-confidence (&ge;0.70) edges found in transmission network.</p>' if not high_confidence_edges else '')}
+    </section>
+
+    <!-- SNP SUMMARY -->
+    <section class="card" id="snp-summary">
+      <h2>Pairwise SNP distance summary</h2>
+      <div class="section-note">
+        ≤12 SNPs = operational threshold for probable recent transmission.
+        &gt;12 SNPs = direct transmission unlikely.
+        SNP unavailable = repeat sequencing required before inference.
+      </div>
+      <div class="tbl-wrap"><table><thead><tr><th>SNP distance category</th><th>Pairs</th><th>Operational implication</th></tr></thead><tbody>
+        <tr><td>0–5 SNPs (direct)</td><td>{_safe_html(str(sum(1 for d in pairwise_snp_matrix.values() if d<=5)))}</td><td>Immediate: probable direct transmission — contact trace; confirm epi link</td></tr>
+        <tr><td>6–12 SNPs (probable)</td><td>{_safe_html(str(sum(1 for d in pairwise_snp_matrix.values() if 6<=d<=12)))}</td><td>Priority: probable cluster; review shared setting and exposures</td></tr>
+        <tr><td>13–25 SNPs (possible shared source)</td><td>{_safe_html(str(sum(1 for d in pairwise_snp_matrix.values() if 13<=d<=25)))}</td><td>Review: possible shared source/reactivation; epi adjudication required</td></tr>
+        <tr><td>&gt;25 SNPs (unlikely direct)</td><td>{_safe_html(str(sum(1 for d in pairwise_snp_matrix.values() if d>25)))}</td><td>Low priority: unlikely direct recent transmission; monitor only</td></tr>
+        <tr><td>SNP unavailable</td><td>{_safe_html(str(sum(1 for r in case_rows if not sequence_by_case.get(str(r.get('case_id',''))) and r.get('case_id'))))}</td><td>Hold: repeat sequencing or QC resolution required before inference</td></tr>
+      </tbody></table></div>
+    </section>
+
+    <!-- OUTBREAK INTERPRETATION -->
+    <section class="card" id="interpretation">
+      <h2>Current outbreak interpretation</h2>
+      <p style="font-size:.87rem">This report identifies {_safe_html(str(int(open_clusters)))} open genomic cluster(s) and {_safe_html(str(high_confidence_all_count))} outbreaker2 model-prioritised transmission hypotheses (posterior &ge;0.70).
+      The immediate priorities are repeat sequencing/QC review, validation of resistance calls, phenotypic DST confirmation, and epidemiological corroboration before field escalation.</p>
+
+      <h3>Counts in this report</h3>
+      <div class="tbl-wrap"><table><thead><tr><th>Metric</th><th>Count</th><th>Definition</th></tr></thead><tbody>
+        <tr><td>Model-prioritised links &ge;0.70</td><td>{_safe_html(str(high_confidence_all_count))}</td><td>All outbreaker2 edges with posterior probability &ge;0.70</td></tr>
+        <tr><td>Discordant pairs reviewed</td><td>{_safe_html(str(len(discordant_pairs)))}</td><td>All model-linked pairs showing SNP/model discordance requiring adjudication</td></tr>
+        <tr><td>Displayed network links</td><td>{_safe_html(str(high_confidence_snapshot_count))}</td><td>Links in network JSON snapshot (may be filtered for display)</td></tr>
+      </tbody></table></div>
+
+      <h3>Discordant pairs</h3>
+      {disc_computed_html}
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- KPIs & TRENDS -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <section class="card" id="kpis">
+      <h2>Programme surveillance KPIs (last 12 weeks)</h2>
+      {kpi_kv}
+      {region_html}
+    </section>
+
+    <section class="card" id="weekly">
+      <h2>Weekly surveillance trends (12 weeks)</h2>
+      {weekly_html}
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- QC -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <section class="card" id="qc">
+      <h2>QC failure drill-down</h2>
+      {qc_summary_html}
+      <div class="section-note" style="margin-top:.6rem">
+        Samples highlighted red require repeat sequencing or resolution before operational inference.
+        Contaminated samples must be excluded from cluster assignment pending repeat.
+      </div>
+      {qc_detail_html}
+    </section>
+
+    <section class="card" id="run-qc">
+      <h2>Run-level QC summary</h2>
+      <div class="section-note">Runs with fail rate &gt;20% or mean coverage &lt;95% should be reviewed before results are used for cluster assignment.</div>
+      {run_qc_html}
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- LINEAGE / DR -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <section class="card" id="lineage">
+      <h2>Lineage and drug-resistance summary</h2>
+      {lineage_table_html}
+    </section>
+
+    <section class="card" id="mutations">
+      <h2>Drug-resistance mutation details</h2>
+      <div class="callout callout-alert">
+        <strong>WARNING:</strong> All genomic resistance predictions must be confirmed by phenotypic DST before clinical use.
+        Invalid gene-drug combinations (marked <span class="badge badge-red">Unusual</span>) must not be reported operationally until pipeline validation is complete.
+      </div>
+      <details open><summary>Gene-drug reference mapping</summary><div>
+        <div class="tbl-wrap"><table><thead><tr><th>Drug</th><th>Expected genes</th></tr></thead><tbody>
+          <tr><td>Rifampicin</td><td>rpoB</td></tr>
+          <tr><td>Isoniazid</td><td>katG, inhA, fabG1</td></tr>
+          <tr><td>Pyrazinamide</td><td>pncA</td></tr>
+          <tr><td>Ethambutol</td><td>embB</td></tr>
+          <tr><td>Fluoroquinolones</td><td>gyrA, gyrB</td></tr>
+          <tr><td>Aminoglycosides / injectables</td><td>rrs, eis, tlyA</td></tr>
+        </tbody></table></div>
+      </div></details>
+      {dr_table_html}
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- CLUSTERS -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <section class="card" id="clusters">
+      <h2>Cluster epidemiology</h2>
+      <p class="muted">Genomic summary + growth status for all active clusters. RR/MDR column = rifampicin-resistant / MDR-TB suspected cases.</p>
+      {cluster_epi_html}
+    </section>
+
+    <section class="card" id="cluster-pri">
+      <h2>Cluster prioritisation</h2>
+      <div class="section-note">Priority score = case count×2 + cross-region spread×3 + recency (14/30/60d = 3/2/1) + open status×3. Scores &gt;10 warrant prioritised MDT review.</div>
+      {cluster_pri_html}
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- METHODS -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <section class="card" id="methods">
+      <h2>Method comparison &amp; secondary engines</h2>
+      <h3>Cross-method clustering comparison</h3>
+      {comp_html}
+      <h3>Sequence clustering snapshot</h3>
+      {seq_cluster_html}
+    </section>
+
+    <!-- DATA PROVENANCE -->
+    <section class="card" id="provenance">
+      <h2>Data provenance and reproducibility</h2>
+      {prov_html}
+      {'<div class="callout callout-alert" style="margin-top:.6rem"><strong>' + str(len(missing_repro)) + ' required field(s) missing.</strong> External circulation is blocked until all mandatory reproducibility fields are populated.</div>' if missing_repro else ''}
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- APPENDICES -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <section class="card" id="appendix-a">
+      <h2>Appendix A — Case-level operational actions</h2>
+      <details open><summary>Table A1 — Case actions ({_safe_html(action_limit_label)})</summary><div>
+        {actions_csv_html}
+      </div></details>
+    </section>
+
+    <section class="card" id="appendix-b">
+      <h2>Appendix B — Full discordance review</h2>
+      <details open><summary>Discordance table ({_safe_html(action_limit_label)})</summary><div>
+        {discordance_csv_html}
+      </div></details>
+    </section>
+
+    <!-- FIGURES -->
+    <section class="card" id="figures">
+      <h2>Figures</h2>
+      <div class="figures-grid">{''.join(graphics_html) if graphics_html else '<p class="muted">No outbreak graphics found in exports/.</p>'}</div>
+    </section>
+
+    <!-- KEY CONCEPTS -->
+    <section class="card" id="concepts">
+      <h2>Key concepts (Appendix D)</h2>
+      <p class="muted" style="margin-bottom:.5rem">Click to expand each definition.</p>
+      {concepts_html}
+    </section>
+
+    {raw_artifacts_html}
+
+    <!-- FOOTER -->
+    <section class="card" style="font-size:.82rem;color:var(--muted)">
+      <p>Generated from TB Genomics backend artifacts &mdash; {_safe_html(generated_at)}. For operational use, interpret genomic findings with clinical history, contact tracing, epidemiology, QC status, and local governance review. This is a decision-support tool only.</p>
+    </section>
+  </main>
+</div>
+
+<script>
+/* Highlight active nav link on scroll */
+(function(){{
+  const links = document.querySelectorAll('nav.sidebar a');
+  const sections = Array.from(links).map(a => document.querySelector(a.getAttribute('href'))).filter(Boolean);
+  const obs = new IntersectionObserver(entries => {{
+    entries.forEach(entry => {{
+      if(entry.isIntersecting){{
+        links.forEach(l => l.classList.remove('active'));
+        const active = document.querySelector('nav.sidebar a[href="#'+entry.target.id+'"]');
+        if(active) active.classList.add('active');
+      }}
+    }});
+  }}, {{rootMargin: '-20% 0px -70% 0px'}});
+  sections.forEach(s => obs.observe(s));
+}})();
+</script>
 </body>
 </html>"""
 

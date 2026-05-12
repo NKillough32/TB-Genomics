@@ -1128,14 +1128,81 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
     analysis_epi_summary = _lineage_epi_summary(db)
 
     # ── Graphics ───────────────────────────────────────────────────────────────
-    graphics_html = []
+    # Metadata for each known figure: stem → (title, interpretive caption)
+    _FIGURE_META: dict[str, tuple[str, str]] = {
+        "outbreaker_trace": (
+            "MCMC Log-Likelihood Trace",
+            "Inspect for convergence: a stable horizontal band indicates good chain mixing. "
+            "Visible drift, cycles, or sudden jumps suggest poor convergence — "
+            "treat all model output as exploratory until convergence is confirmed.",
+        ),
+        "outbreaker_hist": (
+            "MCMC Log-Likelihood Distribution",
+            "A near-normal, unimodal histogram indicates the sampler explored the posterior well. "
+            "Multi-modal or heavily skewed distributions suggest the chain has not converged — "
+            "model-prioritised transmission links should be interpreted with caution.",
+        ),
+        "outbreaker_tree": (
+            "Posterior Transmission Tree",
+            "Arrows show the most probable who-infected-whom direction from outbreaker2 posterior "
+            "marginal modes. These are probabilistic hypotheses, not confirmed routes. "
+            "Validate each link with pairwise SNP distance ≤12 and epidemiological corroboration "
+            "before operational action.",
+        ),
+        "outbreaker_phylo": (
+            "Hierarchical Clustering Dendrogram (SNP Distance)",
+            "Cases joined at a low branch height share recent common ancestry. "
+            "Visible compact sub-trees correspond to transmission clusters. "
+            "Branch heights are proportional to pairwise SNP distance — "
+            "cases below the 12-SNP threshold are likely directly linked.",
+        ),
+        "outbreaker_resistance": (
+            "Drug Resistance Profile Heatmap",
+            "Rows = case isolates, columns = drug classes. "
+            "Green = susceptible, yellow = intermediate, red = resistant. "
+            "All genomic resistance predictions must be confirmed by phenotypic DST before clinical use.",
+        ),
+    }
+
+    # Load all PNGs into a dict keyed by stem for contextual placement
+    figures_by_stem: dict[str, str] = {}  # stem → base64 data URI
     for image_path in sorted(Path(_export_path()).glob("outbreaker_*.png")):
         uri = _image_data_uri(str(image_path))
         if uri:
-            label = image_path.stem.replace("outbreaker_", "").replace("_", " ").title()
-            graphics_html.append(
-                f'<figure><img src="{uri}" alt="{_safe_html(label)}"><figcaption>{_safe_html(label)}</figcaption></figure>'
-            )
+            figures_by_stem[image_path.stem] = uri
+
+    def _figure_card(stem: str, show_in_gallery: bool = False) -> str:
+        """Render a single figure with interpretive caption, zoom button, and download link."""
+        uri = figures_by_stem.get(stem)
+        if not uri:
+            return f'<p class="muted figure-missing">Figure <em>{_safe_html(stem)}</em> not yet generated. Run the analysis pipeline to produce it.</p>'
+        title, caption = _FIGURE_META.get(stem, (stem.replace("outbreaker_", "").replace("_", " ").title(), ""))
+        safe_title = _safe_html(title)
+        safe_caption = _safe_html(caption)
+        dl_name = f"{stem}.png"
+        thumb_cls = "fig-thumb" if show_in_gallery else "fig-full"
+        return (
+            f'<figure class="fig-card {thumb_cls}" data-stem="{_safe_html(stem)}">'
+            f'<div class="fig-img-wrap">'
+            f'<img src="{uri}" alt="{safe_title}" loading="lazy" class="fig-img" '
+            f'     onclick="openLightbox(\'{_safe_html(stem)}\')">'
+            f'<button class="fig-zoom-btn" onclick="openLightbox(\'{_safe_html(stem)}\')" '
+            f'        title="Click to zoom" aria-label="Zoom {safe_title}">&#x26F6;</button>'
+            f'</div>'
+            f'<figcaption>'
+            f'<strong class="fig-title">{safe_title}</strong>'
+            f'{"<p class=fig-caption>" + safe_caption + "</p>" if caption else ""}'
+            f'<a class="fig-dl" href="{uri}" download="{_safe_html(dl_name)}" '
+            f'   title="Download {safe_title}">&#x2B07; Download</a>'
+            f'</figcaption>'
+            f'</figure>'
+        )
+
+    # Build the full figures gallery (thumbnail grid at bottom of report)
+    if figures_by_stem:
+        graphics_html = [_figure_card(stem, show_in_gallery=True) for stem in sorted(figures_by_stem.keys())]
+    else:
+        graphics_html = []
 
     # ── Pair categorisation ────────────────────────────────────────────────────
     genomic_pairs = []
@@ -1262,8 +1329,9 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
             return ""
         rows = ""
         for item in records:
+            _post = f"{item['posterior']:.3f}"
             rows += (f"<tr><td class='mono'>{_safe_html(item['pair'])}</td>"
-                     f"<td>{_safe_html(f\"{item['posterior']:.3f}\")}</td>"
+                     f"<td>{_safe_html(_post)}</td>"
                      f"<td>{_safe_html(item['pairwise'])}</td>"
                      f"<td>{_safe_html(item['qc'])}</td>"
                      f"<td>{_badge(item['validation_flag'])}</td></tr>")
@@ -1380,10 +1448,36 @@ details[open] summary::before{content:'▼ '}
 details > div{padding:.9rem 1rem}
 
 /* ── Figures ── */
-.figures-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem;margin:.6rem 0}
-.figures-grid figure{border:1px solid var(--rule);border-radius:8px;background:#fff;overflow:hidden}
-.figures-grid img{width:100%;height:auto;display:block}
-.figures-grid figcaption{text-align:center;color:var(--muted);font-size:.8rem;padding:.4rem .5rem .5rem}
+.figures-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.2rem;margin:.6rem 0}
+.fig-card{border:1px solid var(--rule);border-radius:10px;background:#fff;overflow:hidden;display:flex;flex-direction:column;transition:box-shadow .2s}
+.fig-card:hover{box-shadow:0 6px 20px rgba(21,38,64,.12)}
+.fig-img-wrap{position:relative;background:#f8fafc;overflow:hidden;line-height:0}
+.fig-img{width:100%;height:auto;display:block;cursor:zoom-in;transition:transform .25s}
+.fig-card:hover .fig-img{transform:scale(1.02)}
+.fig-zoom-btn{position:absolute;bottom:.4rem;right:.4rem;background:rgba(29,53,87,.82);color:#fff;border:none;border-radius:6px;padding:.3rem .45rem;font-size:.85rem;cursor:pointer;line-height:1;opacity:0;transition:opacity .2s}
+.fig-card:hover .fig-zoom-btn{opacity:1}
+.fig-card figcaption{padding:.65rem .75rem .7rem;flex:1;display:flex;flex-direction:column;gap:.25rem}
+.fig-title{font-size:.83rem;color:var(--navy);display:block}
+.fig-caption{font-size:.75rem;color:var(--muted);line-height:1.45;margin:0}
+.fig-dl{font-size:.73rem;color:var(--teal);text-decoration:none;margin-top:auto;align-self:flex-start}
+.fig-dl:hover{text-decoration:underline}
+.figure-missing{font-style:italic;color:var(--muted);padding:.5rem 0}
+.fig-inline{margin:.75rem 0}
+.fig-full .fig-img-wrap{max-height:480px;overflow:hidden}
+.fig-full .fig-img{object-fit:contain;max-height:480px;width:100%}
+
+/* ── Lightbox ── */
+dialog.lb{border:none;border-radius:14px;padding:0;max-width:96vw;max-height:96vh;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.55);background:#111}
+dialog.lb::backdrop{background:rgba(0,0,0,.82)}
+.lb-inner{position:relative;display:flex;flex-direction:column;max-height:96vh}
+.lb-img{max-width:96vw;max-height:82vh;object-fit:contain;display:block;background:#111}
+.lb-bar{background:rgba(0,0,0,.75);color:#f0f0f0;display:flex;align-items:center;gap:.75rem;padding:.5rem .8rem;font-size:.82rem}
+.lb-caption{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lb-close{background:none;border:1px solid rgba(255,255,255,.35);color:#f0f0f0;border-radius:6px;padding:.25rem .65rem;cursor:pointer;font-size:.82rem}
+.lb-close:hover{background:rgba(255,255,255,.15)}
+.lb-dl{color:#80d4c8;font-size:.78rem;text-decoration:none;white-space:nowrap}
+.lb-dl:hover{text-decoration:underline}
+@media(max-width:640px){.figures-grid{grid-template-columns:1fr}}
 
 /* ── Utilities ── */
 .muted{color:var(--muted);font-size:.85rem}
@@ -1596,10 +1690,11 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
             qc_st = str(r.get("qc_status") or "not_reported")
             repeat = "yes" if qc_st.lower() not in ("pass", "passed") or contam == "yes" else "no"
             row_class = ' style="background:var(--alert-bg)"' if repeat == "yes" else ""
+            action_badge = "<span class='badge badge-red'>Repeat</span>" if repeat == "yes" else "<span class='badge badge-green'>OK</span>"
             qc_trows += (f"<tr{row_class}><td class='mono'>{_safe_html(_short_case_id(str(r.get('case_id',''))))}</td>"
                          f"<td>{_safe_html(qc_st)}</td><td>{_safe_html(cov)}</td><td>{_safe_html(dep)}</td>"
                          f"<td>{_safe_html(contam)}</td>"
-                         f"<td>{'<span class=\"badge badge-red\">Repeat</span>' if repeat=='yes' else '<span class=\"badge badge-green\">OK</span>'}</td></tr>")
+                         f"<td>{action_badge}</td></tr>")
         qc_detail_html = (f"<div class='tbl-wrap'><table><thead><tr><th>Sample</th><th>QC status</th><th>Coverage %</th>"
                           f"<th>Mean depth</th><th>Contamination</th><th>Action</th></tr></thead><tbody>{qc_trows}</tbody></table></div>")
     else:
@@ -1794,12 +1889,16 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
     # 18. Discordant pair summary table (from computed data)
     disc_computed_html = ""
     if discordant_pairs:
+        def _fmt_disc(d):
+            _pairwise_str = str(d['pairwise']) if d['pairwise'] is not None else 'n/a'
+            _post_str = f"{d['posterior']:.3f}" if d['posterior'] else 'n/a'
+            return (f"<tr><td class='mono'>{_safe_html(d['pair'])}</td>"
+                    f"<td>{_safe_html(_pairwise_str)}</td>"
+                    f"<td>{_safe_html(_post_str)}</td>"
+                    f"<td><span class='badge badge-orange'>{_safe_html(d['disc_code'])}</span></td>"
+                    f"<td>{_safe_html(d['interpretation'])}</td></tr>")
         disc_rows_out = "".join(
-            f"<tr><td class='mono'>{_safe_html(d['pair'])}</td>"
-            f"<td>{_safe_html(str(d['pairwise']) if d['pairwise'] is not None else 'n/a')}</td>"
-            f"<td>{_safe_html(f\"{d['posterior']:.3f}\" if d['posterior'] else 'n/a')}</td>"
-            f"<td><span class='badge badge-orange'>{_safe_html(d['disc_code'])}</span></td>"
-            f"<td>{_safe_html(d['interpretation'])}</td></tr>"
+            _fmt_disc(d)
             for d in sorted(discordant_pairs, key=lambda x: x["posterior"], reverse=True)[:40 if full else 10]
         )
         disc_computed_html = (f"<div class='tbl-wrap'><table><thead><tr>"
@@ -1810,12 +1909,15 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
         disc_computed_html = '<p class="muted">No discordant pairs identified from available outputs.</p>'
 
     # 19. Data provenance section
-    prov_rows = "".join(
-        f"<tr class='{'style=\"background:var(--alert-bg)\"' if v is None or (isinstance(v,str) and not v.strip()) else ''}'>"
-        f"<th>{_safe_html(lbl)}</th>"
-        f"<td>{'<span class=\"badge badge-red\">Missing — required</span>' if v is None or (isinstance(v,str) and not v.strip()) else _safe_html(str(v))}</td></tr>"
-        for lbl, v in required_repro_metadata
-    )
+    _missing_badge = "<span class='badge badge-red'>Missing \u2014 required</span>"
+
+    def _prov_row(lbl, v):
+        is_missing = v is None or (isinstance(v, str) and not v.strip())
+        row_style = ' style="background:var(--alert-bg)"' if is_missing else ""
+        cell = _missing_badge if is_missing else _safe_html(str(v))
+        return f"<tr{row_style}><th>{_safe_html(lbl)}</th><td>{cell}</td></tr>"
+
+    prov_rows = "".join(_prov_row(lbl, v) for lbl, v in required_repro_metadata)
     prov_html = f"<table class='kv-table'><tbody>{prov_rows}</tbody></table>"
 
     # 20. Key concepts reference
@@ -1940,12 +2042,18 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
         <strong>How to interpret:</strong> Pairs with high posterior transmission probability are model-prioritised hypotheses only.
         They should not be interpreted as direct transmission unless supported by pairwise SNP distance ≤12, QC pass status, and epidemiological corroboration.
       </div>
+      <h3>MCMC diagnostics</h3>
+      <div class="figures-grid">
+        {_figure_card("outbreaker_trace")}
+        {_figure_card("outbreaker_hist")}
+      </div>
     </section>
 
     <!-- TRANSMISSION NETWORK -->
     <section class="card" id="transmission">
       <h2>Transmission network</h2>
       {network_meta_html}
+      <div class="fig-inline">{_figure_card("outbreaker_tree")}</div>
       <h3>Priority nodes</h3>
       {key_nodes_html}
       <h3>Transmission links</h3>
@@ -2045,6 +2153,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
     <section class="card" id="lineage">
       <h2>Lineage and drug-resistance summary</h2>
       {lineage_table_html}
+      <div class="fig-inline" style="margin-top:.9rem">{_figure_card("outbreaker_resistance")}</div>
     </section>
 
     <section class="card" id="mutations">
@@ -2072,6 +2181,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
     <section class="card" id="clusters">
       <h2>Cluster epidemiology</h2>
       <p class="muted">Genomic summary + growth status for all active clusters. RR/MDR column = rifampicin-resistant / MDR-TB suspected cases.</p>
+      <div class="fig-inline">{_figure_card("outbreaker_phylo")}</div>
       {cluster_epi_html}
     </section>
 
@@ -2118,9 +2228,22 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
 
     <!-- FIGURES -->
     <section class="card" id="figures">
-      <h2>Figures</h2>
-      <div class="figures-grid">{''.join(graphics_html) if graphics_html else '<p class="muted">No outbreak graphics found in exports/.</p>'}</div>
+      <h2>Figures overview</h2>
+      <p class="muted" style="margin-bottom:.7rem">All generated figures. Click any image to zoom; use the download link to save. Figures are also embedded inline within their relevant report sections above.</p>
+      <div class="figures-grid">{''.join(graphics_html) if graphics_html else '<p class="muted">No outbreak graphics found in exports/. Run the analysis pipeline to generate figures.</p>'}</div>
     </section>
+
+    <!-- LIGHTBOX DIALOG -->
+    <dialog class="lb" id="lightbox" aria-modal="true" aria-label="Figure zoom view">
+      <div class="lb-inner">
+        <img class="lb-img" id="lb-img" src="" alt="">
+        <div class="lb-bar">
+          <span class="lb-caption" id="lb-caption"></span>
+          <a class="lb-dl" id="lb-dl" href="" download="">&#x2B07; Download</a>
+          <button class="lb-close" onclick="document.getElementById('lightbox').close()" aria-label="Close zoom">&#x2715; Close</button>
+        </div>
+      </div>
+    </dialog>
 
     <!-- KEY CONCEPTS -->
     <section class="card" id="concepts">
@@ -2139,7 +2262,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
 </div>
 
 <script>
-/* Highlight active nav link on scroll */
+/* ── Active nav highlight ── */
 (function(){{
   const links = document.querySelectorAll('nav.sidebar a');
   const sections = Array.from(links).map(a => document.querySelector(a.getAttribute('href'))).filter(Boolean);
@@ -2154,6 +2277,37 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
   }}, {{rootMargin: '-20% 0px -70% 0px'}});
   sections.forEach(s => obs.observe(s));
 }})();
+
+/* ── Lightbox ── */
+const _figMeta = {{
+  outbreaker_trace: {{title:'MCMC Log-Likelihood Trace', dl:'outbreaker_trace.png'}},
+  outbreaker_hist:  {{title:'MCMC Log-Likelihood Distribution', dl:'outbreaker_hist.png'}},
+  outbreaker_tree:  {{title:'Posterior Transmission Tree', dl:'outbreaker_tree.png'}},
+  outbreaker_phylo: {{title:'Hierarchical Clustering Dendrogram', dl:'outbreaker_phylo.png'}},
+  outbreaker_resistance: {{title:'Drug Resistance Profile Heatmap', dl:'outbreaker_resistance.png'}},
+}};
+function openLightbox(stem) {{
+  const lb = document.getElementById('lightbox');
+  const img = document.getElementById('lb-img');
+  const cap = document.getElementById('lb-caption');
+  const dlk = document.getElementById('lb-dl');
+  const srcImg = document.querySelector('[data-stem="'+stem+'"] .fig-img');
+  if(!srcImg) return;
+  const meta = _figMeta[stem] || {{title: stem, dl: stem+'.png'}};
+  img.src = srcImg.src;
+  img.alt = meta.title;
+  cap.textContent = meta.title;
+  dlk.href = srcImg.src;
+  dlk.download = meta.dl;
+  lb.showModal();
+}}
+/* Close on backdrop click */
+document.addEventListener('DOMContentLoaded', function(){{
+  const lb = document.getElementById('lightbox');
+  if(lb) lb.addEventListener('click', function(e){{
+    if(e.target === lb) lb.close();
+  }});
+}});
 </script>
 </body>
 </html>"""

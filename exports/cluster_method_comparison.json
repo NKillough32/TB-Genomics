@@ -1,21 +1,21 @@
 {
-  "generated_at": "2026-05-12T19:15:45.116088+00:00",
+  "generated_at": "2026-05-12T20:12:06.734745+00:00",
   "inputs": {
     "sequence_assignments": "exports/sequence_cluster_assignments.csv",
     "outbreaker_network": "exports/transmission_network.json"
   },
   "coverage": {
-    "sequence_assigned_cases": 14,
-    "outbreaker_assigned_cases": 25,
-    "overlap_cases": 14
+    "sequence_assigned_cases": 13,
+    "outbreaker_assigned_cases": 23,
+    "overlap_cases": 13
   },
   "agreement": {
-    "sequence_same_cluster_pairs": 31,
-    "outbreaker_same_cluster_pairs": 91,
-    "overlap_same_cluster_pairs": 31,
-    "pairwise_precision_outbreaker_vs_sequence": 0.34065934065934067,
+    "sequence_same_cluster_pairs": 26,
+    "outbreaker_same_cluster_pairs": 78,
+    "overlap_same_cluster_pairs": 26,
+    "pairwise_precision_outbreaker_vs_sequence": 0.3333333333333333,
     "pairwise_recall_outbreaker_vs_sequence": 1.0,
-    "pairwise_jaccard": 0.34065934065934067
+    "pairwise_jaccard": 0.3333333333333333
   },
   "notes": [
     "Pairwise metrics compare whether case pairs are grouped together by both methods.",

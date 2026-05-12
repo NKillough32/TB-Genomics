@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-05-12T19:13:15.176069+00:00",
-  "status": "blocked_tool_dependencies",
+  "generated_at": "2026-05-12T20:10:58.091082+00:00",
+  "status": "completed",
   "scaffold_version": "1.0",
   "engines": {
     "tb_profiler": {
@@ -59,19 +59,33 @@
   "inputs": {
     "fastq_count": 0,
     "vcf_count": 0,
-    "fasta_count": 0,
+    "fasta_count": 1,
     "fastq_examples": [],
     "vcf_examples": [],
-    "fasta_examples": []
+    "fasta_examples": [
+      "dna.fasta"
+    ]
   },
   "tbprofiler_run": {
-    "status": "skipped",
-    "message": "tb-profiler not ready to run",
-    "runner": "none",
-    "attempted_samples": 0,
-    "successful_samples": 0,
+    "status": "completed",
+    "runner": "wsl",
+    "wsl_env": "tbtools",
+    "message": "tb-profiler WSL execution finished",
+    "attempted_samples": 10,
+    "successful_samples": 10,
     "failed_samples": 0,
-    "output_jsons": [],
+    "output_jsons": [
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/5da46fbe-1115-4c2f-81b5-ac56b1ba1ba8.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/ea8565e6-7cab-4964-8676-a47f6db2b1eb.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/3fb6c909-fb6f-4fc5-97f7-413a80f1e318.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/cb08ca91-5f05-463b-b739-055ae0f36fd7.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/19ad44ab-654a-43fa-9ee0-c971a376828e.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/32821fde-9cd5-4066-b8b8-5af8b32e0df4.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/c9f94f28-be20-4c9c-b4e5-ac7655006189.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/0f61cc6c-a09b-4910-852a-5d795e7484f9.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/613e39c0-325e-4b67-98f3-48eca48ad358.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/fc1022b4-0af7-4088-afc4-55a6548e33aa.results.json"
+    ],
     "failures": []
   },
   "tbprofiler_local_run": {
@@ -85,13 +99,25 @@
     "failures": []
   },
   "tbprofiler_wsl_run": {
-    "status": "skipped",
+    "status": "completed",
     "runner": "wsl",
-    "message": "WSL tb-profiler execution not attempted",
-    "attempted_samples": 0,
-    "successful_samples": 0,
+    "wsl_env": "tbtools",
+    "message": "tb-profiler WSL execution finished",
+    "attempted_samples": 10,
+    "successful_samples": 10,
     "failed_samples": 0,
-    "output_jsons": [],
+    "output_jsons": [
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/5da46fbe-1115-4c2f-81b5-ac56b1ba1ba8.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/ea8565e6-7cab-4964-8676-a47f6db2b1eb.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/3fb6c909-fb6f-4fc5-97f7-413a80f1e318.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/cb08ca91-5f05-463b-b739-055ae0f36fd7.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/19ad44ab-654a-43fa-9ee0-c971a376828e.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/32821fde-9cd5-4066-b8b8-5af8b32e0df4.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/c9f94f28-be20-4c9c-b4e5-ac7655006189.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/0f61cc6c-a09b-4910-852a-5d795e7484f9.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/613e39c0-325e-4b67-98f3-48eca48ad358.results.json",
+      "C:/Users/Nicho/Desktop/TB-Genomics-main/exports/tbprofiler/results/fc1022b4-0af7-4088-afc4-55a6548e33aa.results.json"
+    ],
     "failures": []
   },
   "tbprofiler_docker_run": {
@@ -112,11 +138,22 @@
     "warnings": []
   },
   "tbprofiler_db_import": {
-    "status": "skipped",
-    "message": "No tb-profiler result JSON files imported",
+    "status": "imported",
+    "message": "tb-profiler results imported into tb_interpretation",
     "imported_rows": 0,
-    "skipped_rows": 0,
-    "warnings": []
+    "skipped_rows": 10,
+    "warnings": [
+      "sample_id not found in cases (5da46fbe-1115-4c2f-81b5-ac56b1ba1ba8)",
+      "sample_id not found in cases (ea8565e6-7cab-4964-8676-a47f6db2b1eb)",
+      "sample_id not found in cases (3fb6c909-fb6f-4fc5-97f7-413a80f1e318)",
+      "sample_id not found in cases (cb08ca91-5f05-463b-b739-055ae0f36fd7)",
+      "sample_id not found in cases (19ad44ab-654a-43fa-9ee0-c971a376828e)",
+      "sample_id not found in cases (32821fde-9cd5-4066-b8b8-5af8b32e0df4)",
+      "sample_id not found in cases (c9f94f28-be20-4c9c-b4e5-ac7655006189)",
+      "sample_id not found in cases (0f61cc6c-a09b-4910-852a-5d795e7484f9)",
+      "sample_id not found in cases (613e39c0-325e-4b67-98f3-48eca48ad358)",
+      "sample_id not found in cases (fc1022b4-0af7-4088-afc4-55a6548e33aa)"
+    ]
   },
   "mykrobe_run": {
     "status": "skipped",

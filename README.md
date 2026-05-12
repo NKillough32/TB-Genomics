@@ -157,6 +157,17 @@ The connector supports scheduled uploads and only sends new/changed files.
 To enforce ingest authentication, set TB_INGEST_API_KEY on the backend host and configure
 TB_API_KEY with the same value in the VM connector environment.
 
+
+Publication-friendly outbreak report
+------------------------------------
+
+The outbreak report is available in two formats:
+
+- GET /cases/outbreak-report for the existing PDF report.
+- GET /cases/outbreak-report.html for a browser-friendly HTML report that is saved to exports/outbreaker_investigation_report.html.
+
+Use the HTML report for online publication workflows after local information-governance review. The HTML output embeds outbreak graphics and uses responsive tables to reduce PDF-only wrapping and page-break formatting issues.
+
 TB surveillance KPI reporting
 -----------------------------
 

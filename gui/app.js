@@ -304,6 +304,9 @@ async function loadLineageDrValidation(){
 function downloadOutbreakReport(){
 	window.open(`${API}/cases/outbreak-report`, '_blank');
 }
+function openOutbreakReportHtml(){
+	window.open(`${API}/cases/outbreak-report.html`, '_blank');
+}
 async function loadAuditTrail(){
 	const box=document.getElementById('auditTrail');
 	box.textContent='Loading audit trail...';

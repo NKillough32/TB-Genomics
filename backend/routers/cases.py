@@ -821,7 +821,7 @@ def outbreak_report(db: Session = Depends(get_db)):
         from reportlab.lib.pagesizes import A4, landscape
         from reportlab.lib.styles import getSampleStyleSheet
         from reportlab.lib.units import inch
-        from reportlab.platypus import BaseDocTemplate, Frame, Image, KeepTogether, NextPageTemplate, PageBreak, PageTemplate, Paragraph, Spacer, Table, TableStyle
+        from reportlab.platypus import BaseDocTemplate, CondPageBreak, Frame, Image, KeepTogether, NextPageTemplate, PageBreak, PageTemplate, Paragraph, Spacer, Table, TableStyle
         from reportlab.lib.utils import ImageReader
     except Exception as e:
         return {"error": f"PDF generation dependency missing: {e}"}
@@ -1687,13 +1687,21 @@ def outbreak_report(db: Session = Depends(get_db)):
             commands.append(("VALIGN", (0, 0), (-1, -1), "TOP"))
         return TableStyle(commands)
 
-    def section_divider(label: str | None = None) -> None:
-        """Append a visually separated section break — a navy rule with optional bold label."""
+    def section_divider(label: str | None = None, *, min_following_height: float = 2.35) -> None:
+        """Append a section break with orphan control for professional report flow.
+
+        ReportLab's paragraph-level ``keepWithNext`` cannot protect a compound
+        section opener (rule + label + heading) from landing at the bottom of a
+        page. A conditional page break reserves enough space for the opener and
+        first substantive content block, preventing disconnected headings and
+        excessive whitespace in mobile PDF viewers.
+        """
         from reportlab.platypus import HRFlowable
-        story.append(Spacer(1, 0.08 * inch))
-        story.append(HRFlowable(width="100%", thickness=1.2, color=C_NAVY, spaceAfter=0, spaceBefore=0))
+
+        story.append(CondPageBreak(min_following_height * inch))
+        rule = HRFlowable(width="100%", thickness=1.2, color=C_NAVY, spaceAfter=0, spaceBefore=0)
         if label:
-            story.append(Paragraph(
+            label_para = Paragraph(
                 f"<b>{label}</b>",
                 ParagraphStyle(
                     "_DividerLabel",
@@ -1704,10 +1712,17 @@ def outbreak_report(db: Session = Depends(get_db)):
                     spaceBefore=3,
                     spaceAfter=2,
                     leading=13,
+                    keepWithNext=1,
                 ),
-            ))
+            )
+            story.append(KeepTogether([Spacer(1, 0.08 * inch), rule, label_para]))
         else:
-            story.append(Spacer(1, 0.04 * inch))
+            story.append(KeepTogether([Spacer(1, 0.08 * inch), rule, Spacer(1, 0.04 * inch)]))
+
+    def append_section_heading(title: str, *, min_following_height: float = 1.55) -> None:
+        """Append a Heading3 with enough remaining frame space for its first block."""
+        story.append(CondPageBreak(min_following_height * inch))
+        story.append(Paragraph(title, styles["Heading3"]))
 
     story.append(Paragraph("NI TB Genomic Surveillance", styles["Title"]))
 
@@ -1840,7 +1855,7 @@ def outbreak_report(db: Session = Depends(get_db)):
             "<b>REPORT STATUS: DEVELOPMENT / INTERNAL DRAFT ONLY</b> - Required reproducibility metadata is incomplete; external circulation is blocked until mandatory fields are populated.",
             section_note_style,
         ))
-    story.append(Paragraph("Executive Action Summary", styles["Heading3"]))
+    append_section_heading("Executive Action Summary", min_following_height=2.1)
     story.append(Paragraph(
         "Use this page first. Items marked model-only or exploratory require genomic validation and epidemiological corroboration before operational action.",
         section_note_style,
@@ -1872,7 +1887,7 @@ def outbreak_report(db: Session = Depends(get_db)):
     )
     top_actions_table.setStyle(standard_table_style(font_size=7.5, header=True, valign_top=True))
     story.append(Spacer(1, 0.08 * inch))
-    story.append(Paragraph("Top Actions Due Now", styles["Heading3"]))
+    append_section_heading("Top Actions Due Now")
     append_table_with_caption(
         top_actions_table,
         "Operational worklist for immediate MDT actioning.",
@@ -1882,7 +1897,7 @@ def outbreak_report(db: Session = Depends(get_db)):
     story.append(PageBreak())
 
     # ── MDT Governance Summary (page 2) ───────────────────────────────────────
-    story.append(Paragraph("MDT Governance Summary", styles["Heading3"]))
+    append_section_heading("MDT Governance Summary")
     _early_hpc = sum(
         1
         for row in cluster_action_rows
@@ -1910,7 +1925,7 @@ def outbreak_report(db: Session = Depends(get_db)):
     story.append(Spacer(1, 0.2 * inch))
 
     # ── Table of Contents ─────────────────────────────────────────────────────
-    story.append(Paragraph("Contents", styles["Heading3"]))
+    append_section_heading("Contents")
     _toc_rows = [
         ["Section", "Content", "Location"],
         ["Executive Action Summary", "Circulation status, QC, resistance, cluster, model risk dashboard", "Opening"],
@@ -1950,7 +1965,7 @@ def outbreak_report(db: Session = Depends(get_db)):
     story.append(PageBreak())
 
     # ── About This Report ──────────────────────────────────────────────────────
-    story.append(Paragraph("About This Report", styles["Heading3"]))
+    append_section_heading("About This Report", min_following_height=1.8)
     story.append(Paragraph(
         "This report is produced by the Northern Ireland TB Genomic Surveillance platform using whole-genome sequencing (WGS) "
         "data and epidemiological case records. It is intended to support TB programme staff and public health investigators "
@@ -2000,7 +2015,7 @@ def outbreak_report(db: Session = Depends(get_db)):
                    "(posterior probability >0.70) are hypotheses and should be validated against pairwise SNP, QC status, and epidemiology.", cell_body_style)],
     ]
 
-    story.append(Paragraph("Case Summary", styles["Heading3"]))
+    append_section_heading("Case Summary", min_following_height=1.9)
     summary_table_data = [
         ["Total Cases", str(int(total_cases))],
         ["Clustered Cases", str(int(clustered_cases))],
@@ -2047,16 +2062,16 @@ def outbreak_report(db: Session = Depends(get_db)):
             "Model-prioritised transmission hypotheses present; validate before field escalation."
         )
 
-    story.append(Paragraph("Automated Interpretation Flags", styles["Heading3"]))
+    append_section_heading("Automated Interpretation Flags", min_following_height=1.4)
     if interpretation_flags:
         for flag in interpretation_flags:
             story.append(Paragraph(f"- {flag}", styles["Normal"]))
     else:
         story.append(Paragraph("No elevated operational risk flags detected in current report window.", styles["Normal"]))
 
-    section_divider("Analysis context")
+    section_divider("Analysis context", min_following_height=3.25)
 
-    story.append(Paragraph("Analysis Summary", styles["Heading3"]))
+    append_section_heading("Analysis Summary")
     if summary_data:
         analysis_label_map = {
             "n_samples": "Posterior Samples",
@@ -2121,8 +2136,8 @@ def outbreak_report(db: Session = Depends(get_db)):
         section_note_style,
     ))
 
-    section_divider("Sequencing and QC")
-    story.append(Paragraph("Programme Surveillance KPIs (Last 12 Weeks)", styles["Heading3"]))
+    section_divider("Sequencing and QC", min_following_height=3.0)
+    append_section_heading("Programme Surveillance KPIs (Last 12 Weeks)")
     if kpi_data:
         kpi_table_data = [
             ["Eligible Cases", str(kpi_data.get("eligible_cases", 0))],
@@ -2182,8 +2197,8 @@ def outbreak_report(db: Session = Depends(get_db)):
         "clusters in under-sequenced regions may be underdetected. Where persistent regional gaps exist, "
         "review laboratory submission pathways and specimen transport processes."
     )
-    section_divider()
-    story.append(Paragraph("Weekly Surveillance Trends (12 Weeks)", styles["Heading3"]))
+    section_divider(min_following_height=3.25)
+    append_section_heading("Weekly Surveillance Trends (12 Weeks)")
     if weekly_trends:
         trend_rows = [["Week", "Eligible", "Sequenced", "Coverage %", "QC Pass %"]]
         for row in weekly_trends:
@@ -2220,7 +2235,7 @@ def outbreak_report(db: Session = Depends(get_db)):
     else:
         story.append(Paragraph("Weekly trends unavailable.", styles["Normal"]))
     section_divider("Cluster operations")
-    story.append(Paragraph("Cluster Action Prioritization", styles["Heading3"]))
+    append_section_heading("Cluster Action Prioritization")
     if cluster_action_rows:
         action_rows = [["Cluster", "Cases", "Regions", "Most Recent", "Status", "Priority"]]
         for row in cluster_action_rows:
@@ -2299,7 +2314,7 @@ def outbreak_report(db: Session = Depends(get_db)):
         story.append(Paragraph("No lineage/DR validation artifact found.", styles["Normal"]))
 
     section_divider()
-    story.append(Paragraph("Secondary Transmission Engines", styles["Heading3"]))
+    append_section_heading("Secondary Transmission Engines")
     story.append(Paragraph(
         "<b>QC Filtering Status:</b> The outbreaker2 network displayed below includes samples with reported QC status at run time. "
         "Samples with QC status 'fail' or 'not_reported' may be present in the graph. "
@@ -2370,7 +2385,7 @@ def outbreak_report(db: Session = Depends(get_db)):
             ),
         ]))
     else:
-        story.append(Paragraph("Cross-Method Clustering Comparison", styles["Heading3"]))
+        append_section_heading("Cross-Method Clustering Comparison")
         story.append(Paragraph("No cluster method comparison artifact found.", styles["Normal"]))
 
     if sequence_summary_data:
@@ -2386,7 +2401,7 @@ def outbreak_report(db: Session = Depends(get_db)):
             append_table_with_caption(seq_table, spacer_after=0.0)
 
     story.append(Spacer(1, 0.12 * inch))
-    story.append(Paragraph("Case-Level Operational Actions", styles["Heading3"]))
+    append_section_heading("Case-Level Operational Actions")
     case_table_for_appendix = None
     case_classif_table_for_appendix = None
     case_actions_b_table_for_appendix = None
@@ -2533,7 +2548,7 @@ def outbreak_report(db: Session = Depends(get_db)):
         story.append(Paragraph("No case-level records available for operational action table.", styles["Normal"]))
 
     section_divider("Transmission evidence")
-    story.append(Paragraph("Model-Prioritised Transmission Hypotheses", styles["Heading3"]))
+    append_section_heading("Model-Prioritised Transmission Hypotheses")
     story.append(Paragraph(
         "The outbreaker2 model infers transmission probabilities from SNP distance and sample collection dates. "
         "Posterior probability >0.70 indicates a plausible transmission event, but genomic validation is essential. "
@@ -2686,7 +2701,7 @@ def outbreak_report(db: Session = Depends(get_db)):
 
     # ── Current Outbreak Interpretation & Top Actions ──────────────────────────────────
     section_divider()
-    story.append(Paragraph("Current Outbreak Interpretation", styles["Heading3"]))
+    append_section_heading("Current Outbreak Interpretation")
     story.append(Paragraph(
         "Current interpretation: This report identifies three open genomic clusters and multiple outbreaker2 model-prioritised transmission hypotheses. "
         "However, no pairwise SNP links ≤12 are demonstrated in this extract, several links involve QC-failed or QC-not-reported samples, "
@@ -2819,7 +2834,7 @@ def outbreak_report(db: Session = Depends(get_db)):
 
     # ── Pairwise SNP Matrix Summary ───────────────────────────────────────────
     section_divider()
-    story.append(Paragraph("Pairwise SNP Distance Summary", styles["Heading3"]))
+    append_section_heading("Pairwise SNP Distance Summary")
     story.append(Paragraph(
         "Pairwise SNP distances are the primary genomic evidence for or against direct recent transmission. "
         "The table below summarises all model-prioritised case pairs by SNP distance category. "
@@ -2889,7 +2904,7 @@ def outbreak_report(db: Session = Depends(get_db)):
 
     # ── QC Failure Drill-Down ──────────────────────────────────────────────────
     section_divider("Sequencing quality")
-    story.append(Paragraph("QC Failure Drill-Down", styles["Heading3"]))
+    append_section_heading("QC Failure Drill-Down")
     low_coverage_count = 0
     for row in qc_detail_rows:
         try:
@@ -2961,7 +2976,7 @@ def outbreak_report(db: Session = Depends(get_db)):
 
     # ── Run-Level QC Summary ───────────────────────────────────────────────────
     section_divider()
-    story.append(Paragraph("Run-Level QC Summary", styles["Heading3"]))
+    append_section_heading("Run-Level QC Summary")
     story.append(Paragraph(
         "Sequencing run quality directly affects confidence in transmission inferences. "
         "Runs with high failure rates or low mean depth should trigger laboratory review before operational decisions are made from that run's samples. "
@@ -3025,7 +3040,7 @@ def outbreak_report(db: Session = Depends(get_db)):
         ))
 
     section_divider("Drug resistance")
-    story.append(Paragraph("Drug-Resistance Mutation Details", styles["Heading3"]))
+    append_section_heading("Drug-Resistance Mutation Details")
     story.append(Paragraph(
         "WARNING: The mapping between predicted mutations and drug resistance is preliminary. "
         "All genomic resistance predictions must be confirmed by phenotypic DST (drug susceptibility testing) before clinical use. "
@@ -3101,7 +3116,7 @@ def outbreak_report(db: Session = Depends(get_db)):
 
     # ── Phenotypic DST Reconciliation ──────────────────────────────────────────
     section_divider()
-    story.append(Paragraph("Phenotypic DST Reconciliation", styles["Heading3"]))
+    append_section_heading("Phenotypic DST Reconciliation")
     story.append(Paragraph(
         "Genomic resistance predictions must be reconciled against phenotypic drug susceptibility testing (DST) "
         "before any clinical or operational decision is made. "
@@ -3196,7 +3211,7 @@ def outbreak_report(db: Session = Depends(get_db)):
         ))
 
     section_divider("Epidemiology and geography")
-    story.append(Paragraph("Cluster Epidemiology Summary", styles["Heading3"]))
+    append_section_heading("Cluster Epidemiology Summary")
     story.append(Paragraph(
         "The cluster tracker is presented in two tables: a genomic summary (dates, SNP distances, resistance burden) "
         "and an operational tracker (investigation lead, epi link, contact tracing, LTBI, DST, next step).",
@@ -3275,7 +3290,7 @@ def outbreak_report(db: Session = Depends(get_db)):
 
     # ── Cluster Growth Status ──────────────────────────────────────────────────
     section_divider()
-    story.append(Paragraph("Cluster Growth Status", styles["Heading3"]))
+    append_section_heading("Cluster Growth Status")
     story.append(Paragraph(
         "Cluster growth status classifies whether each cluster is actively accumulating new cases based on recent specimen dates. "
         "Active clusters (last case <90 days ago) require heightened investigation priority. "
@@ -3337,7 +3352,7 @@ def outbreak_report(db: Session = Depends(get_db)):
 
     # ── Epi-Link Evidence Summary ──────────────────────────────────────────────
     section_divider()
-    story.append(Paragraph("Epi-Link Evidence Summary", styles["Heading3"]))
+    append_section_heading("Epi-Link Evidence Summary")
     story.append(Paragraph(
         "Genomic cluster membership is necessary but not sufficient for establishing a transmission chain. "
         "Epidemiological links — shared contacts, common exposure settings, overlapping timelines — provide independent corroboration. "
@@ -3387,7 +3402,7 @@ def outbreak_report(db: Session = Depends(get_db)):
 
     # ── Contact-Tracing Yield ──────────────────────────────────────────────────
     section_divider()
-    story.append(Paragraph("Contact-Tracing Yield — pending field data", styles["Heading3"]))
+    append_section_heading("Contact-Tracing Yield — pending field data")
     story.append(Paragraph(
         "<b>Contact-tracing yield: not available in current extract.</b> "
         "Contact tracing data are not recorded in this system. "
@@ -3417,7 +3432,7 @@ def outbreak_report(db: Session = Depends(get_db)):
     ))
 
     section_divider()
-    story.append(Paragraph("Geographical Cluster Spread", styles["Heading3"]))
+    append_section_heading("Geographical Cluster Spread")
     if cluster_epi_rows:
         _UK_ONLY_LABELS = {"united kingdom", "uk", "unknown"}
         geo_rows = [["Cluster", "Regions", "Cases", "Cross-Region", "Risk Flag"]]
@@ -3458,7 +3473,7 @@ def outbreak_report(db: Session = Depends(get_db)):
             ))
 
     section_divider()
-    story.append(Paragraph("Missing-Data Dashboard", styles["Heading3"]))
+    append_section_heading("Missing-Data Dashboard")
     if completeness_row:
         total = int(completeness_row.get("total_cases") or 0)
 
@@ -3493,7 +3508,7 @@ def outbreak_report(db: Session = Depends(get_db)):
 
     # ── Cluster Closure Criteria ───────────────────────────────────────────────
     section_divider()
-    story.append(Paragraph("Cluster Closure Criteria", styles["Heading3"]))
+    append_section_heading("Cluster Closure Criteria")
     story.append(Paragraph(
         "Clusters should not be closed on genomic evidence alone. The following criteria define the minimum standards for cluster closure, "
         "based on ECDC/PHE TB cluster management guidance. "
@@ -3545,7 +3560,7 @@ def outbreak_report(db: Session = Depends(get_db)):
     ))
 
     section_divider("Diagnostics and figures")
-    story.append(Paragraph("Model Reliability Diagnostics", styles["Heading3"]))
+    append_section_heading("Model Reliability Diagnostics")
     story.append(Paragraph(
         "MCMC convergence diagnostics indicate whether the Bayesian sampler has explored the parameter space adequately. "
         "Convergence diagnostic (Gelman-Rubin / R-hat) <1.1 indicates reliable estimates. Values >1.1 suggest exploratory inference only. "
@@ -3606,9 +3621,9 @@ def outbreak_report(db: Session = Depends(get_db)):
         ))
 
     section_divider()
-    story.append(Paragraph("Transmission Routes Reference", styles["Heading3"]))
+    append_section_heading("Transmission Routes Reference")
     # ── TB Transmission Routes — Background ───────────────────────────────────
-    story.append(Paragraph("Understanding TB Transmission Routes from WGS", styles["Heading3"]))
+    append_section_heading("Understanding TB Transmission Routes from WGS")
     story.append(Paragraph(
         "Whole-genome sequencing identifies genomic relatedness but does not directly observe contact events. "
         "Combining genomic clusters with epidemiological data (contact tracing, shared locations, timeline of "
@@ -3649,7 +3664,7 @@ def outbreak_report(db: Session = Depends(get_db)):
     )
     story.append(Spacer(1, 0.18 * inch))
 
-    story.append(Paragraph("Transmission Priority Signals", styles["Heading3"]))
+    append_section_heading("Transmission Priority Signals")
     if transmission_data and transmission_data.get("key_nodes"):
         priority_rows = [["Case", "Region", "Risk", "Out", "In"]]
         for node in transmission_data.get("key_nodes", [])[:10]:
@@ -3706,7 +3721,7 @@ def outbreak_report(db: Session = Depends(get_db)):
     )
 
     section_divider()
-    story.append(Paragraph("Diagnostic Graphics", styles["Heading3"]))
+    append_section_heading("Diagnostic Graphics")
     story.append(Paragraph(
         "The following plots are generated by outbreaker2 and the platform's supplementary visualisation pipeline. "
         "Each figure caption explains the content and how to interpret the output.",
@@ -3855,7 +3870,7 @@ def outbreak_report(db: Session = Depends(get_db)):
 
     # ── Clinical Action Summary ────────────────────────────────────────────────
     section_divider("Governance and action")
-    story.append(Paragraph("Clinical and Public Health Action Summary", styles["Heading3"]))
+    append_section_heading("Clinical and Public Health Action Summary")
     story.append(Paragraph(
         "The table below maps genomic findings to recommended clinical and public health actions. "
         "All actions must be confirmed by the responsible clinician and public health team.",
@@ -3914,7 +3929,7 @@ def outbreak_report(db: Session = Depends(get_db)):
     ))
 
     story.append(Spacer(1, 0.16 * inch))
-    story.append(Paragraph("Data Provenance", styles["Heading3"]))
+    append_section_heading("Data Provenance")
     story.append(
         Paragraph(
             "This report combines outbreaker outputs with surveillance KPIs, lineage/DR validation, secondary engine readiness, and cross-method clustering comparison artifacts available at generation time.",

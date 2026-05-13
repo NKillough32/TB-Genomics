@@ -147,7 +147,7 @@ story.append(Spacer(1, 0.2*inch))
 story.append(Paragraph("<b>Step 2.3: Activate Virtual Environment</b>", styles['Heading3']))
 story.append(Spacer(1, 0.1*inch))
 story.append(Paragraph("Activate the virtual environment in PowerShell:", step_style))
-story.append(Paragraph("<font face='Courier' size='9' color='#333333'>.\.venv\Scripts\Activate.ps1</font>", code_style))
+story.append(Paragraph(r"<font face='Courier' size='9' color='#333333'>.\.venv\Scripts\Activate.ps1</font>", code_style))
 story.append(Paragraph("You should see (.venv) at the start of the command line.", step_style))
 
 story.append(Spacer(1, 0.2*inch))

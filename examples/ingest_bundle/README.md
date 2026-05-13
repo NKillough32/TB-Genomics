@@ -61,6 +61,29 @@ psql -f .\examples\ingest_bundle\load_example_data.sql
 
 ## Note about API ingest endpoint
 
-`POST /ingest/file` currently uploads files to `uploads/` and does not parse/insert them automatically.
+`POST /ingest/file` uploads files to `uploads/` but does not automatically parse or insert them into the database.
 
-These templates are for schema-compatible data shaping and database loading workflows.
+For NI live data, use the full ingest pipeline instead:
+
+1. **Prepare** — map NI export columns to bundle format:
+
+   ```powershell
+   python scripts/prepare_ni_data.py --config scripts/ni_column_map.json --list-columns
+   python scripts/prepare_ni_data.py --config scripts/ni_column_map.json --out path/to/bundle
+   ```
+
+2. **Validate** — check bundle compliance before loading:
+
+   ```powershell
+   python scripts/validate_ingest_files.py --dir path/to/bundle
+   ```
+
+3. **Load** — idempotent DB insert (safe to re-run):
+
+   ```powershell
+   python scripts/load_ingest_bundle.py --dir path/to/bundle --dry-run
+   python scripts/load_ingest_bundle.py --dir path/to/bundle
+   ```
+
+Edit `scripts/ni_column_map.json` to match actual NI export column names before running `prepare_ni_data.py`.
+Use `--reset --confirm-reset` with `load_ingest_bundle.py` to truncate all tables before a fresh load (requires both flags).

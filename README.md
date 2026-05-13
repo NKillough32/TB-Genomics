@@ -10,12 +10,15 @@ It supports day-to-day surveillance by:
 - prioritizing where follow-up is most urgent
 - producing repeatable investigation reports for review
 
-Current prototype capabilities include:
+Current capabilities include:
 - FastAPI backend APIs for cases, ingest, KPIs, jobs, and reporting
 - Button-driven workflow for running and tracking analysis jobs
 - Web interface for operational use
 - PostgreSQL data model for surveillance and WGS reporting
 - Outbreaker2 integration for analyst-led outbreak analysis
+- TBProfiler + Mykrobe integration (WSL / Docker fallback) for lineage and drug resistance calling
+- Parallel dual-tool DR concordance checking with discordance flagged in audit_log
+- NI data ingest pipeline: prepare_ni_data.py, validate_ingest_files.py, load_ingest_bundle.py
 - Governance/setup documentation for secure deployment and integration
 
 Plain-language project overview
@@ -83,6 +86,10 @@ Option A: Seed from command line
 2) The script inserts synthetic records into:
 	- `cases`
 	- `tb_interpretation`
+	- `consensus_sequences`
+	- `sequencing_runs`
+	- `sample_qc_metrics`
+	- `analysis_provenance`
 	- `clusters`
 	- `case_clusters`
 	- `audit_log`
@@ -158,8 +165,61 @@ To enforce ingest authentication, set TB_INGEST_API_KEY on the backend host and 
 TB_API_KEY with the same value in the VM connector environment.
 
 
-Publication-friendly outbreak report
+Lineage and drug resistance calling
 ------------------------------------
+
+Scripts are wired as named jobs and called by the backend job runner.
+
+TBProfiler (primary engine):
+- Runs via WSL (`tbtools` mamba env) first; falls back to Docker if WSL is unavailable.
+- Output artifact: `exports/tbprofiler/` and imported into `tb_interpretation`.
+
+Mykrobe (parallel secondary engine):
+- Runs in parallel with TBProfiler (not as a fallback) whenever WSL is available and FASTA inputs are present.
+- Output artifact: `exports/mykrobe/<sample_id>_mykrobe.json`.
+- Results imported first; TBProfiler results overwrite as authoritative source of truth.
+- Import order: Mykrobe → TBProfiler (TBProfiler always wins on conflict).
+
+DR concordance checking:
+- After both tools run, per-drug R/S calls are compared for each sample.
+- Discordant samples (one tool says R, the other says S) are written to `audit_log` with action `dr_concordance_discordance_flagged`.
+- Concordance summary included in `exports/lineage_dr_validation.json` under `dr_concordance`.
+
+Environment variables for tool execution:
+- `TBPROFILER_WSL_FALLBACK=1` (default on): enables WSL execution path.
+- `TBPROFILER_WSL_ENV=tbtools` (default): mamba env name inside WSL.
+- `TBPROFILER_DOCKER_FALLBACK=1` (default on): enables Docker fallback if WSL fails.
+- `TBPROFILER_DOCKER_IMAGE`: TBProfiler Docker image (default: `quay.io/jodyphelan/tbprofiler:latest`).
+
+NI live data ingest pipeline
+-----------------------------
+
+Three scripts handle the end-to-end NI data ingest workflow:
+
+1. **Prepare**: transform NI-format exports into a standard bundle.
+
+	python scripts/prepare_ni_data.py --config scripts/ni_column_map.json --out path/to/bundle
+
+   Use `--list-columns` to discover source column names before editing the mapping.
+   Use `--dry-run` to preview first 5 rows without writing.
+
+2. **Validate**: check the bundle for schema compliance.
+
+	python scripts/validate_ingest_files.py --dir path/to/bundle
+
+3. **Load**: idempotent DB load (safe to re-run).
+
+	python scripts/load_ingest_bundle.py --dir path/to/bundle [--dry-run]
+	python scripts/load_ingest_bundle.py --dir path/to/bundle --reset --confirm-reset
+
+Notes:
+- All inserts use `ON CONFLICT DO NOTHING` — re-running is safe.
+- `--reset --confirm-reset` truncates ALL tables before loading; requires both flags to prevent accidents.
+- `ni_column_map.json` contains value maps for HSC Trust names, case status, and all column mappings.
+- Before first use on live NI data: run `--list-columns` to discover actual column names, then update `source_column` values in `ni_column_map.json`.
+- Ensure DB contains no synthetic seed events (`audit_log WHERE action='seed_synthetic_dataset'`) before loading real data.
+
+
 
 The outbreak report is available in two formats:
 

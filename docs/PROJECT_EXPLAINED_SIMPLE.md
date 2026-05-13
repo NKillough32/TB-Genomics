@@ -13,20 +13,22 @@ In plain terms, it helps answer:
 
 ## What it does, step by step
 
-1. It receives TB case and sequencing-related data.
+1. It receives TB case and sequencing-related data (via direct DB load or the NI ingest pipeline).
 2. It stores and organizes that data in a database.
-3. It runs analysis jobs (including outbreak-style analysis workflows).
-4. It calculates programme metrics (coverage, QC, turnaround, etc.).
-5. It generates summaries, visuals, and a PDF investigation report.
-6. It shows all of this in a web interface and API for operational use.
+3. It runs analysis jobs including outbreak-style analysis workflows.
+4. It calls lineage and drug resistance tools (TBProfiler and Mykrobe) in parallel; both results are compared and discordances are flagged for analyst review.
+5. It calculates programme metrics (coverage, QC, turnaround, etc.).
+6. It generates summaries, visuals, and a full HTML investigation report.
+7. It shows all of this in a web interface and API for operational use.
 
 ## The main parts
 
-- Backend API: runs the logic, calculations, and report generation.
-- Database schema: defines how case, cluster, and quality data are stored.
-- GUI: gives teams a simple web view of cases, jobs, and outputs.
-- Scripts: run clustering/outbreaker pipelines and data export utilities.
-- Governance docs: explain setup and secure integration (for example Azure VM ingestion).
+- **Backend API**: runs the logic, calculations, and report generation.
+- **Database schema**: defines how case, cluster, QC, sequencing run, and provenance data are stored.
+- **GUI**: gives teams a simple web view of cases, jobs, and outputs.
+- **Scripts**: run clustering, outbreaker, lineage/DR, and ingest pipeline utilities.
+- **Ingest pipeline**: three-step workflow (prepare → validate → load) for transforming NI programme exports into the platform database.
+- **Governance docs**: explain setup and secure integration (for example Azure VM ingestion).
 
 ## What users get from it
 
@@ -34,8 +36,10 @@ In plain terms, it helps answer:
 - Surveillance KPIs over a selected time window
 - Weekly trends for sequencing and QC performance
 - Priority lists (for clusters and likely transmission signals)
-- A generated outbreak investigation PDF report
+- Lineage and drug resistance results from TBProfiler and Mykrobe with concordance checking
+- A generated outbreak investigation HTML report (short and full versions)
 - Job status and logs for pipeline runs
+- Data provenance and reproducibility fields (reference genome, pipeline version, resistance catalogue, random seed)
 
 ## Why this is useful for a TB programme
 
@@ -43,6 +47,16 @@ In plain terms, it helps answer:
 - It supports faster and more consistent outbreak response.
 - It helps monitor sequencing service quality, not just case counts.
 - It creates a repeatable reporting process instead of manual collation.
+
+## How NI programme data fits in
+
+When NI sequencing export files are available, a three-step ingest pipeline loads them into the platform:
+
+1. **Prepare**: `prepare_ni_data.py` maps NI-format CSVs and FASTA files into the standard bundle format using a JSON column mapping config (`ni_column_map.json`).
+2. **Validate**: `validate_ingest_files.py` checks the bundle for schema compliance before loading.
+3. **Load**: `load_ingest_bundle.py` inserts the prepared data into the database. All inserts are idempotent — safe to re-run without creating duplicates.
+
+Before using real NI data, the database must contain no synthetic seed events. Check `GET /cases/data-safety` and confirm `operational_safe = true`.
 
 ## How Azure VM data fits in
 
@@ -56,6 +70,7 @@ This means you can automate data flow from sequencing infrastructure into report
 - It does not provide direct patient care decisions.
 - It depends on data quality and completeness from upstream systems.
 - It is a surveillance and operational intelligence tool, not a full LIMS.
+- Drug resistance results from TBProfiler and Mykrobe are genomic predictions only — all must be confirmed by phenotypic DST before clinical use.
 
 ## Demo data vs real operational data
 

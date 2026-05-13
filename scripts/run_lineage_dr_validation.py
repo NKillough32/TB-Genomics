@@ -871,10 +871,10 @@ def _import_tbprofiler_results(result_json_paths: list[str]) -> dict[str, Any]:
                         :interpretation_summary
                     )
                     ON CONFLICT (sample_id) DO UPDATE SET
-                        lineage = COALESCE(EXCLUDED.lineage, tb_interpretation.lineage),
-                        predicted_drug_resistance = COALESCE(EXCLUDED.predicted_drug_resistance, tb_interpretation.predicted_drug_resistance),
-                        confidence_score = COALESCE(EXCLUDED.confidence_score, tb_interpretation.confidence_score),
-                        interpretation_summary = COALESCE(EXCLUDED.interpretation_summary, tb_interpretation.interpretation_summary)
+                        lineage = EXCLUDED.lineage,
+                        predicted_drug_resistance = EXCLUDED.predicted_drug_resistance,
+                        confidence_score = EXCLUDED.confidence_score,
+                        interpretation_summary = EXCLUDED.interpretation_summary
                     """
                 ),
                 {
@@ -1029,6 +1029,99 @@ def _import_calls_csv(path: Path) -> dict[str, Any]:
             "skipped_rows": skipped,
             "warnings": warnings[:25],
         }
+    finally:
+        db.close()
+
+
+def _normalise_dr_to_rs(dr: Any) -> dict[str, str]:
+    """Flatten any DR payload shape to {drug: 'R' | 'S'}. Only R and S are kept."""
+    result: dict[str, str] = {}
+    if isinstance(dr, dict):
+        for drug, val in dr.items():
+            if isinstance(val, str):
+                result[drug] = val.upper()[:1]
+            elif isinstance(val, dict):
+                predict = val.get("predict") or val.get("call") or val.get("type") or ""
+                if predict:
+                    result[drug] = str(predict).upper()[:1]
+                elif val.get("variants"):
+                    result[drug] = "R"
+            elif isinstance(val, list) and val:
+                result[drug] = "R"
+    elif isinstance(dr, list):
+        for item in dr:
+            if isinstance(item, dict):
+                drug = item.get("drug") or item.get("Drug") or ""
+                call = item.get("call") or item.get("prediction") or item.get("type") or "R"
+                if drug:
+                    result[drug] = str(call).upper()[:1]
+    return {k: v for k, v in result.items() if v in {"R", "S"}}
+
+
+def _detect_dr_discordance(
+    tbprofiler_jsons: list[str],
+    mykrobe_jsons: list[str],
+) -> list[dict[str, Any]]:
+    """Compare per-sample DR calls from both tools; return discordances (one says R, other says S)."""
+    tbp_by_sample: dict[str, dict[str, str]] = {}
+    for path_str in tbprofiler_jsons:
+        path = Path(path_str)
+        sample_id = path.stem.replace(".results", "")
+        fields = _extract_lineage_and_resistance(path)
+        dr = fields.get("predicted_drug_resistance")
+        if dr is not None:
+            tbp_by_sample[sample_id] = _normalise_dr_to_rs(dr)
+
+    mk_by_sample: dict[str, dict[str, str]] = {}
+    for path_str in mykrobe_jsons:
+        path = Path(path_str)
+        sample_id = path.stem.replace("_mykrobe", "")
+        fields = _extract_mykrobe_results(path)
+        dr = fields.get("predicted_drug_resistance")
+        if dr is not None:
+            mk_by_sample[sample_id] = _normalise_dr_to_rs(dr)
+
+    discordances: list[dict[str, Any]] = []
+    for sample_id in set(tbp_by_sample) & set(mk_by_sample):
+        tbp_dr = tbp_by_sample[sample_id]
+        mk_dr = mk_by_sample[sample_id]
+        discordant_drugs: list[dict[str, str]] = []
+        for drug in set(tbp_dr) & set(mk_dr):
+            if {tbp_dr[drug], mk_dr[drug]} == {"R", "S"}:
+                discordant_drugs.append(
+                    {"drug": drug, "tbprofiler": tbp_dr[drug], "mykrobe": mk_dr[drug]}
+                )
+        discordances.append({
+            "sample_id": sample_id,
+            "concordant": len(discordant_drugs) == 0,
+            "discordant_drugs": discordant_drugs,
+            "drugs_compared": len(set(tbp_dr) & set(mk_dr)),
+        })
+
+    return discordances
+
+
+def _log_concordance_to_audit(discordances: list[dict[str, Any]]) -> None:
+    """Write DR concordance results to audit_log; one row per discordant sample."""
+    discordant_samples = [d for d in discordances if not d["concordant"]]
+    if not discordant_samples:
+        return
+    db = SessionLocal()
+    try:
+        for item in discordant_samples:
+            db.execute(
+                text(
+                    "INSERT INTO audit_log (action, details, timestamp) "
+                    "VALUES (:action, CAST(:details AS jsonb), NOW())"
+                ),
+                {
+                    "action": "dr_concordance_discordance_flagged",
+                    "details": json.dumps(item),
+                },
+            )
+        db.commit()
+    except Exception:
+        db.rollback()
     finally:
         db.close()
 
@@ -1245,21 +1338,32 @@ def main() -> None:
             tbprofiler_run = tbprofiler_docker_run
 
     if tbprofiler_run["status"] == "completed" and tbprofiler_run["output_jsons"]:
-        tbprofiler_import = _import_tbprofiler_results(tbprofiler_run["output_jsons"])
+        pass  # imported below after mykrobe, so tbprofiler overwrites as authoritative
 
-    # Run mykrobe via WSL as a secondary engine / fallback when tb-profiler did not complete.
+    # Run mykrobe via WSL in parallel with tb-profiler — always when available and FASTA inputs exist.
     if (
         wsl_fallback_enabled
         and fasta_inputs
         and wsl.get("available")
         and wsl_mykrobe.get("status") == "installed"
-        and tbprofiler_run["status"] in {"skipped", "failed"}
     ):
         mykrobe_wsl_run = _run_mykrobe_on_fasta_wsl(fasta_inputs, wsl_env_name)
         mykrobe_run = mykrobe_wsl_run
 
+    # Import order: Mykrobe first (fills base data), TBProfiler second (overwrites as authoritative).
     if mykrobe_run["status"] == "completed" and mykrobe_run["output_jsons"]:
         mykrobe_import = _import_mykrobe_results(mykrobe_run["output_jsons"])
+
+    if tbprofiler_run["status"] == "completed" and tbprofiler_run["output_jsons"]:
+        tbprofiler_import = _import_tbprofiler_results(tbprofiler_run["output_jsons"])
+
+    # Discordance check: flag samples where both tools ran but disagree on R/S.
+    dr_concordance: list[dict[str, Any]] = []
+    if tbprofiler_run["output_jsons"] and mykrobe_run["output_jsons"]:
+        dr_concordance = _detect_dr_discordance(
+            tbprofiler_run["output_jsons"], mykrobe_run["output_jsons"]
+        )
+        _log_concordance_to_audit(dr_concordance)
 
     ready_inputs = inputs["fastq_count"] > 0 or inputs["vcf_count"] > 0 or inputs["fasta_count"] > 0
     overall_status = "completed"
@@ -1315,6 +1419,12 @@ def main() -> None:
         "mykrobe_run": mykrobe_run,
         "mykrobe_wsl_run": mykrobe_wsl_run,
         "mykrobe_db_import": mykrobe_import,
+        "dr_concordance": {
+            "samples_compared": len(dr_concordance),
+            "all_concordant": all(d["concordant"] for d in dr_concordance) if dr_concordance else None,
+            "discordant_sample_count": sum(1 for d in dr_concordance if not d["concordant"]),
+            "details": dr_concordance,
+        },
         "next_steps": [
             "Install tb-profiler/mykrobe dependencies (WSL2 micromamba env is supported via TBPROFILER_WSL_FALLBACK=1).",
             "If local dependencies fail, install Docker Desktop and rerun with TBPROFILER_DOCKER_FALLBACK=1.",

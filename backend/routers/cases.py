@@ -1510,6 +1510,163 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
 """
 
     # ─────────────────────────────────────────────────────────────────────────
+    # Additional computed values for new sections
+    # ─────────────────────────────────────────────────────────────────────────
+
+    # Population / denominator box HTML
+    denom_html = f"""
+<div class="tbl-wrap"><table><thead><tr>
+  <th>Term</th><th>Definition</th><th>Count</th><th>Notes</th>
+</tr></thead><tbody>
+  <tr><td>Notified TB cases</td><td>Human cases in surveillance extract</td><td><strong>{_safe_html(str(denom_notified))}</strong></td><td>Source: cases table</td></tr>
+  <tr><td>Culture-positive / sequencing-eligible</td><td>Cases with a consensus sequence loaded</td><td><strong>{_safe_html(str(denom_culture_pos))}</strong></td><td>Source: consensus_sequences</td></tr>
+  <tr><td>Sequenced samples</td><td>Cases with sequence data in this extract</td><td><strong>{_safe_html(str(denom_sequenced))}</strong></td><td></td></tr>
+  <tr><td>QC-pass genomes</td><td>Genomes passing QC — used for SNP clustering</td><td><strong>{_safe_html(str(denom_qc_pass))}</strong></td><td>Fail/contaminated excluded from inference</td></tr>
+  <tr><td>outbreaker2 model nodes</td><td>Cases/samples included in transmission model</td><td><strong>{_safe_html(str(denom_model_nodes))}</strong></td><td>From transmission network JSON; 0 = analysis not yet run</td></tr>
+</tbody></table></div>"""
+
+    # QC thresholds box HTML
+    qc_thresholds_html = """
+<div class="tbl-wrap"><table><thead><tr><th>QC parameter</th><th>Pass threshold</th><th>Basis</th></tr></thead><tbody>
+  <tr><td>Genome coverage breadth</td><td>&ge;95%</td><td>PHE TB WGS SOP / standard practice</td></tr>
+  <tr><td>Mean depth</td><td>&ge;30&times;</td><td>Required for confident SNP calling</td></tr>
+  <tr><td>Ambiguous bases (%)</td><td>&le;5%</td><td>High missingness distorts SNP distances</td></tr>
+  <tr><td>Contamination</td><td>No mixed-lineage signal</td><td>Mixed lineage = likely contamination or co-infection — exclude pending investigation</td></tr>
+  <tr><td>Minimum reads mapped</td><td>Platform-specific (see pipeline version)</td><td>Record in sequencing_runs table</td></tr>
+  <tr><td>Exclusion rule</td><td>Any QC fail OR contamination flag = excluded from SNP clustering and outbreaker2</td><td>Conservative to avoid false transmission links</td></tr>
+</tbody></table></div>
+<div class="callout callout-warn" style="margin-top:.6rem">
+  Samples with QC status <em>not reported</em> are treated as unresolved and excluded from cluster inference pending review.
+  Thresholds above are defaults — site-specific SOP values override these if recorded in the pipeline provenance.
+</div>"""
+
+    # Epidemiological completeness table HTML — derive from case_rows
+    epi_fields_check = [
+        ("specimen_date",    "Specimen date"),
+        ("geographic_region","Geographic region"),
+        ("lineage",          "Lineage called"),
+        ("predicted_drug_resistance", "Drug resistance called"),
+        ("qc_status",        "QC status recorded"),
+        ("cluster_id",       "Cluster assigned"),
+    ]
+    epi_total = len(case_rows) or 1
+    epi_complete_html = "<div class='tbl-wrap'><table><thead><tr><th>Field</th><th>Populated</th><th>Missing</th><th>Completeness</th></tr></thead><tbody>"
+    for db_key, label in epi_fields_check:
+        populated = sum(1 for r in case_rows if r.get(db_key) not in (None, "", "null", "{}", "[]"))
+        missing   = epi_total - populated
+        pct       = (populated / epi_total) * 100
+        alert_style = ' style="background:var(--alert-bg)"' if pct < 80 else ""
+        epi_complete_html += (f"<tr{alert_style}><td>{_safe_html(label)}</td><td>{_safe_html(str(populated))}</td>"
+                              f"<td>{_safe_html(str(missing))}</td><td>{_progress(pct)}</td></tr>")
+    epi_complete_html += "</tbody></table></div>"
+    epi_complete_html += """
+<div class="callout callout-warn" style="margin-top:.6rem">
+  <strong>Missing epi data domains</strong> (not directly capturable from genomic pipeline — require field data completion):<br>
+  Demographics (age band, sex, country of birth, time in UK),
+  Clinical infectiousness (pulmonary/extrapulmonary, smear status, cavitation, cough duration),
+  Exposure setting (household, workplace, hostel, prison, healthcare, congregate setting),
+  Contact tracing (named contacts, shared venues, tracing status),
+  Vulnerability factors (homelessness, substance use, immunosuppression, migrant health, prison history),
+  Timeline (symptom onset, diagnosis, isolation, treatment start, sequencing date).
+  Complete these fields in the case management system for MDT review.
+</div>"""
+
+    # Methods section HTML
+    methods_html = f"""
+<div class="tbl-wrap"><table><thead><tr><th>Pipeline component</th><th>Tool / approach</th><th>Version / parameter</th></tr></thead><tbody>
+  <tr><td>Sequencing platform</td><td>{_safe_html(seq_platform or 'Not recorded — populate sequencing_runs.platform')}</td><td>{_safe_html(instrument or '—')}</td></tr>
+  <tr><td>Library preparation</td><td>{_safe_html(library_prep or 'Not recorded — populate analysis_provenance.parameters')}</td><td>—</td></tr>
+  <tr><td>Reference genome</td><td>{_safe_html(ref_genome or 'Not recorded — required')}</td><td>H37Rv recommended (NC_000962.3)</td></tr>
+  <tr><td>Read mapping</td><td>{_safe_html(mapping_tool or 'Not recorded')}</td><td>—</td></tr>
+  <tr><td>Variant calling</td><td>{_safe_html(variant_caller or 'Not recorded')}</td><td>Exclude PE/PPE and repetitive regions</td></tr>
+  <tr><td>SNP clustering threshold</td><td>{_safe_html(snp_threshold or '12 SNPs (default)')}</td><td>NICE guideline / PHE SOP</td></tr>
+  <tr><td>Resistance catalogue</td><td>{_safe_html(resist_cat or 'Not recorded — required')}</td><td>WHO/TBProfiler/Mykrobe</td></tr>
+  <tr><td>Lineage-calling tool</td><td>{_safe_html(lineage_tool or 'Not recorded — required')}</td><td>—</td></tr>
+  <tr><td>outbreaker2 version</td><td>{_safe_html(outbreaker_ver or 'Not recorded — required')}</td><td>—</td></tr>
+  <tr><td>Generation time prior mean</td><td>Infectious to secondary case interval</td><td>{_safe_html(gen_time_mean or 'Not recorded')}</td></tr>
+  <tr><td>Generation time prior SD</td><td></td><td>{_safe_html(gen_time_sd or 'Not recorded')}</td></tr>
+  <tr><td>Sampling probability (π)</td><td>Proportion of cases sampled</td><td>{_safe_html(sampling_prob or 'Not recorded')}</td></tr>
+  <tr><td>Random seed</td><td>Required for reproducibility</td><td>{_safe_html(random_seed or 'Not recorded — required')}</td></tr>
+  <tr><td>MCMC iterations</td><td></td><td>{_safe_html(str((summary_data or {{}}).get('n_iter', (summary_data or {{}}).get('n_generations', 'n/a'))))}</td></tr>
+  <tr><td>Burn-in</td><td></td><td>{_safe_html(str((summary_data or {{}}).get('burnin', 'n/a')))}</td></tr>
+  <tr><td>Posterior samples</td><td></td><td>{_safe_html(str((summary_data or {{}}).get('n_samples', 'n/a')))}</td></tr>
+</tbody></table></div>
+<div class="callout callout-warn" style="margin-top:.5rem">
+  Fields showing &ldquo;Not recorded&rdquo; must be populated in the <code>sequencing_runs</code>
+  or <code>analysis_provenance</code> database tables before external circulation.
+  Contact the bioinformatics lead to confirm the pipeline version and parameters used for this extract.
+</div>"""
+
+    # Transmission adjudication table — upgrade with final classification column
+    def _adjudication_table(records, title):
+        if not records:
+            return ""
+        rows = ""
+        for item in records:
+            post = float(item["posterior"])
+            flag = item["validation_flag"]
+            snp  = str(item["pairwise"])
+            qc   = item["qc"]
+            # Derive final classification
+            if flag == "SNP-linked":
+                final = "<span class='badge badge-green'>Genomically supported — escalate with epi</span>"
+            elif flag == "QC-unresolved":
+                final = "<span class='badge badge-red'>Hold — repeat sequencing required</span>"
+            elif flag == "D1: SNP>12":
+                final = "<span class='badge badge-orange'>Do not escalate — SNP discordant</span>"
+            else:
+                final = "<span class='badge badge-amber'>Model hypothesis — epi corroboration required</span>"
+            rows += (f"<tr><td class='mono'>{_safe_html(item['pair'])}</td>"
+                     f"<td>{_safe_html(f'{post:.3f}')}</td>"
+                     f"<td>{_safe_html(snp)}</td>"
+                     f"<td>{_safe_html(qc)}</td>"
+                     f"<td>{_badge(flag)}</td>"
+                     f"<td><em class='muted'>Awaiting epi review</em></td>"
+                     f"<td>{final}</td></tr>")
+        return (f"<h4>{_safe_html(title)}</h4>"
+                f"<div class='tbl-wrap'><table><thead><tr>"
+                f"<th>Pair</th><th>Posterior</th><th>SNP dist</th>"
+                f"<th>QC src/rec</th><th>Genomic flag</th><th>Epidemiological link</th><th>Final classification</th>"
+                f"</tr></thead><tbody>{rows}</tbody></table></div>")
+
+    # PH interpretation statement
+    snp_supported = len(genomic_pairs)
+    model_only_ct = len(model_only_pairs)
+    qc_unresolved_ct = len(qc_resolution_pairs)
+    discordant_ct = len(genomically_discordant)
+
+    if snp_supported > 0:
+        ph_evidence_stmt = (
+            f"There are <strong>{snp_supported}</strong> genomically-supported transmission pair(s) "
+            f"(posterior ≥0.70 and SNP distance ≤12). These represent the highest-priority candidates "
+            f"for operational action, but epidemiological corroboration is still required before field escalation."
+        )
+    else:
+        ph_evidence_stmt = (
+            "<strong>At present, there are no SNP-supported direct transmission links</strong> "
+            "(no pairs meeting both posterior ≥0.70 and SNP distance ≤12 criteria). "
+            "The outbreaker2 output identifies model-prioritised transmission hypotheses only."
+        )
+
+    ph_interpretation_html = f"""
+<div class="callout" style="font-size:.92rem;line-height:1.65">
+  <p style="margin-bottom:.5rem">{ph_evidence_stmt}</p>
+  <p style="margin-bottom:.5rem">
+    There are <strong>{_safe_html(str(model_only_ct))}</strong> model-only link(s) (no pairwise SNP confirmation),
+    <strong>{_safe_html(str(qc_unresolved_ct))}</strong> QC-unresolved pair(s) pending repeat sequencing, and
+    <strong>{_safe_html(str(discordant_ct))}</strong> genomically discordant pair(s) (model-linked but SNP &gt;12).
+  </p>
+  <p><strong>Operational action should focus on:</strong>
+    (1) resolving QC failures and contamination flags,
+    (2) validating drug-resistance gene-drug mapping and confirming phenotypic DST,
+    (3) completing epidemiological linkage data for {_safe_html(str(int(open_clusters)))} open cluster(s),
+    (4) populating all {_safe_html(str(len(missing_repro)))} missing reproducibility field(s) before external circulation{' — <strong>circulation is currently blocked</strong>' if missing_repro else ''}.
+  </p>
+  <p class="muted" style="margin-top:.4rem">This statement is automatically generated from available data.
+  It must be reviewed and countersigned by the responsible public health physician before inclusion in any formal outbreak report.</p>
+</div>"""
+
+    # ─────────────────────────────────────────────────────────────────────────
     # Build HTML sections
     # ─────────────────────────────────────────────────────────────────────────
 
@@ -1536,17 +1693,19 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
     seq_pct_bar = _progress(seq_pct, "Sequencing coverage %")
     qc_bar = _progress(qc_pass_pct, "QC pass rate %")
 
-    # 3. Top Actions Due Now table
+    # 3. Top Actions Due Now table — with status, team, dates, escalation trigger
     top_actions_html = """
 <div class="tbl-wrap"><table>
-<thead><tr><th>Priority</th><th>Action</th><th>Owner</th><th>Due</th></tr></thead>
+<thead><tr><th>#</th><th>Action</th><th>Responsible team</th><th>Due</th><th>Status</th><th>Date raised</th><th>Escalation trigger</th></tr></thead>
 <tbody>
-<tr><td>1</td><td>Repeat sequencing / QC review for failed/unresolved samples</td><td>Laboratory</td><td>48 h</td></tr>
-<tr><td>2</td><td>Validate drug-resistance pipeline gene-drug mapping</td><td>Bioinformatics / Microbiology</td><td>Immediate</td></tr>
-<tr><td>3</td><td>Confirm phenotypic DST for all genomic resistance signals</td><td>TB Microbiology / MDT</td><td>Immediate</td></tr>
-<tr><td>4</td><td>Review open genomic clusters with epi data</td><td>TB MDT / PHA</td><td>Next MDT</td></tr>
-<tr><td>5</td><td>Do not escalate model-only links to field without SNP+epi validation</td><td>HPT / TB Nurses</td><td>Ongoing</td></tr>
-</tbody></table></div>"""
+<tr><td>1</td><td>Repeat sequencing / QC review for all failed or contaminated samples</td><td>Laboratory / Bioinformatics</td><td>48 h</td><td><span class="badge badge-red">Open</span></td><td>{gen_at}</td><td>If repeat fails again: exclude from cluster; flag to MDT</td></tr>
+<tr><td>2</td><td>Validate drug-resistance pipeline gene-drug mapping; suppress unusual mappings from operational reports</td><td>Bioinformatics / Microbiology</td><td>Immediate</td><td><span class="badge badge-red">Open</span></td><td>{gen_at}</td><td>If validation fails: quarantine resistance calls until pipeline fix confirmed</td></tr>
+<tr><td>3</td><td>Confirm phenotypic DST for all genomic resistance signals before clinical use</td><td>TB Microbiology / MDT</td><td>Immediate</td><td><span class="badge badge-red">Open</span></td><td>{gen_at}</td><td>If DST unavailable: treat as MDR pending result; notify clinician</td></tr>
+<tr><td>4</td><td>Complete epidemiological data for all open clusters (demographics, setting, contacts)</td><td>TB Nurses / HPT / PHA</td><td>Next MDT</td><td><span class="badge badge-amber">In progress</span></td><td>{gen_at}</td><td>If epi incomplete at MDT: defer cluster closure; document gap</td></tr>
+<tr><td>5</td><td>Do not escalate model-only links to field investigation without SNP ≤12 + epi corroboration</td><td>HPT / TB Nurses / MDT</td><td>Ongoing</td><td><span class="badge badge-amber">Standing</span></td><td>{gen_at}</td><td>If field escalation requested: require written MDT decision and documented epi rationale</td></tr>
+<tr><td>6</td><td>Populate missing reproducibility metadata before external circulation</td><td>Bioinformatics / Lab Director</td><td>Before circulation</td><td><span class="badge badge-red">Open</span></td><td>{gen_at}</td><td>Block all external distribution until all 6 required fields are populated</td></tr>
+<tr><td>7</td><td>MDT sign-off: document accepted/rejected/deferred for each open cluster</td><td>MDT Chair / PHA</td><td>Next MDT</td><td><span class="badge badge-amber">Pending</span></td><td>{gen_at}</td><td>If MDT not convened within 10 working days: escalate to programme lead</td></tr>
+</tbody></table></div>""".format(gen_at=generated_at)
 
     # 4. MDT Governance table
     mdt_rows = [
@@ -1554,6 +1713,9 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
         ("Model reliability", model_reliability, "Treat directionality as exploratory; diagnostics may be unavailable"),
         ("Open clusters", f"{int(open_clusters)} total / {high_priority_open} priority >10", "MDT review and epi data completion for all open clusters"),
         ("Discordant model links", f"{len(discordant_pairs)} identified", "Pairwise SNP + epi adjudication required"),
+        ("MDT sign-off status", "Pending — MDT review required", "Chair to record: accepted / rejected / deferred for each open cluster"),
+        ("Decision log", "Not yet completed", "Document MDT decisions in case management system; date-stamp and countersign"),
+        ("QC failures", f"{qc_status_counts['fail']} fail / {qc_status_counts['contamination']} contamination", "Resolve before cluster assignment and model inference"),
     ]
     mdt_table_body = "".join(f"<tr><td>{_safe_html(a)}</td><td>{_safe_html(b)}</td><td>{_safe_html(c)}</td></tr>" for a, b, c in mdt_rows)
     mdt_html = f"""<div class="tbl-wrap"><table><thead><tr><th>Priority area</th><th>Current signal</th><th>Required MDT action</th></tr></thead>
@@ -1908,16 +2070,32 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
     else:
         disc_computed_html = '<p class="muted">No discordant pairs identified from available outputs.</p>'
 
-    # 19. Data provenance section
-    _missing_badge = "<span class='badge badge-red'>Missing \u2014 required</span>"
+    # 19. Data provenance section — full extended table
+    _missing_badge = "<span class='badge badge-red'>Missing &#8212; required</span>"
+    _optional_badge = "<span class='badge badge-grey'>Not recorded</span>"
 
-    def _prov_row(lbl, v):
+    def _prov_row(lbl, v, required=True):
         is_missing = v is None or (isinstance(v, str) and not v.strip())
-        row_style = ' style="background:var(--alert-bg)"' if is_missing else ""
-        cell = _missing_badge if is_missing else _safe_html(str(v))
+        row_style = ' style="background:var(--alert-bg)"' if (is_missing and required) else ""
+        cell = (_missing_badge if required else _optional_badge) if is_missing else _safe_html(str(v))
         return f"<tr{row_style}><th>{_safe_html(lbl)}</th><td>{cell}</td></tr>"
 
-    prov_rows = "".join(_prov_row(lbl, v) for lbl, v in required_repro_metadata)
+    prov_rows = "".join(_prov_row(lbl, v, required=True) for lbl, v in required_repro_metadata)
+    # Extended optional fields
+    extended_prov = [
+        ("Sequencing platform",       seq_platform,   False),
+        ("Instrument",                instrument,     False),
+        ("Library prep method",       library_prep,   False),
+        ("Mapping tool",              mapping_tool,   False),
+        ("Variant caller",            variant_caller, False),
+        ("SNP cluster threshold",     snp_threshold,  False),
+        ("Generation time mean (d)",  gen_time_mean,  False),
+        ("Generation time SD (d)",    gen_time_sd,    False),
+        ("Sampling probability (π)",  sampling_prob,  False),
+        ("Pipeline run date",         str(run_meta.get("completed_at", "") or "") or None, False),
+        ("Analysis provenance date",  str(prov_meta.get("generated_at", "") or "") or None, False),
+    ]
+    prov_rows += "".join(_prov_row(lbl, v, required=req) for lbl, v, req in extended_prov)
     prov_html = f"<table class='kv-table'><tbody>{prov_rows}</tbody></table>"
 
     # 20. Key concepts reference
@@ -1952,6 +2130,13 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
     # ─────────────────────────────────────────────────────────────────────────
     # Assemble final HTML
     # ─────────────────────────────────────────────────────────────────────────
+
+    # Build the improved pairs section using adjudication table
+    adj_genomic_html    = _adjudication_table(genomic_pairs[:20 if not full else None],    "Genomically supported (SNP ≤12, shared cluster)")
+    adj_model_html      = _adjudication_table(model_only_pairs[:20 if not full else None],  "Model-only — no pairwise SNP data")
+    adj_discordant_html = _adjudication_table(genomically_discordant[:20 if not full else None], "Genomically discordant (posterior ≥0.70, SNP >12)")
+    adj_qcunres_html    = _adjudication_table(qc_resolution_pairs[:20 if not full else None], "QC-unresolved — hold pending repeat sequencing")
+
     html = f"""<!doctype html>
 <html lang="en">
 <head>
@@ -1972,6 +2157,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
   <nav class="sidebar" aria-label="Report sections">
     <h3>Overview</h3>
     <a href="#executive">Executive summary</a>
+    <a href="#denominators">Denominators</a>
     <a href="#actions-now">Top actions due now</a>
     <a href="#mdt">MDT governance</a>
     <h3>Analysis</h3>
@@ -1991,8 +2177,9 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
     <a href="#clusters">Cluster epidemiology</a>
     <a href="#cluster-pri">Cluster prioritisation</a>
     <h3>Methods</h3>
-    <a href="#methods">Method comparison</a>
+    <a href="#methods">Methods &amp; pipeline</a>
     <a href="#provenance">Data provenance</a>
+    <a href="#epi-completeness">Epi data completeness</a>
     <h3>Appendices</h3>
     <a href="#appendix-a">Appendix A — Case actions</a>
     <a href="#appendix-b">Appendix B — Discordance</a>
@@ -2032,6 +2219,13 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
       <div class="callout-warn callout" style="margin-top:.6rem"><strong>Decision-support tool only.</strong> All findings must be reviewed and acted on by a qualified clinician or public health professional. No automated decisions are made.</div>
     </section>
 
+    <!-- POPULATION AND DENOMINATORS -->
+    <section class="card" id="denominators">
+      <h2>Population and denominators</h2>
+      <div class="section-note">Use this table to interpret all percentages in this report. Every metric is expressed relative to one of these denominator counts.</div>
+      {denom_html}
+    </section>
+
     <!-- ═══════════════════════════════════════════════════════════════════ -->
     <!-- ANALYSIS -->
     <!-- ═══════════════════════════════════════════════════════════════════ -->
@@ -2060,7 +2254,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
       {network_edges_html}
     </section>
 
-    <!-- MODEL-PRIORITISED PAIRS -->
+    <!-- MODEL-PRIORITISED PAIRS — WITH ADJUDICATION TABLE -->
     <section class="card" id="pairs">
       <h2>Model-prioritised transmission hypotheses</h2>
       <div class="callout callout-alert">
@@ -2073,10 +2267,11 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
         <span class="tag">{_safe_html(str(len(genomically_discordant)))} D1: SNP&gt;12</span>
         <span class="tag">{_safe_html(str(len(qc_resolution_pairs)))} QC-unresolved</span>
       </div>
-      {_pair_table_html(genomic_pairs[:20 if not full else None], "Genomically supported (SNP ≤12, shared cluster)")}
-      {_pair_table_html(model_only_pairs[:20 if not full else None], "Model-only — no pairwise SNP data")}
-      {_pair_table_html(genomically_discordant[:20 if not full else None], "Genomically discordant (posterior ≥0.70, SNP >12)")}
-      {_pair_table_html(qc_resolution_pairs[:20 if not full else None], "QC-unresolved — hold pending repeat sequencing")}
+      <div class="section-note">The <strong>Epidemiological link</strong> and <strong>Final classification</strong> columns below are pre-populated with default values. The MDT should review each pair and record the final adjudication decision in the case management system before external circulation.</div>
+      {adj_genomic_html}
+      {adj_model_html}
+      {adj_discordant_html}
+      {adj_qcunres_html}
       {('<p class="muted">No high-confidence (&ge;0.70) edges found in transmission network.</p>' if not high_confidence_edges else '')}
     </section>
 
@@ -2100,10 +2295,10 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
     <!-- OUTBREAK INTERPRETATION -->
     <section class="card" id="interpretation">
       <h2>Current outbreak interpretation</h2>
-      <p style="font-size:.87rem">This report identifies {_safe_html(str(int(open_clusters)))} open genomic cluster(s) and {_safe_html(str(high_confidence_all_count))} outbreaker2 model-prioritised transmission hypotheses (posterior &ge;0.70).
-      The immediate priorities are repeat sequencing/QC review, validation of resistance calls, phenotypic DST confirmation, and epidemiological corroboration before field escalation.</p>
+      {ph_interpretation_html}
 
-      <h3>Counts in this report</h3>
+      <h3>Counts and denominators in this report</h3>
+      <div class="section-note">Definitions match the denominator box above. All model-prioritised links are hypotheses only — zero SNP-supported links means no validated direct transmission candidates at this time.</div>
       <div class="tbl-wrap"><table><thead><tr><th>Metric</th><th>Count</th><th>Definition</th></tr></thead><tbody>
         <tr><td>Model-prioritised links &ge;0.70</td><td>{_safe_html(str(high_confidence_all_count))}</td><td>All outbreaker2 edges with posterior probability &ge;0.70</td></tr>
         <tr><td>Discordant pairs reviewed</td><td>{_safe_html(str(len(discordant_pairs)))}</td><td>All model-linked pairs showing SNP/model discordance requiring adjudication</td></tr>
@@ -2134,9 +2329,13 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
     <section class="card" id="qc">
       <h2>QC failure drill-down</h2>
       {qc_summary_html}
+      <h3>QC pass/fail thresholds applied</h3>
+      {qc_thresholds_html}
+      <h3>Sample-level QC detail</h3>
       <div class="section-note" style="margin-top:.6rem">
         Samples highlighted red require repeat sequencing or resolution before operational inference.
         Contaminated samples must be excluded from cluster assignment pending repeat.
+        The <strong>qc_failure_reason</strong> field (from sample_qc_metrics) is shown where available.
       </div>
       {qc_detail_html}
     </section>
@@ -2159,8 +2358,11 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
     <section class="card" id="mutations">
       <h2>Drug-resistance mutation details</h2>
       <div class="callout callout-alert">
-        <strong>WARNING:</strong> All genomic resistance predictions must be confirmed by phenotypic DST before clinical use.
-        Invalid gene-drug combinations (marked <span class="badge badge-red">Unusual</span>) must not be reported operationally until pipeline validation is complete.
+        <strong>CLINICAL SAFETY NOTICE:</strong> All genomic resistance predictions are <em>not for clinical use until phenotypic DST is confirmed</em>.
+        Gene-drug combinations marked <span class="badge badge-red">Unusual</span> (e.g. gyrA linked to pyrazinamide) indicate a possible
+        data-mapping error and <strong>must be suppressed from operational reports</strong> until the bioinformatics pipeline is validated.
+        If unusual mappings are observed, quarantine the affected samples and notify the bioinformatics lead immediately.
+        Catalogue version used for this analysis: <strong>{_safe_html(resist_cat or 'Not recorded — required')}</strong>.
       </div>
       <details open><summary>Gene-drug reference mapping</summary><div>
         <div class="tbl-wrap"><table><thead><tr><th>Drug</th><th>Expected genes</th></tr></thead><tbody>
@@ -2205,8 +2407,16 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
     <!-- DATA PROVENANCE -->
     <section class="card" id="provenance">
       <h2>Data provenance and reproducibility</h2>
+      <div class="section-note">Fields marked <span class="badge badge-red">Missing &#8212; required</span> are mandatory for external circulation. Fields marked <span class="badge badge-grey">Not recorded</span> are optional but strongly recommended for audit and reproducibility.</div>
       {prov_html}
-      {'<div class="callout callout-alert" style="margin-top:.6rem"><strong>' + str(len(missing_repro)) + ' required field(s) missing.</strong> External circulation is blocked until all mandatory reproducibility fields are populated.</div>' if missing_repro else ''}
+      {'<div class="callout callout-alert" style="margin-top:.6rem"><strong>' + str(len(missing_repro)) + ' required field(s) missing.</strong> External circulation is blocked until all mandatory reproducibility fields are populated. Populate via <code>sequencing_runs</code> or <code>analysis_provenance</code> database tables.</div>' if missing_repro else '<div class="callout" style="margin-top:.6rem">All mandatory reproducibility fields are present. Confirm catalogue and tool versions with the bioinformatics lead before circulation.</div>'}
+    </section>
+
+    <!-- EPIDEMIOLOGICAL DATA COMPLETENESS -->
+    <section class="card" id="epi-completeness">
+      <h2>Epidemiological data completeness</h2>
+      <div class="section-note">Completeness of fields capturable from the genomic pipeline. Additional clinical and field epi data must be completed in the case management system.</div>
+      {epi_complete_html}
     </section>
 
     <!-- ═══════════════════════════════════════════════════════════════════ -->
@@ -5843,3 +6053,559 @@ def get_case_history(case_id: str, db: Session = Depends(get_db)):
         "observation_span_days": span_days,
         "history": case_history
     }
+
+
+# ── Case-specific comprehensive HTML report ──────────────────────────────────
+
+@router.get("/case-report/{case_id}", response_class=HTMLResponse)
+def case_report_html(case_id: str, db: Session = Depends(get_db)):  # noqa: C901
+    """
+    Generate a comprehensive, self-contained HTML report for a single case.
+
+    Includes: identity, genomic profile, drug-resistance, QC metrics,
+    cluster membership, transmission context, related-case timeline,
+    and case-level audit entries.
+    """
+    import datetime as _dt
+
+    # ── Resolve case ──────────────────────────────────────────────────────────
+    pattern = f"{case_id}%" if len(case_id) < 36 else case_id
+    core = db.execute(text("""
+        SELECT
+            c.pseudonymised_case_id::text  AS case_id,
+            c.local_lab_sample_id,
+            c.specimen_date,
+            c.geographic_region,
+            c.case_status,
+            ti.lineage,
+            ti.sublineage,
+            ti.predicted_drug_resistance,
+            ti.resistance_mutations,
+            ti.interpretation_summary,
+            cs.sequence,
+            sqm.qc_status,
+            sqm.coverage_breadth,
+            sqm.mean_depth,
+            sqm.contamination_flag,
+            sqm.ambiguous_base_percent,
+            cc.cluster_id::text            AS cluster_id,
+            cl.snp_distance,
+            cl.investigation_status        AS cluster_status,
+            COUNT(cc2.sample_id) OVER (PARTITION BY cc.cluster_id) AS cluster_size
+        FROM cases c
+        LEFT JOIN tb_interpretation    ti  ON ti.sample_id  = c.pseudonymised_case_id
+        LEFT JOIN consensus_sequences  cs  ON cs.sample_id  = c.pseudonymised_case_id
+        LEFT JOIN sample_qc_metrics    sqm ON sqm.sample_id = c.pseudonymised_case_id
+        LEFT JOIN case_clusters        cc  ON cc.sample_id  = c.pseudonymised_case_id
+        LEFT JOIN clusters             cl  ON cl.cluster_id = cc.cluster_id
+        LEFT JOIN case_clusters        cc2 ON cc2.cluster_id = cc.cluster_id
+        WHERE CAST(c.pseudonymised_case_id AS TEXT) LIKE :pat
+        LIMIT 1
+    """), {"pat": pattern}).mappings().first()
+
+    if not core:
+        return HTMLResponse(
+            content=f"<html><body><h2>Case not found: {html_lib.escape(case_id)}</h2></body></html>",
+            status_code=404,
+        )
+
+    full_id   = core["case_id"]
+    region    = core["geographic_region"] or "Unknown"
+    short_id  = full_id[:8]
+    generated = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+
+    # ── Related cases in same cluster ────────────────────────────────────────
+    cluster_peers: list[dict] = []
+    if core["cluster_id"]:
+        peer_rows = db.execute(text("""
+            SELECT
+                c.pseudonymised_case_id::text AS case_id,
+                c.specimen_date,
+                c.geographic_region,
+                c.case_status,
+                ti.lineage,
+                ti.predicted_drug_resistance
+            FROM case_clusters cc
+            JOIN cases c ON c.pseudonymised_case_id = cc.sample_id
+            LEFT JOIN tb_interpretation ti ON ti.sample_id = c.pseudonymised_case_id
+            WHERE cc.cluster_id = CAST(:cid AS uuid)
+            ORDER BY c.specimen_date
+        """), {"cid": core["cluster_id"]}).mappings().all()
+        cluster_peers = [
+            {
+                "case_id":    str(r["case_id"])[:8],
+                "date":       str(r["specimen_date"]),
+                "region":     r["geographic_region"],
+                "status":     r["case_status"],
+                "lineage":    r["lineage"],
+                "resistance": r["predicted_drug_resistance"],
+                "is_index":   r["case_id"] == full_id,
+            }
+            for r in peer_rows
+        ]
+
+    # ── Regional case history timeline ───────────────────────────────────────
+    history_rows = db.execute(text("""
+        SELECT
+            c.pseudonymised_case_id::text AS case_id,
+            c.specimen_date,
+            c.geographic_region,
+            c.case_status,
+            ti.lineage,
+            ti.predicted_drug_resistance,
+            cc.cluster_id::text AS cluster_id
+        FROM cases c
+        LEFT JOIN tb_interpretation ti ON ti.sample_id = c.pseudonymised_case_id
+        LEFT JOIN case_clusters cc     ON cc.sample_id = c.pseudonymised_case_id
+        WHERE c.pseudonymised_case_id = CAST(:cid AS uuid)
+           OR c.geographic_region = :region
+        ORDER BY c.specimen_date
+    """), {"cid": full_id, "region": region}).mappings().all()
+    timeline = [
+        {
+            "case_id":    str(r["case_id"])[:8],
+            "date":       str(r["specimen_date"]),
+            "region":     r["geographic_region"],
+            "status":     r["case_status"],
+            "lineage":    r["lineage"],
+            "resistance": r["predicted_drug_resistance"],
+            "cluster_id": str(r["cluster_id"])[:8] if r["cluster_id"] else None,
+            "is_index":   r["case_id"] == full_id,
+        }
+        for r in history_rows
+    ]
+
+    # ── Audit entries for this case ───────────────────────────────────────────
+    audit_rows: list[dict] = []
+    try:
+        audit_rows = [
+            dict(r) for r in db.execute(text("""
+                SELECT action, user_id, timestamp, details
+                FROM audit_log
+                WHERE details ILIKE :pat
+                ORDER BY timestamp DESC
+                LIMIT 50
+            """), {"pat": f"%{short_id}%"}).mappings().all()
+        ]
+    except Exception:
+        audit_rows = []
+
+    # ── Transmission network context ─────────────────────────────────────────
+    tx_context: dict = {}
+    tx_path = _export_path("transmission_network.json")
+    if os.path.exists(tx_path):
+        try:
+            with open(tx_path, "r", encoding="utf-8") as _f:
+                tx_data = json.load(_f)
+            key_nodes = tx_data.get("key_nodes") or []
+            edges     = tx_data.get("edges") or tx_data.get("transmission_edges") or []
+            # find edges involving this case
+            related_edges = [
+                e for e in edges
+                if short_id in str(e.get("from", "")) or short_id in str(e.get("to", ""))
+                   or short_id in str(e.get("source", "")) or short_id in str(e.get("target", ""))
+            ]
+            node_match = next(
+                (n for n in key_nodes if short_id in str(n.get("id", ""))), None
+            )
+            tx_context = {
+                "is_key_node":    node_match is not None,
+                "node_details":   node_match,
+                "linked_edges":   related_edges[:20],
+                "total_edges":    len(edges),
+                "total_nodes":    len(key_nodes),
+            }
+        except Exception:
+            tx_context = {}
+
+    # ── TBProfiler JSON artifact ──────────────────────────────────────────────
+    tbp_data: dict | None = None
+    tbp_dir = _export_path("tbprofiler")
+    if os.path.isdir(tbp_dir):
+        for fname in os.listdir(tbp_dir):
+            if short_id in fname and fname.endswith(".json"):
+                try:
+                    with open(os.path.join(tbp_dir, fname), "r", encoding="utf-8") as _f:
+                        tbp_data = json.load(_f)
+                except Exception:
+                    pass
+                break
+
+    # ── Helper functions ──────────────────────────────────────────────────────
+    def _e(v) -> str:
+        return html_lib.escape("" if v is None else str(v), quote=True)
+
+    def _badge_status(status: str | None) -> str:
+        s = (status or "").lower()
+        colour = {"open": "#e63946", "closed": "#2a9d8f", "active": "#e63946",
+                  "pass": "#2a9d8f", "fail": "#e63946", "passed": "#2a9d8f",
+                  "failed": "#e63946"}.get(s, "#6c757d")
+        return (f'<span style="background:{colour};color:#fff;padding:2px 8px;'
+                f'border-radius:10px;font-size:0.8em;font-weight:600">{_e(status or "Unknown")}</span>')
+
+    def _resistance_badge(dr) -> str:
+        if not dr:
+            return '<span style="color:#6c757d;font-style:italic">Not determined</span>'
+        dr_str = str(dr)
+        if any(x in dr_str.lower() for x in ["xdr", "extensively"]):
+            colour = "#7b2d8b"
+        elif any(x in dr_str.lower() for x in ["mdr", "multi"]):
+            colour = "#e63946"
+        elif any(x in dr_str.lower() for x in ['"r"', "'r'", ": r", ":r", "resistant"]):
+            colour = "#f4a261"
+        else:
+            colour = "#2a9d8f"
+        return (f'<span style="background:{colour};color:#fff;padding:2px 8px;'
+                f'border-radius:10px;font-size:0.8em;font-weight:600">{_e(dr_str[:80])}</span>')
+
+    def _metric_card(label: str, value: str, sub: str = "", alert: bool = False) -> str:
+        border = "#e63946" if alert else "#2a9d8f"
+        return (
+            f'<div style="background:#fff;border-left:4px solid {border};border-radius:6px;'
+            f'padding:14px 18px;min-width:140px;box-shadow:0 1px 4px rgba(0,0,0,.08)">'
+            f'<div style="font-size:.75em;color:#6c757d;text-transform:uppercase;letter-spacing:.04em">{_e(label)}</div>'
+            f'<div style="font-size:1.6em;font-weight:700;color:#212529;line-height:1.2">{value}</div>'
+            f'{"<div style=font-size:.8em;color:#6c757d;margin-top:2px>" + _e(sub) + "</div>" if sub else ""}'
+            f'</div>'
+        )
+
+    def _section(title: str, body: str) -> str:
+        return (
+            f'<section style="margin-bottom:32px">'
+            f'<h2 style="font-size:1.1em;font-weight:700;color:#1d3557;border-bottom:2px solid #e9ecef;'
+            f'padding-bottom:6px;margin-bottom:14px">{_e(title)}</h2>'
+            f'{body}</section>'
+        )
+
+    def _kv_table(rows: list[tuple[str, str]]) -> str:
+        tr = "".join(
+            f'<tr><th style="width:220px;text-align:left;padding:6px 10px;color:#495057;'
+            f'font-weight:600;background:#f8f9fa">{_e(k)}</th>'
+            f'<td style="padding:6px 10px">{v}</td></tr>'
+            for k, v in rows
+        )
+        return (
+            '<table style="width:100%;border-collapse:collapse;border:1px solid #dee2e6;'
+            'border-radius:4px;overflow:hidden"><tbody>' + tr + '</tbody></table>'
+        )
+
+    def _data_table(headers: list[str], rows: list[list[str]], empty: str = "No data") -> str:
+        if not rows:
+            return f'<p style="color:#6c757d;font-style:italic">{_e(empty)}</p>'
+        th = "".join(
+            f'<th style="padding:7px 10px;background:#1d3557;color:#fff;text-align:left;'
+            f'font-weight:600;font-size:.85em">{_e(h)}</th>'
+            for h in headers
+        )
+        tr_html = ""
+        for i, row in enumerate(rows):
+            bg = "#f8f9fa" if i % 2 else "#fff"
+            tr_html += (
+                '<tr style="background:' + bg + '">'
+                + "".join(f'<td style="padding:6px 10px;font-size:.875em;border-top:1px solid #dee2e6">{c}</td>' for c in row)
+                + "</tr>"
+            )
+        return (
+            '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">'
+            '<thead><tr>' + th + '</tr></thead><tbody>' + tr_html + '</tbody></table></div>'
+        )
+
+    # ── Build report sections ─────────────────────────────────────────────────
+
+    # 1. Identity card
+    identity_body = _kv_table([
+        ("Pseudonymised Case ID",    _e(full_id)),
+        ("Short Reference",          _e(short_id)),
+        ("Local Lab Sample ID",      _e(core["local_lab_sample_id"] or "—")),
+        ("Specimen Date",            _e(core["specimen_date"])),
+        ("Geographic Region",        _e(region)),
+        ("Case Status",              _badge_status(core["case_status"])),
+        ("Report Generated",         _e(generated)),
+    ])
+    identity_sec = _section("1. Case Identity", identity_body)
+
+    # 2. Genomic / Lineage profile
+    lineage_body = _kv_table([
+        ("Lineage",          _e(core["lineage"] or "Not determined")),
+        ("Sublineage",       _e(core["sublineage"] or "—")),
+        ("Sequence Present", _e("Yes" if core["sequence"] else "No")),
+        ("Interpretation",   _e(core["interpretation_summary"] or "—")),
+    ])
+    lineage_sec = _section("2. Genomic &amp; Lineage Profile", lineage_body)
+
+    # 3. Drug resistance
+    dr_raw = core["predicted_drug_resistance"]
+    if isinstance(dr_raw, dict):
+        dr_rows: list[list[str]] = [
+            [_e(drug), _badge_status(result)]
+            for drug, result in dr_raw.items()
+        ]
+        dr_table = _data_table(["Drug", "Predicted Result"], dr_rows, "No resistance data")
+    else:
+        dr_table = f'<p>{_resistance_badge(dr_raw)}</p>'
+
+    mut_raw = core["resistance_mutations"]
+    if isinstance(mut_raw, list) and mut_raw:
+        mut_table = _data_table(
+            ["Gene / Mutation", "Drug", "Confidence"],
+            [[_e(str(m.get("mutation", m) if isinstance(m, dict) else m)),
+              _e(str(m.get("drug", "—") if isinstance(m, dict) else "—")),
+              _e(str(m.get("confidence", "—") if isinstance(m, dict) else "—"))]
+             for m in mut_raw[:30]],
+            "No mutation data"
+        )
+    elif mut_raw:
+        mut_table = f'<pre style="font-size:.8em">{_e(str(mut_raw)[:1000])}</pre>'
+    else:
+        mut_table = '<p style="color:#6c757d;font-style:italic">No resistance mutations recorded</p>'
+
+    dr_sec = _section(
+        "3. Drug Resistance Profile",
+        '<h3 style="font-size:.95em;margin:0 0 8px;color:#495057">Predicted Resistance</h3>'
+        + dr_table
+        + '<h3 style="font-size:.95em;margin:16px 0 8px;color:#495057">Resistance Mutations</h3>'
+        + mut_table,
+    )
+
+    # 4. QC metrics
+    qc_alert = (
+        str(core.get("qc_status", "")).lower() in {"fail", "failed"}
+        or bool(core.get("contamination_flag"))
+    )
+    qc_body = _kv_table([
+        ("QC Status",             _badge_status(core["qc_status"])),
+        ("Coverage Breadth",      _e(f"{core['coverage_breadth']:.1f}%" if core["coverage_breadth"] is not None else "—")),
+        ("Mean Depth",            _e(f"{core['mean_depth']:.1f}×" if core["mean_depth"] is not None else "—")),
+        ("Contamination Flag",    _e("⚠ YES" if core["contamination_flag"] else "No")),
+        ("Ambiguous Bases (%)",   _e(f"{core['ambiguous_base_percent']:.2f}%" if core["ambiguous_base_percent"] is not None else "—")),
+    ])
+    qc_sec = _section(
+        "4. Sequencing QC Metrics" + (" ⚠" if qc_alert else ""),
+        qc_body,
+    )
+
+    # 5. Cluster membership
+    if core["cluster_id"]:
+        cluster_body = _kv_table([
+            ("Cluster ID",           _e(core["cluster_id"][:8])),
+            ("Cluster Size",         _e(str(core["cluster_size"]))),
+            ("SNP Distance (max)",   _e(str(core["snp_distance"]) if core["snp_distance"] is not None else "—")),
+            ("Investigation Status", _badge_status(core["cluster_status"])),
+        ])
+        peer_table = _data_table(
+            ["Case ID", "Date", "Region", "Lineage", "Resistance", "Status"],
+            [
+                [
+                    '<strong>' + _e(p["case_id"]) + '</strong>' if p["is_index"] else _e(p["case_id"]),
+                    _e(p["date"]),
+                    _e(p["region"]),
+                    _e(p["lineage"] or "—"),
+                    _resistance_badge(p["resistance"]),
+                    _badge_status(p["status"]),
+                ]
+                for p in cluster_peers
+            ],
+            "No cluster peers found",
+        )
+        cluster_sec = _section(
+            "5. Cluster Membership",
+            cluster_body
+            + '<h3 style="font-size:.95em;margin:16px 0 8px;color:#495057">Cluster Members</h3>'
+            + peer_table,
+        )
+    else:
+        cluster_sec = _section(
+            "5. Cluster Membership",
+            '<p style="color:#6c757d;font-style:italic">This case is not assigned to any cluster.</p>',
+        )
+
+    # 6. Transmission network context
+    if tx_context:
+        tx_rows = _kv_table([
+            ("Is Key Network Node",      _e("Yes" if tx_context.get("is_key_node") else "No")),
+            ("Linked Transmission Edges", _e(str(len(tx_context.get("linked_edges", []))))),
+            ("Total Network Edges",       _e(str(tx_context.get("total_edges", "—")))),
+            ("Total Key Nodes",           _e(str(tx_context.get("total_nodes", "—")))),
+        ])
+        edge_data = tx_context.get("linked_edges", [])
+        if edge_data:
+            edge_table = _data_table(
+                ["From", "To", "Probability / Weight"],
+                [
+                    [
+                        _e(str(e.get("from", e.get("source", "—")))[:10]),
+                        _e(str(e.get("to",   e.get("target", "—")))[:10]),
+                        _e(str(e.get("probability", e.get("weight", "—")))),
+                    ]
+                    for e in edge_data
+                ],
+                "No linked edges",
+            )
+        else:
+            edge_table = '<p style="color:#6c757d;font-style:italic">No direct transmission edges found for this case.</p>'
+        tx_sec = _section(
+            "6. Transmission Network Context",
+            tx_rows
+            + '<h3 style="font-size:.95em;margin:16px 0 8px;color:#495057">Linked Edges</h3>'
+            + edge_table,
+        )
+    else:
+        tx_sec = _section(
+            "6. Transmission Network Context",
+            '<p style="color:#6c757d;font-style:italic">No transmission network data available. Run the outbreaker2 analysis first.</p>',
+        )
+
+    # 7. Regional case timeline
+    timeline_sec = _section(
+        "7. Regional Case Timeline",
+        _data_table(
+            ["Case ID", "Date", "Region", "Lineage", "Resistance", "Cluster", "Status"],
+            [
+                [
+                    '<strong>' + _e(t["case_id"]) + '</strong>' if t["is_index"] else _e(t["case_id"]),
+                    _e(t["date"]),
+                    _e(t["region"]),
+                    _e(t["lineage"] or "—"),
+                    _resistance_badge(t["resistance"]),
+                    _e(t["cluster_id"] or "—"),
+                    _badge_status(t["status"]),
+                ]
+                for t in timeline
+            ],
+            "No timeline data",
+        ),
+    )
+
+    # 8. TBProfiler data
+    if tbp_data and isinstance(tbp_data, dict):
+        tbp_fields = [
+            ("TBProfiler Version",    _e(tbp_data.get("tbprofiler_version", "—"))),
+            ("Main Lineage",          _e(tbp_data.get("main_lin", "—"))),
+            ("Sub Lineage",           _e(tbp_data.get("sub_lin", "—"))),
+            ("DR Type",               _e(tbp_data.get("drtype", "—"))),
+            ("Median Coverage",       _e(str(tbp_data.get("median_coverage", "—")))),
+            ("Pct Reads Mapped",      _e(str(tbp_data.get("pct_reads_mapped", "—")))),
+        ]
+        tbp_sec = _section("8. TBProfiler Analysis Details", _kv_table(tbp_fields))
+    else:
+        tbp_sec = _section(
+            "8. TBProfiler Analysis Details",
+            '<p style="color:#6c757d;font-style:italic">No TBProfiler output found for this case.</p>',
+        )
+
+    # 9. Audit trail
+    if audit_rows:
+        audit_sec = _section(
+            "9. Case Audit Trail",
+            _data_table(
+                ["Timestamp", "Action", "User", "Details"],
+                [
+                    [
+                        _e(str(a.get("timestamp", "—"))[:19]),
+                        _e(str(a.get("action", "—"))),
+                        _e(str(a.get("user_id", "—"))),
+                        _e(str(a.get("details", ""))[:120]),
+                    ]
+                    for a in audit_rows
+                ],
+                "No audit entries",
+            ),
+        )
+    else:
+        audit_sec = _section(
+            "9. Case Audit Trail",
+            '<p style="color:#6c757d;font-style:italic">No audit entries found referencing this case.</p>',
+        )
+
+    # ── Assemble HTML ─────────────────────────────────────────────────────────
+    dr_summary_text = _e(str(core["predicted_drug_resistance"])[:60]) if core["predicted_drug_resistance"] else "Not determined"
+    lineage_text    = _e(core["lineage"] or "Unknown")
+    status_badge    = _badge_status(core["case_status"])
+
+    metric_strip = (
+        '<div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:28px">'
+        + _metric_card("Case ID",     short_id)
+        + _metric_card("Region",      region)
+        + _metric_card("Lineage",     core["lineage"] or "—")
+        + _metric_card("Cluster",     core["cluster_id"][:8] if core["cluster_id"] else "None",
+                        sub=f"{core['cluster_size']} members" if core["cluster_id"] else "")
+        + _metric_card("QC Status",   core["qc_status"] or "—",
+                        alert=qc_alert)
+        + _metric_card("Timeline Cases", str(len(timeline)))
+        + '</div>'
+    )
+
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Case Report – {_e(short_id)}</title>
+<style>
+  *, *::before, *::after {{ box-sizing: border-box; }}
+  body {{
+    margin: 0; padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #f0f4f8; color: #212529; font-size: 14px; line-height: 1.5;
+  }}
+  .report-header {{
+    background: linear-gradient(135deg, #1d3557 0%, #457b9d 100%);
+    color: #fff; padding: 28px 40px 20px;
+  }}
+  .report-header h1 {{ margin: 0 0 4px; font-size: 1.6em; }}
+  .report-header p  {{ margin: 0; opacity: .8; font-size: .9em; }}
+  .report-body {{
+    max-width: 1100px; margin: 28px auto; padding: 0 24px;
+  }}
+  .data-card {{
+    background: #fff; border-radius: 8px; box-shadow: 0 1px 6px rgba(0,0,0,.09);
+    padding: 28px 32px; margin-bottom: 24px;
+  }}
+  @media print {{
+    body {{ background: #fff; }}
+    .report-header {{ background: #1d3557 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
+    .data-card {{ box-shadow: none; border: 1px solid #dee2e6; }}
+    .no-print {{ display: none; }}
+  }}
+</style>
+</head>
+<body>
+<div class="report-header">
+  <h1>TB Case Investigation Report</h1>
+  <p>Case {_e(short_id)} &nbsp;·&nbsp; {_e(region)} &nbsp;·&nbsp;
+     Status: {status_badge} &nbsp;·&nbsp; Generated {_e(generated)}</p>
+</div>
+<div class="report-body">
+  <div class="no-print" style="margin-bottom:18px">
+    <button onclick="window.print()"
+      style="padding:8px 20px;background:#1d3557;color:#fff;border:none;border-radius:4px;
+             cursor:pointer;font-size:.9em;margin-right:8px">
+      &#x1F5B6; Print / Save as PDF
+    </button>
+    <button onclick="window.close()"
+      style="padding:8px 20px;background:#6c757d;color:#fff;border:none;border-radius:4px;
+             cursor:pointer;font-size:.9em">
+      Close
+    </button>
+  </div>
+  {metric_strip}
+  <div class="data-card">
+    {identity_sec}
+    {lineage_sec}
+    {dr_sec}
+    {qc_sec}
+    {cluster_sec}
+    {tx_sec}
+    {timeline_sec}
+    {tbp_sec}
+    {audit_sec}
+  </div>
+  <p style="text-align:center;color:#adb5bd;font-size:.8em;margin-top:24px">
+    TB Genomic Surveillance Platform &nbsp;·&nbsp; Confidential &nbsp;·&nbsp;
+    For authorised public-health use only
+  </p>
+</div>
+</body>
+</html>"""
+
+    return HTMLResponse(content=html)

@@ -351,7 +351,7 @@ async function advancedSearch(){
 			html+='<table class="data-table">';
 			html+='<tr><th>Case ID</th><th>Date</th><th>Region</th><th>Lineage</th><th>Cluster</th><th>Action</th></tr>';
 			for(const c of data.cases){
-				html+=`<tr><td>${escapeHtml(c.case_id)}</td><td>${escapeHtml(c.specimen_date)}</td><td>${escapeHtml(c.region)}</td><td>${escapeHtml(c.lineage)}</td><td>${escapeHtml(c.cluster_id||'-')}</td><td><button type="button" class="mini-btn" onclick="loadCaseHistory(${escapeAttr(JSON.stringify(c.case_id||''))})">View history</button></td></tr>`;
+				html+=`<tr><td>${escapeHtml(c.case_id)}</td><td>${escapeHtml(c.specimen_date)}</td><td>${escapeHtml(c.region)}</td><td>${escapeHtml(c.lineage)}</td><td>${escapeHtml(c.cluster_id||'-')}</td><td><button type="button" class="mini-btn" onclick="loadCaseHistory(${escapeAttr(JSON.stringify(c.case_id||''))})">View history</button> <button type="button" class="mini-btn" onclick="generateCaseReport(${escapeAttr(JSON.stringify(c.case_id||''))})">Report</button></td></tr>`;
 			}
 			html+='</table>';
 		}
@@ -388,6 +388,12 @@ async function loadCaseHistory(caseIdOverride){
 	}catch(e){
 		box.textContent=`Failed to load case history: ${e}`;
 	}
+}
+function generateCaseReport(caseIdOverride){
+	const input=document.getElementById('caseHistoryId');
+	const caseId=caseIdOverride||input.value;
+	if(!caseId){alert('Please enter a Case ID first.');return;}
+	window.open(`${API}/cases/case-report/${encodeURIComponent(caseId)}`,'_blank');
 }
 async function loadRegions(){
 	const sel=document.getElementById('searchRegion');

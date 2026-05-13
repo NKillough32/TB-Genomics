@@ -335,6 +335,93 @@ def seed_synthetic_dataset(
             },
         )
 
+        # ── Seed sequencing_runs ────────────────────────────────────────────
+        run_id = f"RUN-{today.strftime('%Y%m%d')}-SYNTHETIC"
+        db.execute(
+            text(
+                "INSERT INTO sequencing_runs "
+                "(run_id, platform, instrument_name, pipeline_version, reference_genome, "
+                "started_at, completed_at, created_at) "
+                "VALUES (:run_id, :platform, :instrument_name, :pipeline_version, :reference_genome, "
+                ":started_at, :completed_at, NOW()) "
+                "ON CONFLICT (run_id) DO NOTHING"
+            ),
+            {
+                "run_id": run_id,
+                "platform": "Illumina",
+                "instrument_name": "NextSeq 550 (synthetic)",
+                "pipeline_version": "tb-pipeline-v2.3.1-synthetic",
+                "reference_genome": "H37Rv (NC_000962.3)",
+                "started_at": datetime.utcnow() - timedelta(hours=8),
+                "completed_at": datetime.utcnow() - timedelta(hours=1),
+            },
+        )
+
+        # ── Seed analysis_provenance ────────────────────────────────────────
+        db.execute(
+            text(
+                "INSERT INTO analysis_provenance "
+                "(pipeline_name, pipeline_version, reference_genome, software_versions, parameters, generated_at) "
+                "VALUES (:pipeline_name, :pipeline_version, :reference_genome, "
+                "CAST(:software_versions AS jsonb), CAST(:parameters AS jsonb), NOW())"
+            ),
+            {
+                "pipeline_name": "TB-WGS-Outbreak-Pipeline",
+                "pipeline_version": "2.3.1-synthetic",
+                "reference_genome": "H37Rv (NC_000962.3)",
+                "software_versions": json.dumps({
+                    "mapper": "BWA-MEM 0.7.17",
+                    "variant_caller": "GATK HaplotypeCaller 4.4.0",
+                    "resistance_catalogue": "WHO TB catalogue v2 (2023)",
+                    "lineage_tool": "TBProfiler v5.0.0",
+                    "outbreaker2": "outbreaker2 1.4.4",
+                }),
+                "parameters": json.dumps({
+                    "platform": "Illumina",
+                    "instrument": "NextSeq 550 (synthetic)",
+                    "library_prep": "Nextera XT",
+                    "snp_threshold": 12,
+                    "gen_time_mean": "7",
+                    "gen_time_sd": "2",
+                    "sampling_prob": "0.85",
+                    "random_seed": seed,
+                    "mapper": "BWA-MEM 0.7.17",
+                    "variant_caller": "GATK HaplotypeCaller 4.4.0",
+                    "resistance_catalogue": "WHO TB catalogue v2 (2023)",
+                    "lineage_tool": "TBProfiler v5.0.0",
+                }),
+            },
+        )
+
+        # ── Seed per-case audit_log entries (sample of actions) ────────────
+        audit_actions = [
+            ("case_ingested", "WGS sequence received and ingested"),
+            ("qc_reviewed", "QC metrics reviewed by bioinformatician"),
+            ("cluster_assigned", "Case assigned to transmission cluster"),
+            ("lineage_called", "Lineage and drug resistance called"),
+            ("mdt_notified", "MDT notified of cluster membership"),
+        ]
+        sampled_cases = random.sample(
+            [str(r.get("case_id")) for r in
+             db.execute(text("SELECT pseudonymised_case_id::text AS case_id FROM cases LIMIT 100")).mappings().all()
+             if r.get("case_id")],
+            k=min(30, case_count),
+        )
+        for cid in sampled_cases:
+            action, detail_text = random.choice(audit_actions)
+            db.execute(
+                text(
+                    "INSERT INTO audit_log (action, user_id, details, timestamp) "
+                    "VALUES (:action, :user_id, CAST(:details AS jsonb), :ts)"
+                ),
+                {
+                    "action": action,
+                    "user_id": random.choice(["lab.user1", "bioinf.user2", "epi.user3", "system"]),
+                    "details": json.dumps({"sample_id": cid, "note": detail_text}),
+                    "ts": datetime.utcnow() - timedelta(days=random.randint(0, 90)),
+                },
+            )
+
         db.commit()
         return {
             "status": "ok",

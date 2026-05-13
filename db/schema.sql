@@ -70,7 +70,8 @@ CREATE TABLE clusters (
 
 CREATE TABLE case_clusters (
   sample_id UUID REFERENCES cases(pseudonymised_case_id),
-  cluster_id UUID REFERENCES clusters(cluster_id)
+  cluster_id UUID REFERENCES clusters(cluster_id),
+  PRIMARY KEY (sample_id, cluster_id)
 );
 
 CREATE TABLE audit_log (

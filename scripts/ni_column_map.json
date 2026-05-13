@@ -1,0 +1,234 @@
+{
+  "_comment": [
+    "Column mapping configuration for Northern Ireland TB data preparation.",
+    "Edit this file to match the actual column names and values in your source exports.",
+    "Then run: python scripts/prepare_ni_data.py --config scripts/ni_column_map.json --out prepared_bundle/",
+    "",
+    "Mapping types:",
+    "  'column'  : read value directly from a source column",
+    "  'static'  : use a fixed value for every row",
+    "  'uuid_from_column' : generate a stable UUID from a source column value (e.g. lab ID)",
+    "  'date_column' : read a date column and normalise to ISO format YYYY-MM-DD",
+    "  'map_values' : rename categorical values (e.g. trust names to canonical regions)",
+    "  'ignore'  : leave this field blank/null (fill in later)",
+    "",
+    "Run 'python scripts/prepare_ni_data.py --list-columns --source cases' to print",
+    "the column headers found in your source file without doing any transformation."
+  ],
+
+  "source_files": {
+    "cases": "ni_exports/cases_extract.csv",
+    "tb_interpretation": "ni_exports/tbprofiler_results.csv",
+    "sample_qc_metrics": "ni_exports/qc_metrics.csv",
+    "sequencing_runs": "ni_exports/sequencing_runs.csv",
+    "analysis_provenance": "ni_exports/analysis_provenance.csv",
+    "fasta": "ni_exports/consensus.fasta"
+  },
+
+  "cases": {
+    "pseudonymised_case_id": {
+      "type": "uuid_from_column",
+      "source_column": "SAMPLE_ID",
+      "_note": "If your source already has UUID-format IDs, use 'column' instead."
+    },
+    "local_lab_sample_id": {
+      "type": "column",
+      "source_column": "SAMPLE_ID",
+      "_note": "The lab accession number (e.g. NIBT-2024-12345)"
+    },
+    "specimen_date": {
+      "type": "date_column",
+      "source_column": "SPECIMEN_DATE",
+      "_note": "Accepts YYYY-MM-DD, DD/MM/YYYY, DD-MM-YYYY"
+    },
+    "geographic_region": {
+      "type": "map_values",
+      "source_column": "TRUST",
+      "_note": "Maps HSC Trust names to canonical display values for the report",
+      "value_map": {
+        "Belfast Health and Social Care Trust": "Belfast HSC Trust",
+        "Northern Health and Social Care Trust": "Northern HSC Trust",
+        "South Eastern Health and Social Care Trust": "South Eastern HSC Trust",
+        "Southern Health and Social Care Trust": "Southern HSC Trust",
+        "Western Health and Social Care Trust": "Western HSC Trust",
+        "BHSCT": "Belfast HSC Trust",
+        "NHSCT": "Northern HSC Trust",
+        "SEHSCT": "South Eastern HSC Trust",
+        "SHSCT": "Southern HSC Trust",
+        "WHSCT": "Western HSC Trust"
+      },
+      "fallback": "Unknown"
+    },
+    "case_status": {
+      "type": "map_values",
+      "source_column": "CASE_STATUS",
+      "_note": "Maps to one of: confirmed, probable, under_review",
+      "value_map": {
+        "Confirmed": "confirmed",
+        "CONFIRMED": "confirmed",
+        "Probable": "probable",
+        "PROBABLE": "probable",
+        "Pending": "under_review",
+        "Under Review": "under_review",
+        "UNDER REVIEW": "under_review"
+      },
+      "fallback": "under_review"
+    }
+  },
+
+  "tb_interpretation": {
+    "sample_id": {
+      "type": "uuid_from_column",
+      "source_column": "SAMPLE_ID",
+      "_note": "Must resolve to the same UUID as cases.pseudonymised_case_id"
+    },
+    "species_confirmation": {
+      "type": "column",
+      "source_column": "SPECIES",
+      "_note": "e.g. 'M. tuberculosis complex'"
+    },
+    "lineage": {
+      "type": "column",
+      "source_column": "LINEAGE",
+      "_note": "TBProfiler lineage call e.g. 'L4'"
+    },
+    "sublineage": {
+      "type": "column",
+      "source_column": "SUBLINEAGE",
+      "_note": "e.g. 'L4.3.4.2'"
+    },
+    "resistance_mutations": {
+      "type": "column",
+      "source_column": "RESISTANCE_MUTATIONS",
+      "_note": "JSON array of {gene, variant, drug} objects. If TBProfiler output, use --tbprofiler-json flag."
+    },
+    "predicted_drug_resistance": {
+      "type": "column",
+      "source_column": "PREDICTED_RESISTANCE",
+      "_note": "JSON object {drug: susceptible|resistant}"
+    },
+    "confidence_score": {
+      "type": "column",
+      "source_column": "CONFIDENCE",
+      "_note": "Float 0-1"
+    },
+    "interpretation_summary": {
+      "type": "column",
+      "source_column": "SUMMARY"
+    }
+  },
+
+  "sample_qc_metrics": {
+    "sample_id": {
+      "type": "uuid_from_column",
+      "source_column": "SAMPLE_ID"
+    },
+    "run_id": {
+      "type": "column",
+      "source_column": "RUN_ID",
+      "_note": "Must match a run_id in sequencing_runs. Leave blank if no run tracking."
+    },
+    "mean_depth": {
+      "type": "column",
+      "source_column": "MEAN_DEPTH",
+      "_note": "Mean read depth across the reference genome"
+    },
+    "coverage_breadth": {
+      "type": "column",
+      "source_column": "COVERAGE_BREADTH",
+      "_note": "Percentage of reference covered at >= min depth threshold"
+    },
+    "ambiguous_base_percent": {
+      "type": "column",
+      "source_column": "AMBIGUOUS_PCT"
+    },
+    "contamination_flag": {
+      "type": "column",
+      "source_column": "CONTAMINATION_FLAG",
+      "_note": "true/false"
+    },
+    "qc_status": {
+      "type": "map_values",
+      "source_column": "QC_STATUS",
+      "value_map": {
+        "PASS": "pass",
+        "Pass": "pass",
+        "FAIL": "fail",
+        "Fail": "fail",
+        "passed": "pass",
+        "failed": "fail"
+      },
+      "fallback": "fail"
+    },
+    "qc_failure_reason": {
+      "type": "column",
+      "source_column": "QC_FAILURE_REASON"
+    },
+    "reported_at": {
+      "type": "date_column",
+      "source_column": "REPORTED_DATE"
+    }
+  },
+
+  "sequencing_runs": {
+    "run_id": {
+      "type": "column",
+      "source_column": "RUN_ID"
+    },
+    "platform": {
+      "type": "column",
+      "source_column": "PLATFORM",
+      "_note": "e.g. 'Illumina'"
+    },
+    "instrument_name": {
+      "type": "column",
+      "source_column": "INSTRUMENT"
+    },
+    "pipeline_version": {
+      "type": "column",
+      "source_column": "PIPELINE_VERSION"
+    },
+    "reference_genome": {
+      "type": "column",
+      "source_column": "REFERENCE_GENOME"
+    },
+    "started_at": {
+      "type": "date_column",
+      "source_column": "RUN_START_DATE"
+    },
+    "completed_at": {
+      "type": "date_column",
+      "source_column": "RUN_END_DATE"
+    }
+  },
+
+  "analysis_provenance": {
+    "sample_id": {
+      "type": "uuid_from_column",
+      "source_column": "SAMPLE_ID"
+    },
+    "pipeline_name": {
+      "type": "static",
+      "value": "NI-TB-WGS-Pipeline",
+      "_note": "Set to the name of your pipeline"
+    },
+    "pipeline_version": {
+      "type": "column",
+      "source_column": "PIPELINE_VERSION"
+    },
+    "reference_genome": {
+      "type": "static",
+      "value": "H37Rv (NC_000962.3)"
+    },
+    "software_versions": {
+      "type": "column",
+      "source_column": "SOFTWARE_VERSIONS",
+      "_note": "JSON object {tool: version}. Can also be 'static' with a hard-coded value."
+    },
+    "parameters": {
+      "type": "column",
+      "source_column": "PARAMETERS",
+      "_note": "JSON object of pipeline parameters"
+    }
+  }
+}

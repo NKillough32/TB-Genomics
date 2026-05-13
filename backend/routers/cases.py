@@ -654,6 +654,46 @@ def list_regions(db: Session = Depends(get_db)):
     return {"regions": list(rows)}
 
 
+@router.get("/summary")
+def cases_summary(db: Session = Depends(get_db)):
+    """KPI summary used by the GUI banner."""
+    total = db.execute(text("SELECT COUNT(*) FROM cases")).scalar() or 0
+    clustered = db.execute(
+        text("SELECT COUNT(DISTINCT sample_id) FROM case_clusters")
+    ).scalar() or 0
+    open_clusters = db.execute(
+        text("SELECT COUNT(*) FROM clusters WHERE investigation_status = 'open'")
+    ).scalar() or 0
+    return {
+        "total_cases": total,
+        "clustered_cases": clustered,
+        "unclustered_cases": max(0, total - clustered),
+        "open_clusters": open_clusters,
+    }
+
+
+@router.get("/data-safety")
+def data_safety(db: Session = Depends(get_db)):
+    """Return whether the current dataset is operational or synthetic/demo."""
+    total = db.execute(text("SELECT COUNT(*) FROM cases")).scalar() or 0
+    # Detect synthetic seed events in the audit log
+    try:
+        seed_events = db.execute(
+            text("SELECT COUNT(*) FROM audit_log WHERE action = 'seed_synthetic_dataset'")
+        ).scalar() or 0
+    except Exception:
+        db.rollback()
+        seed_events = 0
+    # Heuristic: if any seed event exists, data is non-operational
+    operational_safe = seed_events == 0
+    return {
+        "operational_safe": operational_safe,
+        "total_cases": total,
+        "synthetic_case_count": total if not operational_safe else 0,
+        "synthetic_seed_events": seed_events,
+    }
+
+
 @router.get("/outbreaker-status")
 def outbreaker_status():
     summary_path = _export_path("outbreaker_summary.json")
@@ -1123,6 +1163,62 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
     missing_repro = [label for label, v in required_repro_metadata if v is None or (isinstance(v, str) and not v.strip())]
     circulation_ok = not missing_repro
 
+    # ── Reproducibility / pipeline metadata variables ─────────────────────────
+    # Pull from DB tables first, fall back to JSON artifact values.
+    _seq_run_row: dict = {}
+    try:
+        _seq_run_row = dict(db.execute(text(
+            "SELECT platform, instrument_name, pipeline_version, reference_genome "
+            "FROM sequencing_runs ORDER BY created_at DESC NULLS LAST LIMIT 1"
+        )).mappings().first() or {})
+    except Exception:
+        db.rollback()
+
+    _prov_row_db: dict = {}
+    try:
+        _prov_row_db = dict(db.execute(text(
+            "SELECT pipeline_name, pipeline_version, reference_genome, software_versions, parameters "
+            "FROM analysis_provenance ORDER BY generated_at DESC NULLS LAST LIMIT 1"
+        )).mappings().first() or {})
+    except Exception:
+        db.rollback()
+
+    _sw: dict = {}
+    try:
+        import json as _json
+        _sw = _json.loads(_prov_row_db.get("software_versions") or "{}") or {}
+    except Exception:
+        pass
+
+    _params: dict = {}
+    try:
+        import json as _json2
+        _params = _json2.loads(_prov_row_db.get("parameters") or "{}") or {}
+    except Exception:
+        pass
+
+    ref_genome     = (_prov_row_db.get("reference_genome") or _seq_run_row.get("reference_genome")
+                      or (summary_data or {}).get("reference_genome"))
+    seq_platform   = _seq_run_row.get("platform") or _params.get("platform")
+    instrument     = _seq_run_row.get("instrument_name") or _params.get("instrument")
+    library_prep   = _params.get("library_prep") or _params.get("library_preparation")
+    snp_pipeline   = (_prov_row_db.get("pipeline_name") or _prov_row_db.get("pipeline_version")
+                      or (summary_data or {}).get("snp_pipeline_version"))
+    mapping_tool   = _sw.get("mapper") or _sw.get("bwa") or _params.get("mapper")
+    variant_caller = _sw.get("variant_caller") or _params.get("variant_caller")
+    snp_threshold  = str(_params.get("snp_threshold") or 12)
+    resist_cat     = (_sw.get("resistance_catalogue") or _params.get("resistance_catalogue")
+                      or (lineage_dr_data or {}).get("resistance_catalogue_version"))
+    lineage_tool   = (_sw.get("lineage_tool") or _params.get("lineage_tool")
+                      or (lineage_dr_data or {}).get("lineage_tool_version"))
+    outbreaker_ver = (_sw.get("outbreaker2") or _params.get("outbreaker_version")
+                      or (summary_data or {}).get("analysis_engine_version"))
+    random_seed    = (str(_params.get("random_seed") or "")
+                      or str((summary_data or {}).get("random_seed") or "") or None)
+    gen_time_mean  = str(_params.get("gen_time_mean") or _params.get("generation_time_mean") or "")
+    gen_time_sd    = str(_params.get("gen_time_sd") or _params.get("generation_time_sd") or "")
+    sampling_prob  = str(_params.get("sampling_prob") or _params.get("pi") or "")
+
     # ── Lineage epi summary ────────────────────────────────────────────────────
     analysis_summary = _lineage_analysis_summary(db)
     analysis_epi_summary = _lineage_epi_summary(db)
@@ -1508,6 +1604,25 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
   main{padding:1rem .75rem}
 }
 """
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Denominator counts
+    # ─────────────────────────────────────────────────────────────────────────
+    denom_notified = int(total_cases)
+    denom_sequenced = len(sequence_by_case)
+    try:
+        denom_culture_pos = db.execute(text("SELECT COUNT(*) FROM consensus_sequences")).scalar() or 0
+    except Exception:
+        db.rollback()
+        denom_culture_pos = 0
+    denom_qc_pass = int(qc_status_counts["pass"])
+    _model_nodes: set = set()
+    for _e in transmission_edges:
+        if _e.get("source"):
+            _model_nodes.add(str(_e["source"]))
+        if _e.get("target"):
+            _model_nodes.add(str(_e["target"]))
+    denom_model_nodes = len(_model_nodes)
 
     # ─────────────────────────────────────────────────────────────────────────
     # Additional computed values for new sections
@@ -2092,8 +2207,8 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
         ("Generation time mean (d)",  gen_time_mean,  False),
         ("Generation time SD (d)",    gen_time_sd,    False),
         ("Sampling probability (π)",  sampling_prob,  False),
-        ("Pipeline run date",         str(run_meta.get("completed_at", "") or "") or None, False),
-        ("Analysis provenance date",  str(prov_meta.get("generated_at", "") or "") or None, False),
+        ("Pipeline run date",         str(_seq_run_row.get("completed_at", "") or _prov_row_db.get("run_at", "") or "") or None, False),
+        ("Analysis provenance date",  str(_prov_row_db.get("generated_at", "") or _prov_row_db.get("run_at", "") or "") or None, False),
     ]
     prov_rows += "".join(_prov_row(lbl, v, required=req) for lbl, v, req in extended_prov)
     prov_html = f"<table class='kv-table'><tbody>{prov_rows}</tbody></table>"

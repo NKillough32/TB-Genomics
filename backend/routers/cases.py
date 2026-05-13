@@ -1151,18 +1151,6 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
         except Exception:
             run_qc_rows_db = []
 
-    # ── Reproduce metadata gate ────────────────────────────────────────────────
-    required_repro_metadata = [
-        ("Reference genome", (summary_data or {}).get("reference_genome")),
-        ("SNP-calling pipeline/version", (summary_data or {}).get("snp_pipeline_version")),
-        ("Resistance catalogue/version", (lineage_dr_data or {}).get("resistance_catalogue_version")),
-        ("Lineage-calling tool/version", (lineage_dr_data or {}).get("lineage_tool_version")),
-        ("outbreaker2 version", (summary_data or {}).get("analysis_engine_version")),
-        ("Random seed", (summary_data or {}).get("random_seed")),
-    ]
-    missing_repro = [label for label, v in required_repro_metadata if v is None or (isinstance(v, str) and not v.strip())]
-    circulation_ok = not missing_repro
-
     # ── Reproducibility / pipeline metadata variables ─────────────────────────
     # Pull from DB tables first, fall back to JSON artifact values.
     _seq_run_row: dict = {}
@@ -1183,19 +1171,21 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
     except Exception:
         db.rollback()
 
-    _sw: dict = {}
-    try:
-        import json as _json
-        _sw = _json.loads(_prov_row_db.get("software_versions") or "{}") or {}
-    except Exception:
-        pass
+    def _parse_jsonb(val: object) -> dict:
+        """JSONB columns come back from SQLAlchemy as dicts already; strings need loads()."""
+        if isinstance(val, dict):
+            return val
+        if val is None:
+            return {}
+        try:
+            import json as _j
+            result = _j.loads(val)
+            return result if isinstance(result, dict) else {}
+        except Exception:
+            return {}
 
-    _params: dict = {}
-    try:
-        import json as _json2
-        _params = _json2.loads(_prov_row_db.get("parameters") or "{}") or {}
-    except Exception:
-        pass
+    _sw: dict = _parse_jsonb(_prov_row_db.get("software_versions"))
+    _params: dict = _parse_jsonb(_prov_row_db.get("parameters"))
 
     ref_genome     = (_prov_row_db.get("reference_genome") or _seq_run_row.get("reference_genome")
                       or (summary_data or {}).get("reference_genome"))
@@ -1218,6 +1208,19 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
     gen_time_mean  = str(_params.get("gen_time_mean") or _params.get("generation_time_mean") or "")
     gen_time_sd    = str(_params.get("gen_time_sd") or _params.get("generation_time_sd") or "")
     sampling_prob  = str(_params.get("sampling_prob") or _params.get("pi") or "")
+
+    # ── Reproduce metadata gate ────────────────────────────────────────────────
+    # Uses the already-resolved DB variables so the DB is the source of truth.
+    required_repro_metadata = [
+        ("Reference genome", ref_genome),
+        ("SNP-calling pipeline/version", snp_pipeline),
+        ("Resistance catalogue/version", resist_cat),
+        ("Lineage-calling tool/version", lineage_tool),
+        ("outbreaker2 version", outbreaker_ver),
+        ("Random seed", random_seed),
+    ]
+    missing_repro = [label for label, v in required_repro_metadata if v is None or (isinstance(v, str) and not v.strip())]
+    circulation_ok = not missing_repro
 
     # ── Lineage epi summary ────────────────────────────────────────────────────
     analysis_summary = _lineage_analysis_summary(db)

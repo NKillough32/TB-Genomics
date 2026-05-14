@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.database import init_db
-from backend.routers import cases, ingest, jobs
+from backend.routers import cases, ingest, jobs, cluster_investigations
 
 
 @asynccontextmanager
@@ -28,6 +28,7 @@ app.add_middleware(
 app.include_router(cases.router)
 app.include_router(ingest.router)
 app.include_router(jobs.router)
+app.include_router(cluster_investigations.router)
 
 
 @app.get("/")

@@ -395,6 +395,227 @@ function generateCaseReport(caseIdOverride){
 	if(!caseId){alert('Please enter a Case ID first.');return;}
 	window.open(`${API}/cases/case-report/${encodeURIComponent(caseId)}`,'_blank');
 }
+// ── Cluster Investigation Centre ─────────────────────────────────────────────
+let _cicCurrentCluster = null;
+
+const _CIC_BAND_COLOUR = {
+	critical: '#b91c1c',
+	high:     '#c2410c',
+	medium:   '#b45309',
+	low:      '#15803d',
+};
+
+async function loadClusterInvestigations(){
+	const listEl = document.getElementById('cicList');
+	listEl.innerHTML = '<p class="hint">Loading clusters…</p>';
+	closeCicPanel();
+	try{
+		const r = await fetch(`${API}/cluster-investigations`);
+		if(!r.ok){ listEl.textContent = 'Failed to load: ' + r.status; return; }
+		const data = await r.json();
+		if(!data.investigations || data.investigations.length === 0){
+			listEl.innerHTML = '<p class="hint">No clusters found. Run analysis first (Step 3).</p>';
+			return;
+		}
+		let html = '<table class="data-table cic-cluster-table">';
+		html += '<thead><tr><th>Cluster</th><th>Cases</th><th>Risk</th><th>Score</th>'
+		      + '<th>Status</th><th>Assigned to</th><th>Actions</th><th></th></tr></thead><tbody>';
+		for(const inv of data.investigations){
+			const band = inv.risk_band || 'low';
+			const colour = _CIC_BAND_COLOUR[band] || '#374151';
+			const statusLabel = (inv.status || 'open').replace(/_/g,' ');
+			const signed = inv.status === 'signed_off';
+			html += `<tr>
+				<td><code>${escapeHtml(inv.cluster_id.slice(0,8))}</code></td>
+				<td>${escapeHtml(inv.case_count)}</td>
+				<td><span class="cic-band-badge" style="background:${escapeAttr(colour)}">${escapeHtml(band.toUpperCase())}</span></td>
+				<td>${escapeHtml(inv.risk_score)}</td>
+				<td>${escapeHtml(statusLabel)}${signed ? ' ✓' : ''}</td>
+				<td>${escapeHtml(inv.assigned_to || '—')}</td>
+				<td>${escapeHtml(inv.action_count)}</td>
+				<td><button class="mini-btn" onclick="openCicPanel(${escapeAttr(JSON.stringify(inv.cluster_id))})">Investigate</button></td>
+			</tr>`;
+		}
+		html += '</tbody></table>';
+		listEl.innerHTML = html;
+	}catch(e){
+		listEl.textContent = 'Error: ' + e;
+	}
+}
+
+async function openCicPanel(clusterId){
+	_cicCurrentCluster = clusterId;
+	const panel = document.getElementById('cicPanel');
+	panel.style.display = 'block';
+	panel.removeAttribute('aria-hidden');
+	document.getElementById('cicPanelTitle').textContent =
+		'Cluster ' + clusterId.slice(0,8) + '…';
+	// reset tabs to first
+	cicTab(document.querySelector('.cic-tab'), 'cicTabMembers');
+	await _cicRefreshDetail();
+	panel.scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+function closeCicPanel(){
+	_cicCurrentCluster = null;
+	const panel = document.getElementById('cicPanel');
+	panel.style.display = 'none';
+	panel.setAttribute('aria-hidden','true');
+}
+
+async function _cicRefreshDetail(){
+	if(!_cicCurrentCluster) return;
+	try{
+		const r = await fetch(`${API}/cluster-investigations/${encodeURIComponent(_cicCurrentCluster)}`);
+		if(!r.ok) return;
+		const d = await r.json();
+		_cicRenderRiskStrip(d);
+		_cicRenderMembers(d);
+		_cicRenderActions(d);
+		if(d.epi_notes) document.getElementById('cicEpiNotes').value = d.epi_notes;
+		if(d.assigned_to) document.getElementById('cicAssignee').value = d.assigned_to;
+	}catch(e){
+		console.warn('CIC detail load failed', e);
+	}
+}
+
+function _cicRenderRiskStrip(d){
+	const band = d.risk_band || 'low';
+	const colour = _CIC_BAND_COLOUR[band] || '#374151';
+	const status = (d.status || 'open').replace(/_/g,' ');
+	const assignee = d.assigned_to ? `Assigned to: ${escapeHtml(d.assigned_to)}` : 'Unassigned';
+	const comp = d.risk_components || {};
+	const compStr = Object.entries(comp)
+		.map(([k,v]) => `${k.replace(/_/g,' ')}: ${v}`)
+		.join(' | ');
+	document.getElementById('cicRiskStrip').innerHTML =
+		`<span class="cic-band-badge" style="background:${escapeAttr(colour)};font-size:1rem">${escapeHtml(band.toUpperCase())}</span>
+		<strong>${escapeHtml(String(d.risk_score))}</strong> pts &nbsp;|&nbsp;
+		Status: <strong>${escapeHtml(status)}</strong> &nbsp;|&nbsp; ${escapeHtml(assignee)}
+		${compStr ? `<div class="hint" style="margin-top:.25rem">${escapeHtml(compStr)}</div>` : ''}`;
+}
+
+function _cicRenderMembers(d){
+	const members = d.members || [];
+	let html = `<p class="hint">${members.length} case(s) in this cluster.</p>`;
+	if(members.length > 0){
+		html += '<table class="data-table"><thead><tr><th>Case ID</th><th>Date</th><th>Region</th><th>Lineage</th><th>Resistance</th></tr></thead><tbody>';
+		for(const m of members){
+			let dr = m.resistance;
+			if(dr && typeof dr === 'object') dr = Object.keys(dr).join(', ') || 'none';
+			else if(!dr || dr === 'null') dr = 'none';
+			html += `<tr><td><code>${escapeHtml((m.case_id||'').slice(0,8))}</code></td>
+				<td>${escapeHtml(m.specimen_date||'')}</td>
+				<td>${escapeHtml(m.region||'')}</td>
+				<td>${escapeHtml(m.lineage||'')}</td>
+				<td>${escapeHtml(String(dr))}</td></tr>`;
+		}
+		html += '</tbody></table>';
+	}
+	document.getElementById('cicMembersTable').innerHTML = html;
+}
+
+function _cicRenderActions(d){
+	const actions = d.actions || [];
+	let html = '';
+	if(actions.length === 0){
+		html = '<p class="hint">No actions recorded yet.</p>';
+	}else{
+		html = '<table class="data-table"><thead><tr><th>Type</th><th>Description</th><th>By</th><th>Date</th></tr></thead><tbody>';
+		for(const a of actions){
+			html += `<tr><td>${escapeHtml(a.action_type||'')}</td>
+				<td>${escapeHtml(a.description||'')}</td>
+				<td>${escapeHtml(a.performed_by||'')}</td>
+				<td>${escapeHtml((a.performed_at||'').slice(0,10))}</td></tr>`;
+		}
+		html += '</tbody></table>';
+	}
+	document.getElementById('cicActionsTable').innerHTML = html;
+}
+
+function cicTab(btn, tabId){
+	document.querySelectorAll('.cic-tab').forEach(t => t.classList.remove('active'));
+	document.querySelectorAll('.cic-tab-content').forEach(t => { t.style.display='none'; });
+	btn.classList.add('active');
+	document.getElementById(tabId).style.display = 'block';
+}
+
+async function cicAssign(){
+	const val = document.getElementById('cicAssignee').value.trim();
+	const msg = document.getElementById('cicAssignStatus');
+	if(!val || !_cicCurrentCluster){ msg.textContent='Please enter a reviewer name.'; return; }
+	try{
+		const r = await fetch(`${API}/cluster-investigations/${encodeURIComponent(_cicCurrentCluster)}/assign`,
+			{method:'POST', headers:{'Content-Type':'application/json'},
+			 body: JSON.stringify({assigned_to: val})});
+		if(r.ok){ msg.textContent='✓ Assigned to ' + val; await _cicRefreshDetail(); loadClusterInvestigations(); }
+		else { const e=await r.json(); msg.textContent='Error: '+(e.detail||r.status); }
+	}catch(e){ msg.textContent='Error: '+e; }
+}
+
+async function cicSaveEpiNotes(){
+	const notes = document.getElementById('cicEpiNotes').value;
+	const msg = document.getElementById('cicEpiStatus');
+	if(!_cicCurrentCluster) return;
+	try{
+		const r = await fetch(`${API}/cluster-investigations/${encodeURIComponent(_cicCurrentCluster)}/epi-notes`,
+			{method:'PUT', headers:{'Content-Type':'application/json'},
+			 body: JSON.stringify({epi_notes: notes})});
+		if(r.ok){ msg.textContent='✓ Notes saved.'; }
+		else { const e=await r.json(); msg.textContent='Error: '+(e.detail||r.status); }
+	}catch(e){ msg.textContent='Error: '+e; }
+}
+
+async function cicRecordAction(){
+	const msg = document.getElementById('cicActionStatus');
+	if(!_cicCurrentCluster){ msg.textContent='No cluster selected.'; return; }
+	const atype = document.getElementById('cicActionType').value;
+	const desc  = document.getElementById('cicActionDesc').value.trim();
+	const by    = document.getElementById('cicActionBy').value.trim();
+	const date  = document.getElementById('cicActionDate').value || null;
+	if(!desc || !by){ msg.textContent='Please fill in description and performed by.'; return; }
+	try{
+		const r = await fetch(`${API}/cluster-investigations/${encodeURIComponent(_cicCurrentCluster)}/actions`,
+			{method:'POST', headers:{'Content-Type':'application/json'},
+			 body: JSON.stringify({action_type:atype, description:desc, performed_by:by, performed_at:date})});
+		if(r.ok){
+			msg.textContent='✓ Action recorded.';
+			document.getElementById('cicActionDesc').value='';
+			document.getElementById('cicActionBy').value='';
+			document.getElementById('cicActionDate').value='';
+			await _cicRefreshDetail();
+			loadClusterInvestigations();
+		}else{ const e=await r.json(); msg.textContent='Error: '+(e.detail||r.status); }
+	}catch(e){ msg.textContent='Error: '+e; }
+}
+
+async function cicSignOff(){
+	const msg = document.getElementById('cicSignOffStatus');
+	if(!_cicCurrentCluster){ msg.textContent='No cluster selected.'; return; }
+	const decision   = document.getElementById('cicDecision').value;
+	const decisionBy = document.getElementById('cicDecisionBy').value.trim();
+	const notes      = document.getElementById('cicSignOffNotes').value.trim();
+	if(!decisionBy){ msg.textContent='Please enter your name / role.'; return; }
+	if(!confirm(`Sign off cluster ${_cicCurrentCluster.slice(0,8)} with decision "${decision}"?`)) return;
+	try{
+		const r = await fetch(`${API}/cluster-investigations/${encodeURIComponent(_cicCurrentCluster)}/sign-off`,
+			{method:'POST', headers:{'Content-Type':'application/json'},
+			 body: JSON.stringify({decision, decision_by:decisionBy, notes: notes||null})});
+		if(r.ok){
+			msg.textContent='✓ Investigation signed off.';
+			await _cicRefreshDetail();
+			loadClusterInvestigations();
+		}else{ const e=await r.json(); msg.textContent='Error: '+(e.detail||r.status); }
+	}catch(e){ msg.textContent='Error: '+e; }
+}
+
+function cicOpenReport(){
+	if(!_cicCurrentCluster){ alert('No cluster selected.'); return; }
+	window.open(`${API}/cluster-investigations/${encodeURIComponent(_cicCurrentCluster)}/report`, '_blank');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 async function loadRegions(){
 	const sel=document.getElementById('searchRegion');
 	try{

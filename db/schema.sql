@@ -94,3 +94,24 @@ CREATE TABLE IF NOT EXISTS pipeline_validation_signoffs (
   catalogue_version TEXT,
   signed_off_at     TIMESTAMP DEFAULT NOW()
 );
+
+-- ─── Cluster Investigation Centre ─────────────────────────────────────────────
+-- One row per cluster under active or completed investigation.
+CREATE TABLE IF NOT EXISTS cluster_investigations (
+  investigation_id  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  cluster_id        UUID NOT NULL REFERENCES clusters(cluster_id) ON DELETE CASCADE,
+  risk_score        NUMERIC NOT NULL DEFAULT 0,
+  risk_band         TEXT NOT NULL DEFAULT 'low' CHECK (risk_band IN ('low', 'medium', 'high', 'critical')),
+  assigned_to       TEXT,
+  status            TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'under_review', 'signed_off', 'closed')),
+  epi_notes         TEXT,
+  actions           JSONB NOT NULL DEFAULT '[]',
+  decision          TEXT,
+  decision_by       TEXT,
+  decision_at       TIMESTAMP,
+  created_at        TIMESTAMP DEFAULT NOW(),
+  updated_at        TIMESTAMP DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_cluster_investigations_cluster
+  ON cluster_investigations (cluster_id);

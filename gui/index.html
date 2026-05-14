@@ -144,6 +144,117 @@
     <button onclick="loadAuditTrail()">View audit trail</button>
     <pre id="auditTrail" class="log-box"></pre>
   </section>
+
+  <!-- ── Step 6: Cluster Investigation Centre ─────────────────────────────── -->
+  <section class="card" id="cicCard">
+    <h2>Step 6 - Cluster Investigation Centre</h2>
+    <p class="hint">
+      End-to-end workflow: risk-scored cluster list → assign reviewer → record
+      epidemiology notes and actions → formal sign-off → generate report.
+    </p>
+    <button class="btn-primary" onclick="loadClusterInvestigations()">&#x1F50D; Load clusters</button>
+    <div id="cicList" class="cic-list"></div>
+
+    <!-- Investigation detail panel (hidden until a cluster is selected) -->
+    <div id="cicPanel" class="cic-panel" aria-hidden="true" style="display:none">
+      <div class="cic-panel-header">
+        <span id="cicPanelTitle" class="cic-panel-title"></span>
+        <button class="cic-close-btn" onclick="closeCicPanel()" aria-label="Close">&times;</button>
+      </div>
+
+      <!-- Risk summary strip -->
+      <div id="cicRiskStrip" class="cic-risk-strip"></div>
+
+      <!-- Tabs -->
+      <div class="cic-tabs" role="tablist">
+        <button class="cic-tab active" role="tab" onclick="cicTab(this,'cicTabMembers')">Members</button>
+        <button class="cic-tab" role="tab" onclick="cicTab(this,'cicTabEpi')">Epi notes</button>
+        <button class="cic-tab" role="tab" onclick="cicTab(this,'cicTabActions')">Actions</button>
+        <button class="cic-tab" role="tab" onclick="cicTab(this,'cicTabSignOff')">Sign-off</button>
+      </div>
+
+      <!-- Tab: Members -->
+      <div id="cicTabMembers" class="cic-tab-content">
+        <h3 class="cic-section-title">Assign reviewer</h3>
+        <div class="cic-row">
+          <input id="cicAssignee" type="text" placeholder="Reviewer name or initials" class="cic-input" />
+          <button onclick="cicAssign()">Assign</button>
+        </div>
+        <div id="cicAssignStatus" class="cic-msg"></div>
+        <h3 class="cic-section-title">Cluster members</h3>
+        <div id="cicMembersTable"></div>
+      </div>
+
+      <!-- Tab: Epi notes -->
+      <div id="cicTabEpi" class="cic-tab-content" style="display:none">
+        <h3 class="cic-section-title">Epidemiology review notes</h3>
+        <p class="hint">Document contacts, exposure settings, travel history, social links.</p>
+        <textarea id="cicEpiNotes" class="cic-textarea" rows="8" placeholder="Enter epidemiology notes…"></textarea>
+        <button onclick="cicSaveEpiNotes()">Save notes</button>
+        <div id="cicEpiStatus" class="cic-msg"></div>
+      </div>
+
+      <!-- Tab: Actions -->
+      <div id="cicTabActions" class="cic-tab-content" style="display:none">
+        <h3 class="cic-section-title">Record a public health action</h3>
+        <div class="cic-form-grid">
+          <label>Action type
+            <select id="cicActionType" class="cic-input">
+              <option value="contact_tracing">Contact tracing</option>
+              <option value="interview">Case interview</option>
+              <option value="referral">Clinical referral</option>
+              <option value="notification">Public health notification</option>
+              <option value="enhanced_surveillance">Enhanced surveillance</option>
+              <option value="cluster_closure">Cluster closure</option>
+              <option value="other">Other</option>
+            </select>
+          </label>
+          <label>Description
+            <input id="cicActionDesc" type="text" class="cic-input" placeholder="Brief description of action taken" />
+          </label>
+          <label>Performed by
+            <input id="cicActionBy" type="text" class="cic-input" placeholder="Staff name or role" />
+          </label>
+          <label>Date
+            <input id="cicActionDate" type="date" class="cic-input" />
+          </label>
+        </div>
+        <button onclick="cicRecordAction()">Record action</button>
+        <div id="cicActionStatus" class="cic-msg"></div>
+        <h3 class="cic-section-title">Recorded actions</h3>
+        <div id="cicActionsTable"></div>
+      </div>
+
+      <!-- Tab: Sign-off -->
+      <div id="cicTabSignOff" class="cic-tab-content" style="display:none">
+        <h3 class="cic-section-title">Formal sign-off decision</h3>
+        <div class="cic-form-grid">
+          <label>Decision
+            <select id="cicDecision" class="cic-input">
+              <option value="no_further_action">No further action</option>
+              <option value="monitor">Continue monitoring</option>
+              <option value="public_health_response">Public health response initiated</option>
+              <option value="escalated">Escalated to national team</option>
+              <option value="outbreak_declared">Outbreak declared</option>
+            </select>
+          </label>
+          <label>Signed off by
+            <input id="cicDecisionBy" type="text" class="cic-input" placeholder="Name and role" />
+          </label>
+          <label>Additional notes (optional)
+            <textarea id="cicSignOffNotes" class="cic-textarea" rows="3" placeholder="Any sign-off remarks…"></textarea>
+          </label>
+        </div>
+        <button class="btn-primary" onclick="cicSignOff()">&#x2713; Sign off investigation</button>
+        <div id="cicSignOffStatus" class="cic-msg"></div>
+        <hr />
+        <h3 class="cic-section-title">Generate report</h3>
+        <p class="hint">Produces a printable HTML report containing all investigation details.</p>
+        <button onclick="cicOpenReport()">&#x1F5CE; Open investigation report</button>
+      </div>
+
+    </div><!-- /cicPanel -->
+  </section>
 </main>
 
 <div id="demoModeModal" class="modal-overlay" aria-hidden="true">

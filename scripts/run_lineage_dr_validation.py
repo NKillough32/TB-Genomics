@@ -23,6 +23,7 @@ import sys
 import tempfile
 import uuid
 from datetime import datetime, timezone
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -514,12 +515,16 @@ def _drug_gene_mapping_status(drug: object, gene: object) -> str:
 
 
 def _coerce_json_value(value: object) -> Any:
-    if isinstance(value, (dict, list)):
-        return value
+    if isinstance(value, Decimal):
+        return int(value) if value == value.to_integral_value() else float(value)
+    if isinstance(value, dict):
+        return {str(k): _coerce_json_value(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_coerce_json_value(item) for item in value]
     if value is None:
         return None
     try:
-        return json.loads(str(value))
+        return _coerce_json_value(json.loads(str(value)))
     except Exception:
         return value
 

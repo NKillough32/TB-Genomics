@@ -12,10 +12,11 @@ import json
 import logging
 import uuid
 from datetime import datetime, timezone
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, constr
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -36,29 +37,38 @@ def get_db():
         db.close()
 
 
-def _ensure_tables(db: Session) -> None:
-    db.execute(text("""
-        CREATE TABLE IF NOT EXISTS cluster_investigations (
-            investigation_id  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-            cluster_id        UUID NOT NULL REFERENCES clusters(cluster_id) ON DELETE CASCADE,
-            risk_score        NUMERIC NOT NULL DEFAULT 0,
-            risk_band         TEXT NOT NULL DEFAULT 'low',
-            assigned_to       TEXT,
-            status            TEXT NOT NULL DEFAULT 'open',
-            epi_notes         TEXT,
-            actions           JSONB NOT NULL DEFAULT '[]',
-            decision          TEXT,
-            decision_by       TEXT,
-            decision_at       TIMESTAMP,
-            created_at        TIMESTAMP DEFAULT NOW(),
-            updated_at        TIMESTAMP DEFAULT NOW()
-        )
-    """))
-    db.execute(text("""
-        CREATE UNIQUE INDEX IF NOT EXISTS uq_cluster_investigations_cluster
-            ON cluster_investigations (cluster_id)
-    """))
-    db.commit()
+def _normalise_cluster_id(cluster_id: str) -> str:
+    try:
+        return str(uuid.UUID(cluster_id))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=422, detail="cluster_id must be a valid UUID")
+
+
+def _require_cluster(db: Session, cluster_id: str) -> str:
+    cid = _normalise_cluster_id(cluster_id)
+    try:
+        row = db.execute(text("""
+            SELECT EXISTS (
+                SELECT 1 FROM clusters WHERE cluster_id = CAST(:cid AS UUID)
+            ) AS found
+        """), {"cid": cid}).mappings().first()
+    except Exception as exc:
+        logger.exception("Cluster lookup failed for %s", cid)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    if not row or not row["found"]:
+        raise HTTPException(status_code=404, detail="Cluster not found")
+    return cid
+
+
+def _fetch_investigation(db: Session, cluster_id: str):
+    return db.execute(text("""
+        SELECT investigation_id::text, cluster_id::text, risk_score, risk_band,
+               assigned_to, status, epi_notes, actions,
+               decision, decision_by, decision_at, created_at, updated_at
+        FROM cluster_investigations
+        WHERE cluster_id = CAST(:cid AS UUID)
+    """), {"cid": cluster_id}).mappings().first()
 
 
 # ── Risk scoring ───────────────────────────────────────────────────────────────
@@ -142,6 +152,16 @@ def _compute_risk_score(db: Session, cluster_id: str) -> dict:
             WHERE cc.cluster_id = CAST(:cid AS UUID)
               AND ti.predicted_drug_resistance IS NOT NULL
               AND ti.predicted_drug_resistance::text NOT IN ('null', '{}', '[]')
+              AND CASE jsonb_typeof(ti.predicted_drug_resistance)
+                  WHEN 'object' THEN EXISTS (
+                          SELECT 1
+                          FROM jsonb_each_text(ti.predicted_drug_resistance) AS dr(drug, status)
+                          WHERE LOWER(status) IN ('r', 'resistant')
+                      )
+                  WHEN 'array' THEN jsonb_array_length(ti.predicted_drug_resistance) > 0
+                  WHEN 'string' THEN LOWER(ti.predicted_drug_resistance #>> '{}') IN ('r', 'resistant')
+                  ELSE FALSE
+              END
         """), {"cid": cluster_id}).mappings().first()
         has_resistance = int(mdr_row["n"] or 0) > 0 if mdr_row else False
         resistance_pts = 25.0 if has_resistance else 0.0
@@ -155,30 +175,54 @@ def _compute_risk_score(db: Session, cluster_id: str) -> dict:
     return {"score": round(score, 1), "band": band, "components": components}
 
 
+def _format_resistance_profile(value) -> str:
+    if isinstance(value, dict):
+        resistant = [
+            str(drug)
+            for drug, status in value.items()
+            if str(status).strip().lower() in {"r", "resistant"}
+        ]
+        return ", ".join(resistant) if resistant else "none"
+    if isinstance(value, list):
+        return ", ".join(str(v) for v in value if v) or "none"
+    if isinstance(value, str):
+        stripped = value.strip()
+        if stripped.lower() in {"", "null", "{}", "[]", "susceptible", "s"}:
+            return "none"
+        return stripped
+    return "none"
+
+
 # ── Upsert investigation row ────────────────────────────────────────────────────
 
-def _upsert_investigation(db: Session, cluster_id: str) -> None:
+def _upsert_investigation(db: Session, cluster_id: str) -> str:
     """Ensure an investigation row exists; recompute risk score on every call."""
-    _ensure_tables(db)
+    cluster_id = _require_cluster(db, cluster_id)
     risk = _compute_risk_score(db, cluster_id)
     db.execute(text("""
         INSERT INTO cluster_investigations
             (investigation_id, cluster_id, risk_score, risk_band, created_at, updated_at)
         VALUES
-            (uuid_generate_v4(), CAST(:cid AS UUID), :score, :band, NOW(), NOW())
+            (CAST(:iid AS UUID), CAST(:cid AS UUID), :score, :band, NOW(), NOW())
         ON CONFLICT (cluster_id)
         DO UPDATE SET
             risk_score = EXCLUDED.risk_score,
             risk_band  = EXCLUDED.risk_band,
             updated_at = NOW()
-    """), {"cid": cluster_id, "score": risk["score"], "band": risk["band"]})
+    """), {
+        "iid": str(uuid.uuid4()),
+        "cid": cluster_id,
+        "score": risk["score"],
+        "band": risk["band"],
+    })
     db.commit()
+    return cluster_id
 
 
 # ── Pydantic models ─────────────────────────────────────────────────────────────
 
 class AssignRequest(BaseModel):
-    assigned_to: str
+    assigned_to: constr(strip_whitespace=True, min_length=1)
 
 
 class EpiNotesRequest(BaseModel):
@@ -186,15 +230,29 @@ class EpiNotesRequest(BaseModel):
 
 
 class ActionRequest(BaseModel):
-    action_type: str    # e.g. "contact_tracing", "interview", "referral", "notification"
-    description: str
-    performed_by: str
+    action_type: Literal[
+        "contact_tracing",
+        "interview",
+        "referral",
+        "notification",
+        "enhanced_surveillance",
+        "cluster_closure",
+        "other",
+    ]
+    description: constr(strip_whitespace=True, min_length=1)
+    performed_by: constr(strip_whitespace=True, min_length=1)
     performed_at: str | None = None  # ISO date string; defaults to now
 
 
 class SignOffRequest(BaseModel):
-    decision: str       # e.g. "no_further_action", "escalated", "public_health_response"
-    decision_by: str
+    decision: Literal[
+        "no_further_action",
+        "monitor",
+        "public_health_response",
+        "escalated",
+        "outbreak_declared",
+    ]
+    decision_by: constr(strip_whitespace=True, min_length=1)
     notes: str | None = None
 
 
@@ -204,10 +262,8 @@ class SignOffRequest(BaseModel):
 def list_investigations(db: Session = Depends(get_db)):
     """
     Return all clusters with their investigation state and risk scores.
-    Creates investigation rows on first call.
+    Read-only: risk is computed for display without creating investigation rows.
     """
-    _ensure_tables(db)
-
     try:
         cluster_rows = db.execute(text("""
             SELECT cluster_id::text, snp_distance, investigation_status, alert_flag
@@ -220,15 +276,8 @@ def list_investigations(db: Session = Depends(get_db)):
     results = []
     for row in cluster_rows:
         cid = row["cluster_id"]
-        _upsert_investigation(db, cid)
-
-        inv = db.execute(text("""
-            SELECT investigation_id::text, risk_score, risk_band, assigned_to,
-                   status, epi_notes, actions, decision, decision_by, decision_at,
-                   created_at, updated_at
-            FROM cluster_investigations
-            WHERE cluster_id = CAST(:cid AS UUID)
-        """), {"cid": cid}).mappings().first()
+        risk = _compute_risk_score(db, cid)
+        inv = _fetch_investigation(db, cid)
 
         size_row = db.execute(text("""
             SELECT COUNT(*)::int AS n FROM case_clusters
@@ -242,8 +291,8 @@ def list_investigations(db: Session = Depends(get_db)):
             "alert_flag": bool(row["alert_flag"]),
             "case_count": int(size_row["n"] or 0) if size_row else 0,
             "investigation_id": inv["investigation_id"] if inv else None,
-            "risk_score": float(inv["risk_score"] or 0) if inv else 0.0,
-            "risk_band": inv["risk_band"] if inv else "low",
+            "risk_score": risk["score"],
+            "risk_band": risk["band"],
             "assigned_to": inv["assigned_to"] if inv else None,
             "status": inv["status"] if inv else "open",
             "has_epi_notes": bool(inv["epi_notes"]) if inv else False,
@@ -261,19 +310,8 @@ def list_investigations(db: Session = Depends(get_db)):
 @router.get("/{cluster_id}")
 def get_investigation(cluster_id: str, db: Session = Depends(get_db)):
     """Return full investigation detail for a single cluster."""
-    _upsert_investigation(db, cluster_id)
-
-    inv = db.execute(text("""
-        SELECT investigation_id::text, cluster_id::text, risk_score, risk_band,
-               assigned_to, status, epi_notes, actions,
-               decision, decision_by, decision_at, created_at, updated_at
-        FROM cluster_investigations
-        WHERE cluster_id = CAST(:cid AS UUID)
-    """), {"cid": cluster_id}).mappings().first()
-
-    if not inv:
-        raise HTTPException(status_code=404, detail="Investigation not found")
-
+    cluster_id = _require_cluster(db, cluster_id)
+    inv = _fetch_investigation(db, cluster_id)
     risk = _compute_risk_score(db, cluster_id)
 
     # Cluster members
@@ -291,19 +329,19 @@ def get_investigation(cluster_id: str, db: Session = Depends(get_db)):
 
     return {
         "cluster_id": cluster_id,
-        "investigation_id": inv["investigation_id"],
-        "risk_score": float(inv["risk_score"] or 0),
-        "risk_band": inv["risk_band"],
+        "investigation_id": inv["investigation_id"] if inv else None,
+        "risk_score": risk["score"],
+        "risk_band": risk["band"],
         "risk_components": risk["components"],
-        "assigned_to": inv["assigned_to"],
-        "status": inv["status"],
-        "epi_notes": inv["epi_notes"],
-        "actions": inv["actions"] or [],
-        "decision": inv["decision"],
-        "decision_by": inv["decision_by"],
-        "decision_at": inv["decision_at"].isoformat() if inv["decision_at"] else None,
-        "created_at": inv["created_at"].isoformat() if inv["created_at"] else None,
-        "updated_at": inv["updated_at"].isoformat() if inv["updated_at"] else None,
+        "assigned_to": inv["assigned_to"] if inv else None,
+        "status": inv["status"] if inv else "open",
+        "epi_notes": inv["epi_notes"] if inv else None,
+        "actions": (inv["actions"] or []) if inv else [],
+        "decision": inv["decision"] if inv else None,
+        "decision_by": inv["decision_by"] if inv else None,
+        "decision_at": inv["decision_at"].isoformat() if inv and inv["decision_at"] else None,
+        "created_at": inv["created_at"].isoformat() if inv and inv["created_at"] else None,
+        "updated_at": inv["updated_at"].isoformat() if inv and inv["updated_at"] else None,
         "members": [
             {
                 "case_id": m["case_id"],
@@ -311,7 +349,7 @@ def get_investigation(cluster_id: str, db: Session = Depends(get_db)):
                 "region": m["geographic_region"],
                 "status": m["case_status"],
                 "lineage": m["lineage"],
-                "resistance": m["predicted_drug_resistance"],
+                "resistance": _format_resistance_profile(m["predicted_drug_resistance"]),
             }
             for m in members
         ],
@@ -321,9 +359,8 @@ def get_investigation(cluster_id: str, db: Session = Depends(get_db)):
 @router.post("/{cluster_id}/assign")
 def assign_reviewer(cluster_id: str, body: AssignRequest, db: Session = Depends(get_db)):
     """Assign an investigation to a reviewer and move status to under_review."""
-    _upsert_investigation(db, cluster_id)
-    if not body.assigned_to.strip():
-        raise HTTPException(status_code=422, detail="assigned_to must not be empty")
+    cluster_id = _upsert_investigation(db, cluster_id)
+    reviewer = body.assigned_to
 
     db.execute(text("""
         UPDATE cluster_investigations
@@ -331,7 +368,7 @@ def assign_reviewer(cluster_id: str, body: AssignRequest, db: Session = Depends(
             status      = CASE WHEN status = 'open' THEN 'under_review' ELSE status END,
             updated_at  = NOW()
         WHERE cluster_id = CAST(:cid AS UUID)
-    """), {"reviewer": body.assigned_to.strip(), "cid": cluster_id})
+    """), {"reviewer": reviewer, "cid": cluster_id})
     db.commit()
 
     # Audit
@@ -339,16 +376,16 @@ def assign_reviewer(cluster_id: str, body: AssignRequest, db: Session = Depends(
         INSERT INTO audit_log (action, user_id, details, timestamp)
         VALUES ('cluster_investigation_assigned', :reviewer,
                 jsonb_build_object('cluster_id', :cid, 'assigned_to', :reviewer), NOW())
-    """), {"reviewer": body.assigned_to.strip(), "cid": cluster_id})
+    """), {"reviewer": reviewer, "cid": cluster_id})
     db.commit()
 
-    return {"ok": True, "assigned_to": body.assigned_to.strip()}
+    return {"ok": True, "assigned_to": reviewer}
 
 
 @router.put("/{cluster_id}/epi-notes")
 def update_epi_notes(cluster_id: str, body: EpiNotesRequest, db: Session = Depends(get_db)):
     """Save epidemiology review notes for a cluster investigation."""
-    _upsert_investigation(db, cluster_id)
+    cluster_id = _upsert_investigation(db, cluster_id)
 
     db.execute(text("""
         UPDATE cluster_investigations
@@ -363,14 +400,14 @@ def update_epi_notes(cluster_id: str, body: EpiNotesRequest, db: Session = Depen
 @router.post("/{cluster_id}/actions")
 def record_action(cluster_id: str, body: ActionRequest, db: Session = Depends(get_db)):
     """Append a public health action to the investigation log."""
-    _upsert_investigation(db, cluster_id)
+    cluster_id = _upsert_investigation(db, cluster_id)
 
     performed_at = body.performed_at or datetime.now(timezone.utc).isoformat()
     new_action = {
         "id": str(uuid.uuid4()),
-        "action_type": body.action_type.strip(),
-        "description": body.description.strip(),
-        "performed_by": body.performed_by.strip(),
+        "action_type": body.action_type,
+        "description": body.description,
+        "performed_by": body.performed_by,
         "performed_at": performed_at,
         "recorded_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -391,10 +428,10 @@ def record_action(cluster_id: str, body: ActionRequest, db: Session = Depends(ge
                                    'action_type', :atype,
                                    'description', :desc), NOW())
     """), {
-        "user": body.performed_by.strip(),
+        "user": body.performed_by,
         "cid": cluster_id,
-        "atype": body.action_type.strip(),
-        "desc": body.description.strip(),
+        "atype": body.action_type,
+        "desc": body.description,
     })
     db.commit()
 
@@ -404,11 +441,8 @@ def record_action(cluster_id: str, body: ActionRequest, db: Session = Depends(ge
 @router.post("/{cluster_id}/sign-off")
 def sign_off(cluster_id: str, body: SignOffRequest, db: Session = Depends(get_db)):
     """Record a formal sign-off decision for a cluster investigation."""
-    _upsert_investigation(db, cluster_id)
-    if not body.decision.strip():
-        raise HTTPException(status_code=422, detail="decision must not be empty")
-    if not body.decision_by.strip():
-        raise HTTPException(status_code=422, detail="decision_by must not be empty")
+    cluster_id = _upsert_investigation(db, cluster_id)
+    notes = body.notes.strip() if body.notes else None
 
     db.execute(text("""
         UPDATE cluster_investigations
@@ -424,9 +458,9 @@ def sign_off(cluster_id: str, body: SignOffRequest, db: Session = Depends(get_db
             updated_at  = NOW()
         WHERE cluster_id = CAST(:cid AS UUID)
     """), {
-        "decision": body.decision.strip(),
-        "by": body.decision_by.strip(),
-        "notes": body.notes or "",
+        "decision": body.decision,
+        "by": body.decision_by,
+        "notes": notes,
         "cid": cluster_id,
     })
     db.commit()
@@ -436,27 +470,17 @@ def sign_off(cluster_id: str, body: SignOffRequest, db: Session = Depends(get_db
         INSERT INTO audit_log (action, user_id, details, timestamp)
         VALUES ('cluster_investigation_signed_off', :by,
                 jsonb_build_object('cluster_id', :cid, 'decision', :decision), NOW())
-    """), {"by": body.decision_by.strip(), "cid": cluster_id, "decision": body.decision.strip()})
+    """), {"by": body.decision_by, "cid": cluster_id, "decision": body.decision})
     db.commit()
 
-    return {"ok": True, "decision": body.decision.strip(), "decision_by": body.decision_by.strip()}
+    return {"ok": True, "decision": body.decision, "decision_by": body.decision_by}
 
 
 @router.get("/{cluster_id}/report", response_class=HTMLResponse)
 def generate_report(cluster_id: str, db: Session = Depends(get_db)):
     """Generate a self-contained HTML investigation report for a cluster."""
-    _upsert_investigation(db, cluster_id)
-
-    inv = db.execute(text("""
-        SELECT investigation_id::text, risk_score, risk_band, assigned_to,
-               status, epi_notes, actions, decision, decision_by, decision_at,
-               created_at, updated_at
-        FROM cluster_investigations
-        WHERE cluster_id = CAST(:cid AS UUID)
-    """), {"cid": cluster_id}).mappings().first()
-
-    if not inv:
-        raise HTTPException(status_code=404, detail="Investigation not found")
+    cluster_id = _require_cluster(db, cluster_id)
+    inv = _fetch_investigation(db, cluster_id)
 
     members = db.execute(text("""
         SELECT c.pseudonymised_case_id::text AS case_id,
@@ -471,7 +495,7 @@ def generate_report(cluster_id: str, db: Session = Depends(get_db)):
 
     risk = _compute_risk_score(db, cluster_id)
     h = html_lib.escape
-    actions: list[dict] = inv["actions"] or []
+    actions: list[dict] = (inv["actions"] or []) if inv else []
     generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
     band_colour = {
@@ -479,18 +503,12 @@ def generate_report(cluster_id: str, db: Session = Depends(get_db)):
         "high": "#c2410c",
         "medium": "#b45309",
         "low": "#15803d",
-    }.get(inv["risk_band"] or "low", "#374151")
+    }.get(risk["band"], "#374151")
 
     # ── Member rows ─────────────────────────────────────────────────────────────
     member_rows = ""
     for m in members:
-        dr_raw = m["predicted_drug_resistance"]
-        if isinstance(dr_raw, dict):
-            dr = ", ".join(dr_raw.keys()) or "none"
-        elif isinstance(dr_raw, str) and dr_raw not in ("null", "{}"):
-            dr = dr_raw
-        else:
-            dr = "none"
+        dr = _format_resistance_profile(m["predicted_drug_resistance"])
         member_rows += (
             f"<tr><td>{h(str(m['case_id'])[:8])}</td>"
             f"<td>{h(str(m['specimen_date'] or ''))}</td>"
@@ -518,7 +536,7 @@ def generate_report(cluster_id: str, db: Session = Depends(get_db)):
     )
 
     decision_block = ""
-    if inv["decision"]:
+    if inv and inv["decision"]:
         decision_block = f"""
         <section>
           <h2>Sign-off Decision</h2>
@@ -562,7 +580,7 @@ def generate_report(cluster_id: str, db: Session = Depends(get_db)):
 <section>
   <h2>Risk Assessment</h2>
   <p class="score">{h(str(risk['score']))}</p>
-  <span class="risk-badge">{h((inv['risk_band'] or 'low').upper())}</span>
+  <span class="risk-badge">{h(risk['band'].upper())}</span>
   <table style="margin-top:.75rem;max-width:400px">
     <tr><th>Component</th><th>Points</th></tr>
     {component_rows}
@@ -573,10 +591,10 @@ def generate_report(cluster_id: str, db: Session = Depends(get_db)):
 <section>
   <h2>Investigation Status</h2>
   <dl class="kv">
-    <dt>Status</dt><dd>{h(str(inv['status'] or '').replace('_', ' ').title())}</dd>
-    <dt>Assigned to</dt><dd>{h(str(inv['assigned_to'] or 'Unassigned'))}</dd>
-    <dt>Opened</dt><dd>{h(str(inv['created_at'])[:19] if inv['created_at'] else '')}</dd>
-    <dt>Last updated</dt><dd>{h(str(inv['updated_at'])[:19] if inv['updated_at'] else '')}</dd>
+    <dt>Status</dt><dd>{h(str(inv['status'] if inv else 'open').replace('_', ' ').title())}</dd>
+    <dt>Assigned to</dt><dd>{h(str(inv['assigned_to'] if inv and inv['assigned_to'] else 'Unassigned'))}</dd>
+    <dt>Opened</dt><dd>{h(str(inv['created_at'])[:19] if inv and inv['created_at'] else 'Not opened')}</dd>
+    <dt>Last updated</dt><dd>{h(str(inv['updated_at'])[:19] if inv and inv['updated_at'] else 'Not updated')}</dd>
   </dl>
 </section>
 
@@ -590,7 +608,7 @@ def generate_report(cluster_id: str, db: Session = Depends(get_db)):
 
 <section>
   <h2>Epidemiology Notes</h2>
-  <pre>{h(str(inv['epi_notes'] or 'No notes recorded.'))}</pre>
+  <pre>{h(str(inv['epi_notes'] if inv and inv['epi_notes'] else 'No notes recorded.'))}</pre>
 </section>
 
 <section>

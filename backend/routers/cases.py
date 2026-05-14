@@ -1322,6 +1322,68 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
     _resist_cat_html = _safe_html(resist_cat or 'Not recorded &#8212; required')
 
     # ── Resistance blocking card (dynamic based on sign-off) ───────────────────
+    # Shared sign-off form — appended to the card in both states.
+    _signoff_form_html = (
+        '<div id="signoff-panel" style="margin-top:.9rem;padding:.8rem 1rem;'
+        'background:rgba(0,0,0,.03);border-radius:6px;border:1px solid rgba(0,0,0,.1)">'
+        '<strong style="font-size:.9rem">Record pipeline validation sign-off</strong>'
+        '<form id="signoff-form" style="margin-top:.6rem;display:grid;gap:.45rem">'
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:.45rem">'
+        '<input id="sf-reviewer" type="text" placeholder="Reviewer name *" required '
+        'style="padding:.35rem .6rem;border:1px solid #ced4da;border-radius:4px;font-size:.87rem">'
+        '<select id="sf-decision" '
+        'style="padding:.35rem .6rem;border:1px solid #ced4da;border-radius:4px;font-size:.87rem">'
+        '<option value="approved">Approved</option>'
+        '<option value="rejected">Rejected</option>'
+        '<option value="under_review">Under review</option>'
+        '</select>'
+        '</div>'
+        '<input id="sf-cat" type="text" placeholder="Catalogue / version (e.g. WHO 2022)" '
+        'style="padding:.35rem .6rem;border:1px solid #ced4da;border-radius:4px;font-size:.87rem">'
+        '<textarea id="sf-notes" placeholder="Notes" rows="2" '
+        'style="padding:.35rem .6rem;border:1px solid #ced4da;border-radius:4px;'
+        'font-size:.87rem;resize:vertical"></textarea>'
+        '<div style="display:flex;align-items:center;gap:.7rem">'
+        '<button type="submit" '
+        'style="background:#1d4ed8;color:#fff;border:none;padding:.38rem 1rem;'
+        'border-radius:4px;font-size:.87rem;cursor:pointer">Submit sign-off</button>'
+        '<span id="sf-msg" style="font-size:.84rem;color:#374151"></span>'
+        '</div>'
+        '</form>'
+        '</div>'
+        '<script>'
+        'document.getElementById("signoff-form").addEventListener("submit",async function(e){'
+        'e.preventDefault();'
+        'var msg=document.getElementById("sf-msg");'
+        'msg.textContent="Submitting\u2026";'
+        'try{'
+        'var r=await fetch("/cases/resistance-validation/approve",{'
+        'method:"POST",'
+        'headers:{"Content-Type":"application/json"},'
+        'body:JSON.stringify({'
+        'decision:document.getElementById("sf-decision").value,'
+        'reviewer:document.getElementById("sf-reviewer").value,'
+        'notes:document.getElementById("sf-notes").value,'
+        'catalogue_version:document.getElementById("sf-cat").value'
+        '})'
+        '});'
+        'if(r.ok){'
+        'msg.textContent="\u2713 Sign-off recorded \u2014 reloading\u2026";'
+        'msg.style.color="#16a34a";'
+        'setTimeout(()=>location.reload(),1400);'
+        '}else{'
+        'var err=await r.json().catch(()=>({}));'
+        'msg.textContent="Error: "+(err.detail||r.statusText);'
+        'msg.style.color="#dc2626";'
+        '}'
+        '}catch(ex){'
+        'msg.textContent="Network error: "+ex.message;'
+        'msg.style.color="#dc2626";'
+        '}'
+        '});'
+        '</script>'
+    )
+
     if _signoff and _signoff.get("decision") == "approved":
         _signoff_note_parts = [
             f'Pipeline validation approved by <strong>{_safe_html(str(_signoff["reviewer"]))}</strong>'
@@ -1332,8 +1394,7 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
         _signoff_note = "".join(_signoff_note_parts)
         _blocking_card_html = (
             f'<div class="card card-warn" style="border-width:2px;padding:1rem;margin-bottom:.9rem">'
-            f'<strong>&#9888; Pipeline validation sign-off recorded &#8212; phenotypic DST '
-            f'confirmation still required before clinical use.</strong><br>'
+            f'<strong>&#9888; Pipeline validation sign-off recorded.</strong><br>'
             f'Unusual gene-drug mappings were detected and reviewed. {_signoff_note}'
             f'<ul style="margin:.5rem 0 .4rem 1.2rem;font-size:.87rem">'
             f'<li>Resistance calls with <span class="badge badge-red">Unusual gene-drug mapping</span>'
@@ -1346,6 +1407,9 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
             f'<span style="font-size:.82rem;color:var(--muted)">Resistance catalogue/version: '
             f'<strong>{_resist_cat_html}</strong>'
             f' &nbsp;&middot;&nbsp; Local pipeline validation status: {_pipeline_valid_badge}</span>'
+            f'<details style="margin-top:.7rem"><summary style="cursor:pointer;font-size:.87rem;color:#1d4ed8">Revise sign-off</summary>'
+            f'{_signoff_form_html}'
+            f'</details>'
             f'</div>'
         )
     else:
@@ -1373,6 +1437,7 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
             f'<span style="font-size:.82rem;color:var(--muted)">Configured resistance catalogue/version metadata: '
             f'<strong>{_resist_cat_html}</strong>'
             f' &nbsp;&middot;&nbsp; Local pipeline validation status: {_pipeline_valid_badge}</span>'
+            f'{_signoff_form_html}'
             f'</div>'
         )
 

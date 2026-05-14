@@ -915,6 +915,19 @@ def _image_data_uri(path: str) -> str | None:
         return None
 
 
+def _pct(numerator: int | float | None, denominator: int | float | None) -> float | None:
+    if denominator in (None, 0):
+        return None
+    try:
+        return (float(numerator or 0) / float(denominator)) * 100.0
+    except Exception:
+        return None
+
+
+def _pct_label(value: float | None) -> str:
+    return f"{float(value):.1f}%" if value is not None else "n/a"
+
+
 def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa: C901
     """Build a rich, PDF-aligned static HTML outbreak report from database counts and export artifacts."""
     import datetime as _dt
@@ -1525,6 +1538,10 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
     summary_coverage = f"{float(seq_pct):.1f}%" if seq_pct is not None else (
         f"{(summary_sequenced/summary_total)*100:.1f}%" if summary_total else "n/a")
     summary_qc_pass = f"{float(qc_pass_pct):.1f}%" if qc_pass_pct is not None else "n/a"
+    extract_seq_pct = _pct(len(sequence_by_case), total_cases)
+    extract_qc_pass_pct = _pct(qc_status_counts["pass"], len(sequence_by_case))
+    extract_coverage_label = _pct_label(extract_seq_pct)
+    extract_qc_pass_label = _pct_label(extract_qc_pass_pct)
 
     model_reliability = "Exploratory"
     if summary_data and summary_data.get("convergence_diagnostic") is not None:
@@ -1558,6 +1575,7 @@ header h1{font-size:1.6rem;font-weight:700;letter-spacing:-.02em}
 header p{color:#c8ddf0;font-size:.9rem;margin-top:.25rem}
 .status-banner{display:inline-block;margin-top:.5rem;padding:.2rem .75rem;border-radius:20px;font-size:.78rem;font-weight:600;letter-spacing:.03em}
 .status-draft{background:#e63946;color:#fff}
+.status-review{background:#f4a261;color:#1c2b3a}
 .status-ready{background:#16a34a;color:#fff}
 
 /* ── Layout ── */
@@ -1843,6 +1861,12 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
             "The outbreaker2 output identifies model-prioritised transmission hypotheses only."
         )
 
+    repro_focus = (
+        f"populating all {_safe_html(str(len(missing_repro)))} missing reproducibility field(s) before external circulation"
+        if missing_repro else
+        "confirming reproducibility metadata and appendices during information-governance review"
+    )
+
     ph_interpretation_html = f"""
 <div class="callout" style="font-size:.92rem;line-height:1.65">
   <p style="margin-bottom:.5rem">{ph_evidence_stmt}</p>
@@ -1855,7 +1879,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
     (1) resolving QC failures and contamination flags,
     (2) validating drug-resistance gene-drug mapping and confirming phenotypic DST,
     (3) completing epidemiological linkage data for {_safe_html(str(int(open_clusters)))} open cluster(s),
-    (4) populating all {_safe_html(str(len(missing_repro)))} missing reproducibility field(s) before external circulation{' — <strong>circulation is currently blocked</strong>' if missing_repro else ''}.
+    (4) {repro_focus}{' — <strong>circulation is currently blocked</strong>' if missing_repro else ''}.
   </p>
   <p class="muted" style="margin-top:.4rem">This statement is automatically generated from available data.
   It must be reviewed and countersigned by the responsible public health physician before inclusion in any formal outbreak report.</p>
@@ -1867,10 +1891,24 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
 
     # 1. Status banner
     _appendices_missing = not action_rows_csv or not discordance_rows_csv
+    _tbp_import = (lineage_dr_data or {}).get("tbprofiler_db_import") or {}
+    _mk_import = (lineage_dr_data or {}).get("mykrobe_db_import") or {}
+    _dr_imported_rows = int((_tbp_import.get("imported_rows") or 0) + (_mk_import.get("imported_rows") or 0))
+    _dr_skipped_rows = int((_tbp_import.get("skipped_rows") or 0) + (_mk_import.get("skipped_rows") or 0))
+    _dr_unlinked = bool(lineage_dr_data) and _dr_skipped_rows > 0 and _dr_imported_rows == 0
+    _science_limitations = []
+    if extract_qc_pass_pct is not None and extract_qc_pass_pct < 90:
+        _science_limitations.append("QC below target")
+    if model_reliability == "Exploratory":
+        _science_limitations.append("model exploratory")
+    if _dr_unlinked:
+        _science_limitations.append("lineage/DR outputs unlinked")
     if missing_repro:
         status_html = f'<span class="status-banner status-draft">DRAFT — {len(missing_repro)} reproducibility field(s) missing</span>'
     elif _appendices_missing:
         status_html = '<span class="status-banner status-draft">INCOMPLETE &#8212; Appendices missing; not eligible for circulation</span>'
+    elif _science_limitations:
+        status_html = '<span class="status-banner status-review">ARTIFACT COMPLETE &#8212; governance/MDT review required</span>'
     else:
         status_html = '<span class="status-banner status-ready">Governance gate passed — eligible for circulation</span>'
 
@@ -1878,10 +1916,17 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
     _qc_warning_html = (
         f'<div class="callout callout-alert" style="margin-bottom:.6rem">'
         f'<strong>&#9888; Interpretation limited by QC failure rate.</strong> '
-        f'QC pass rate is {summary_qc_pass} ({denom_qc_pass}/{denom_sequenced} sequenced), '
+        f'QC pass rate is {extract_qc_pass_label} ({denom_qc_pass}/{denom_sequenced} sequenced), '
         f'below the &ge;90% target. Cluster assignments and model-based transmission links rely on '
         f'QC-pass genomes only. All conclusions are provisional pending QC resolution.</div>'
-    ) if (qc_pass_pct is not None and float(qc_pass_pct) < 90) else ""
+    ) if (extract_qc_pass_pct is not None and extract_qc_pass_pct < 90) else ""
+    _dr_unlinked_warning_html = (
+        f'<div class="callout callout-alert" style="margin-bottom:.6rem">'
+        f'<strong>Lineage/DR outputs are not linked to active cases.</strong> '
+        f'TBProfiler/Mykrobe generated outputs, but no rows were imported into '
+        f'<code>tb_interpretation</code>. Treat lineage and resistance summaries as unavailable '
+        f'until sample IDs are mapped to case IDs.</div>'
+    ) if _dr_unlinked else ""
     _snp_warning_html = (
         f'<div class="callout callout-alert" style="margin-bottom:.6rem">'
         f'<strong>No SNP-supported direct transmission links identified.</strong> '
@@ -1892,13 +1937,13 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
     ) if pairwise_links_le_12 == 0 else ""
 
     # 2. Dashboard cards
-    _seq_sub = f"of {denom_notified} notified ({summary_coverage})"
-    _qc_sub = f"of {denom_sequenced} sequenced ({summary_qc_pass})"
+    _seq_sub = f"of {denom_notified} notified ({extract_coverage_label})"
+    _qc_sub = f"of {denom_sequenced} sequenced ({extract_qc_pass_label})"
     dashboard_html = f"""
 <div class="metrics-grid">
   {_metric_card("Notified cases", str(denom_notified), "Population denominator")}
-  {_metric_card("Sequenced", str(denom_sequenced), _seq_sub, alert=seq_pct is not None and float(seq_pct) < 80)}
-  {_metric_card("QC-pass genomes", str(denom_qc_pass), _qc_sub, alert=qc_pass_pct is not None and float(qc_pass_pct) < 90)}
+  {_metric_card("Sequenced", str(denom_sequenced), _seq_sub, alert=extract_seq_pct is not None and extract_seq_pct < 80)}
+  {_metric_card("QC-pass genomes", str(denom_qc_pass), _qc_sub, alert=extract_qc_pass_pct is not None and extract_qc_pass_pct < 90)}
   {_metric_card("QC unresolved", str(qc_status_counts['fail'] + qc_status_counts['not_reported'] + qc_status_counts['contamination']), f"{qc_status_counts['pass']} passed", alert=(qc_status_counts['fail'] + qc_status_counts['contamination']) > 0)}
   {_metric_card("Open clusters", str(open_clusters), f"{high_priority_open} priority >10")}
   {_metric_card("Model links ≥0.70", str(high_confidence_all_count), "Posterior ≥0.70 — validate with SNP+epi")}
@@ -1909,6 +1954,17 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
     # Progress bars for coverage/QC
     seq_pct_bar = _progress(seq_pct, "Sequencing coverage %")
     qc_bar = _progress(qc_pass_pct, "QC pass rate %")
+    _repro_status = '<span class="badge badge-red">Open</span>' if missing_repro else '<span class="badge badge-green">Complete</span>'
+    _repro_action = (
+        "Populate missing reproducibility metadata before external circulation"
+        if missing_repro else
+        "Confirm reproducibility metadata during information-governance review"
+    )
+    _repro_trigger = (
+        f"Block all external distribution until {len(missing_repro)} required field(s) are populated"
+        if missing_repro else
+        "No metadata blocker currently detected; retain audit sign-off"
+    )
 
     # 3. Top Actions Due Now table — with status, team, dates, escalation trigger
     top_actions_html = """
@@ -1920,13 +1976,18 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
 <tr><td>3</td><td>Confirm phenotypic DST for all genomic resistance signals before clinical use</td><td>TB Microbiology / MDT</td><td>Immediate</td><td><span class="badge badge-red">Open</span></td><td>{gen_at}</td><td>If DST unavailable: treat as MDR pending result; notify clinician</td></tr>
 <tr><td>4</td><td>Complete epidemiological data for all open clusters (demographics, setting, contacts)</td><td>TB Nurses / HPT / PHA</td><td>Next MDT</td><td><span class="badge badge-amber">In progress</span></td><td>{gen_at}</td><td>If epi incomplete at MDT: defer cluster closure; document gap</td></tr>
 <tr><td>5</td><td>Do not escalate model-only links to field investigation without SNP ≤12 + epi corroboration</td><td>HPT / TB Nurses / MDT</td><td>Ongoing</td><td><span class="badge badge-amber">Standing</span></td><td>{gen_at}</td><td>If field escalation requested: require written MDT decision and documented epi rationale</td></tr>
-<tr><td>6</td><td>Populate missing reproducibility metadata before external circulation</td><td>Bioinformatics / Lab Director</td><td>Before circulation</td><td><span class="badge badge-red">Open</span></td><td>{gen_at}</td><td>Block all external distribution until all 6 required fields are populated</td></tr>
+<tr><td>6</td><td>{repro_action}</td><td>Bioinformatics / Lab Director</td><td>Before circulation</td><td>{repro_status}</td><td>{gen_at}</td><td>{repro_trigger}</td></tr>
 <tr><td>7</td><td>MDT sign-off: document accepted/rejected/deferred for each open cluster</td><td>MDT Chair / PHA</td><td>Next MDT</td><td><span class="badge badge-amber">Pending</span></td><td>{gen_at}</td><td>If MDT not convened within 10 working days: escalate to programme lead</td></tr>
-</tbody></table></div>""".format(gen_at=generated_at)
+</tbody></table></div>""".format(
+        gen_at=generated_at,
+        repro_action=_safe_html(_repro_action),
+        repro_status=_repro_status,
+        repro_trigger=_safe_html(_repro_trigger),
+    )
 
     # 4. MDT Governance table
     mdt_rows = [
-        ("Circulation readiness", "Governance ready" if circulation_ok else "BLOCKED", "Complete mandatory reproducibility metadata before external circulation"),
+        ("Circulation readiness", "Review required" if _science_limitations else ("Governance ready" if circulation_ok else "BLOCKED"), "; ".join(_science_limitations) if _science_limitations else "Complete mandatory reproducibility metadata before external circulation"),
         ("Model reliability", model_reliability, "Treat directionality as exploratory; diagnostics may be unavailable"),
         ("Open clusters", f"{int(open_clusters)} total / {high_priority_open} priority >10", "MDT review and epi data completion for all open clusters"),
         ("Discordant model links", f"{len(discordant_pairs)} identified", "Pairwise SNP + epi adjudication required"),
@@ -2047,6 +2108,15 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
     lineage_table_html = "<table class='kv-table'><tbody>" + "".join(
         f"<tr><th>{_safe_html(k)}</th><td>{_safe_html(v)}</td></tr>" for k, v in lin_kv_rows
     ) + "</tbody></table>"
+    if _dr_unlinked:
+        lineage_table_html = (
+            '<div class="callout callout-alert" style="margin-bottom:.6rem">'
+            '<strong>Linked lineage/DR calls unavailable.</strong> Tool outputs exist, '
+            'but sample IDs did not match active case IDs during import. Provide a sample ID map '
+            'or regenerate tool inputs from the active case FASTA before using this section operationally.'
+            '</div>'
+            + lineage_table_html
+        )
     top_lineages = analysis_epi_summary.get("top_lineages") or []
     if top_lineages:
         lineage_table_html += "<p style='margin-top:.5rem'><strong>Top lineages: </strong>" + ", ".join(
@@ -2450,7 +2520,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
     <section class="card" id="executive">
       <h2>Executive summary</h2>
       {dashboard_html}
-      {_qc_warning_html}{_snp_warning_html}{'<div class="callout callout-alert"><strong>DRAFT REPORT:</strong> Missing reproducibility fields: ' + _safe_html(', '.join(missing_repro)) + '. External circulation is blocked until these are populated.</div>' if missing_repro else '<div class="callout"><strong>Governance gate passed.</strong> Reproducibility metadata is complete. Publish only after information-governance review.</div>'}
+      {_qc_warning_html}{_snp_warning_html}{_dr_unlinked_warning_html}{'<div class="callout callout-alert"><strong>DRAFT REPORT:</strong> Missing reproducibility fields: ' + _safe_html(', '.join(missing_repro)) + '. External circulation is blocked until these are populated.</div>' if missing_repro else '<div class="callout"><strong>Artifact completeness gate passed.</strong> Reproducibility metadata and appendices are present. Operational use still requires MDT, QC, and information-governance review.</div>'}
     </section>
 
     <!-- TOP ACTIONS -->

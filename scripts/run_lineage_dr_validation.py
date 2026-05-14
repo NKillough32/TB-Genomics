@@ -21,6 +21,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -277,6 +278,83 @@ def _split_fasta_records(path: Path, max_records: int = 10) -> list[tuple[str, s
         records.append((header, "".join(chunks)))
 
     return records[:max_records]
+
+
+def _sample_id_map_paths() -> list[Path]:
+    return [
+        EXPORTS / "sample_id_map.csv",
+        EXPORTS / "analysis_sample_map.csv",
+        UPLOADS / "sample_id_map.csv",
+        UPLOADS / "analysis_sample_map.csv",
+    ]
+
+
+def _load_sample_id_map() -> dict[str, str]:
+    """Return optional tool/sample aliases mapped onto case UUIDs."""
+    mapping: dict[str, str] = {}
+    source_cols = ("tool_sample_id", "sample_id", "analysis_sample_id", "input_sample_id")
+    target_cols = ("case_id", "pseudonymised_case_id", "canonical_sample_id")
+
+    for path in _sample_id_map_paths():
+        if not path.exists():
+            continue
+        try:
+            with path.open("r", encoding="utf-8", newline="") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    source = next((row.get(col, "").strip() for col in source_cols if row.get(col, "").strip()), "")
+                    target = next((row.get(col, "").strip() for col in target_cols if row.get(col, "").strip()), "")
+                    if source and target:
+                        mapping[source] = target
+        except Exception:
+            continue
+
+    return mapping
+
+
+def _looks_like_uuid(value: str) -> bool:
+    try:
+        uuid.UUID(value)
+        return True
+    except Exception:
+        return False
+
+
+def _resolve_case_sample_id(db: Any, sample_id: str, sample_map: dict[str, str]) -> str | None:
+    """Resolve a tool output sample ID to cases.pseudonymised_case_id."""
+    candidates = [sample_id]
+    if sample_id in sample_map:
+        candidates.insert(0, sample_map[sample_id])
+
+    for candidate in candidates:
+        if _looks_like_uuid(candidate):
+            exists = db.execute(
+                text("SELECT 1 FROM cases WHERE pseudonymised_case_id = CAST(:sample_id AS uuid)"),
+                {"sample_id": candidate},
+            ).scalar()
+            if exists:
+                return candidate
+
+    # Some pipelines name FASTA/tool outputs using local lab IDs. Support that
+    # without changing the canonical tb_interpretation foreign key.
+    exists = db.execute(
+        text("SELECT pseudonymised_case_id::text FROM cases WHERE local_lab_sample_id = :sample_id"),
+        {"sample_id": sample_id},
+    ).scalar()
+    if exists:
+        return str(exists)
+
+    return None
+
+
+def _import_status(tool_name: str, imported: int, skipped: int) -> tuple[str, str]:
+    if imported:
+        if skipped:
+            return "imported_with_warnings", f"{tool_name} results imported with skipped unlinked samples"
+        return "imported", f"{tool_name} results imported into tb_interpretation"
+    if skipped:
+        return "no_matching_cases", f"{tool_name} results were generated but none matched cases"
+    return "no_results", f"No {tool_name} results available to import"
 
 
 def _extract_lineage_and_resistance(result_json: Path) -> dict[str, Any]:
@@ -755,6 +833,7 @@ def _import_mykrobe_results(result_json_paths: list[str]) -> dict[str, Any]:
     imported = 0
     skipped = 0
     warnings: list[str] = []
+    sample_map = _load_sample_id_map()
 
     try:
         for path_str in result_json_paths:
@@ -762,11 +841,8 @@ def _import_mykrobe_results(result_json_paths: list[str]) -> dict[str, Any]:
             # Filename: <sample_id>_mykrobe.json
             sample_id = path.stem.replace("_mykrobe", "")
 
-            exists = db.execute(
-                text("SELECT 1 FROM cases WHERE pseudonymised_case_id = CAST(:sample_id AS uuid)"),
-                {"sample_id": sample_id},
-            ).scalar()
-            if not exists:
+            case_sample_id = _resolve_case_sample_id(db, sample_id, sample_map)
+            if not case_sample_id:
                 skipped += 1
                 warnings.append(f"sample_id not found in cases ({sample_id})")
                 continue
@@ -799,7 +875,7 @@ def _import_mykrobe_results(result_json_paths: list[str]) -> dict[str, Any]:
                     """
                 ),
                 {
-                    "sample_id": sample_id,
+                    "sample_id": case_sample_id,
                     "species_confirmation": "M. tuberculosis complex",
                     "lineage": fields["lineage"],
                     "predicted_drug_resistance": json.dumps(fields["predicted_drug_resistance"]) if fields["predicted_drug_resistance"] is not None else "null",
@@ -810,9 +886,10 @@ def _import_mykrobe_results(result_json_paths: list[str]) -> dict[str, Any]:
             imported += 1
 
         db.commit()
+        status, message = _import_status("mykrobe", imported, skipped)
         return {
-            "status": "imported",
-            "message": "mykrobe results imported into tb_interpretation",
+            "status": status,
+            "message": message,
             "imported_rows": imported,
             "skipped_rows": skipped,
             "warnings": warnings[:25],
@@ -835,17 +912,15 @@ def _import_tbprofiler_results(result_json_paths: list[str]) -> dict[str, Any]:
     imported = 0
     skipped = 0
     warnings: list[str] = []
+    sample_map = _load_sample_id_map()
 
     try:
         for path_str in result_json_paths:
             path = Path(path_str)
             sample_id = path.stem.replace(".results", "")
 
-            exists = db.execute(
-                text("SELECT 1 FROM cases WHERE pseudonymised_case_id = CAST(:sample_id AS uuid)"),
-                {"sample_id": sample_id},
-            ).scalar()
-            if not exists:
+            case_sample_id = _resolve_case_sample_id(db, sample_id, sample_map)
+            if not case_sample_id:
                 skipped += 1
                 warnings.append(f"sample_id not found in cases ({sample_id})")
                 continue
@@ -878,7 +953,7 @@ def _import_tbprofiler_results(result_json_paths: list[str]) -> dict[str, Any]:
                     """
                 ),
                 {
-                    "sample_id": sample_id,
+                    "sample_id": case_sample_id,
                     "species_confirmation": "M. tuberculosis complex",
                     "lineage": fields["lineage"],
                     "predicted_drug_resistance": json.dumps(fields["predicted_drug_resistance"]) if fields["predicted_drug_resistance"] is not None else "null",
@@ -889,9 +964,10 @@ def _import_tbprofiler_results(result_json_paths: list[str]) -> dict[str, Any]:
             imported += 1
 
         db.commit()
+        status, message = _import_status("tb-profiler", imported, skipped)
         return {
-            "status": "imported",
-            "message": "tb-profiler results imported into tb_interpretation",
+            "status": status,
+            "message": message,
             "imported_rows": imported,
             "skipped_rows": skipped,
             "warnings": warnings[:25],
@@ -938,6 +1014,7 @@ def _import_calls_csv(path: Path) -> dict[str, Any]:
     imported = 0
     skipped = 0
     warnings: list[str] = []
+    sample_map = _load_sample_id_map()
 
     try:
         with path.open("r", encoding="utf-8", newline="") as f:
@@ -961,11 +1038,8 @@ def _import_calls_csv(path: Path) -> dict[str, Any]:
                     warnings.append(f"row {index}: empty sample_id")
                     continue
 
-                exists = db.execute(
-                    text("SELECT 1 FROM cases WHERE pseudonymised_case_id = CAST(:sample_id AS uuid)"),
-                    {"sample_id": sample_id},
-                ).scalar()
-                if not exists:
+                case_sample_id = _resolve_case_sample_id(db, sample_id, sample_map)
+                if not case_sample_id:
                     skipped += 1
                     warnings.append(f"row {index}: sample_id not found in cases ({sample_id})")
                     continue
@@ -1002,7 +1076,7 @@ def _import_calls_csv(path: Path) -> dict[str, Any]:
                         """
                     ),
                     {
-                        "sample_id": sample_id,
+                        "sample_id": case_sample_id,
                         "species_confirmation": "M. tuberculosis complex",
                         "lineage": lineage,
                         "predicted_drug_resistance": json.dumps(resistance_obj) if resistance_obj is not None else "null",
@@ -1013,9 +1087,10 @@ def _import_calls_csv(path: Path) -> dict[str, Any]:
                 imported += 1
 
         db.commit()
+        status, message = _import_status("Lineage/DR CSV", imported, skipped)
         return {
-            "status": "imported",
-            "message": "Lineage/DR calls imported into tb_interpretation",
+            "status": status,
+            "message": message,
             "imported_rows": imported,
             "skipped_rows": skipped,
             "warnings": warnings[:25],

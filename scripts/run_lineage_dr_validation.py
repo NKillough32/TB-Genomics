@@ -42,6 +42,13 @@ sys.path.insert(0, str(ROOT))
 from backend.database import SessionLocal
 
 
+def _json_default(obj: object) -> object:
+    """JSON serialization fallback — converts Decimal to float."""
+    if isinstance(obj, Decimal):
+        return float(obj)
+    raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
+
+
 def _iso_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -678,7 +685,7 @@ def _generate_resistance_validation_artifact(catalogue: str | None = None) -> di
     finally:
         db.close()
 
-    RESISTANCE_VALIDATION_JSON.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    RESISTANCE_VALIDATION_JSON.write_text(json.dumps(payload, indent=2, default=_json_default), encoding="utf-8")
     return payload
 
 
@@ -1846,8 +1853,8 @@ def main() -> None:
         ],
     }
 
-    OUT_JSON.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-    print(json.dumps(payload, indent=2))
+    OUT_JSON.write_text(json.dumps(payload, indent=2, default=_json_default), encoding="utf-8")
+    print(json.dumps(payload, indent=2, default=_json_default))
 
 
 if __name__ == "__main__":

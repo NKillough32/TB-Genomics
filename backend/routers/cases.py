@@ -2224,7 +2224,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
     # QC summary cards
     qc_summary_html = f"""
 <div class="metrics-grid">
-  {_metric_card("QC pass", str(qc_status_counts['pass']), f"{summary_qc_pass} pass rate")}
+  {_metric_card("QC pass", str(qc_status_counts['pass']), f"{extract_qc_pass_label} pass rate")}
   {_metric_card("QC fail", str(qc_status_counts['fail']), "Low coverage / threshold breach", alert=qc_status_counts['fail']>0)}
   {_metric_card("Contamination", str(qc_status_counts['contamination']), "Mixed signal — exclude pending repeat", alert=qc_status_counts['contamination']>0)}
   {_metric_card("Not reported", str(qc_status_counts['not_reported']), "QC metadata absent — treat as unresolved")}

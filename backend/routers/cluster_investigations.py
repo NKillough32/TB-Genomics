@@ -12,11 +12,11 @@ import json
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Literal
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse
-from pydantic import BaseModel, constr
+from pydantic import BaseModel, StringConstraints
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -222,7 +222,7 @@ def _upsert_investigation(db: Session, cluster_id: str) -> str:
 # ── Pydantic models ─────────────────────────────────────────────────────────────
 
 class AssignRequest(BaseModel):
-    assigned_to: constr(strip_whitespace=True, min_length=1)
+    assigned_to: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
 
 class EpiNotesRequest(BaseModel):
@@ -239,8 +239,8 @@ class ActionRequest(BaseModel):
         "cluster_closure",
         "other",
     ]
-    description: constr(strip_whitespace=True, min_length=1)
-    performed_by: constr(strip_whitespace=True, min_length=1)
+    description: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+    performed_by: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
     performed_at: str | None = None  # ISO date string; defaults to now
 
 
@@ -252,7 +252,7 @@ class SignOffRequest(BaseModel):
         "escalated",
         "outbreak_declared",
     ]
-    decision_by: constr(strip_whitespace=True, min_length=1)
+    decision_by: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
     notes: str | None = None
 
 

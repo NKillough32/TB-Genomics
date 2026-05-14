@@ -1362,7 +1362,84 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
             "posterior": post,
             "interpretation": interp,
             "disc_code": disc_code,
+            "snp_result": "linked" if in_seq else "not_linked",
+            "out_result": "linked" if in_out else "not_linked",
         })
+
+    # ── Generate appendix CSVs from live data (no separate PDF run required) ──
+    _case_action_csv = [[
+        "Case", "Cluster", "Pairwise SNP?", "NN SNP", "Likely link",
+        "Posterior", "Tier", "QC", "Warning", "Recommended action",
+    ]]
+    for _row in case_rows[:30]:
+        _cid = str(_row.get("case_id") or "")
+        _clid = str(_row.get("cluster_id") or "")
+        _inc = best_incoming.get(_cid)
+        _out = best_outgoing.get(_cid)
+        _nn_snp = nearest_neighbor_snp.get(_cid)
+        if _inc and (not _out or _inc["probability"] >= _out["probability"]):
+            _src = str(_inc["source"])
+            _link = f"{_short_case_id(_src)} -> {_short_case_id(_cid)}"
+            _post = _inc["probability"]
+            _lp = pairwise_snp_matrix.get(_pair_key(_src, _cid))
+            _same = bool((case_by_id.get(_src) or {}).get("cluster_id")) and str((case_by_id.get(_src) or {}).get("cluster_id") or "") == _clid
+        elif _out:
+            _tgt = str(_out["target"])
+            _link = f"{_short_case_id(_cid)} -> {_short_case_id(_tgt)}"
+            _post = _out["probability"]
+            _lp = pairwise_snp_matrix.get(_pair_key(_cid, _tgt))
+            _same = bool(_clid) and str((case_by_id.get(_tgt) or {}).get("cluster_id") or "") == _clid
+        else:
+            _link, _post, _lp, _same = "none", 0.0, None, bool(_clid)
+        _qc = str(_row.get("qc_status") or "not_reported")
+        _contam = bool(_row.get("contamination_flag"))
+        _qc_prob = _qc.lower() not in ("pass", "passed") or _contam
+        _pa = "yes" if _nn_snp is not None else "no"
+        _tier = _confidence_tier(
+            qc_status=_qc,
+            contamination_flag=_contam,
+            pairwise_distance=_lp if _lp is not None else _nn_snp,
+            outbreaker_probability=_post,
+            same_cluster=_same,
+        )
+        if _qc_prob:
+            _warn = "Pairwise SNP required before transmission interpretation."
+            _act = "Repeat/verify sequence before action."
+        elif _lp is None:
+            _warn = "Outbreaker-only link: requires genomic validation."
+            _act = "Model-prioritised exposure review — confirm with pairwise SNP and epidemiology before action."
+        elif _lp <= 12:
+            _warn = "Pairwise SNP supports cluster linkage, but epidemiology must still corroborate the direction."
+            _act = "Confirm with pairwise SNP and epidemiology before operational action."
+        else:
+            _warn = "Pairwise SNP distance is too high for direct transmission interpretation."
+            _act = "Model-prioritised exposure review — confirm with pairwise SNP and epidemiology before action."
+        _case_action_csv.append([
+            _short_case_id(_cid),
+            _short_case_id(_clid) if _clid else "none",
+            _pa,
+            str(_nn_snp) if _nn_snp is not None else "n/a",
+            _link,
+            f"{_post:.3f}" if _post else "n/a",
+            _tier,
+            f"{_qc}{' +contam' if _contam else ''}",
+            _warn,
+            _act,
+        ])
+    _write_csv_rows(_export_path("appendix_a_case_level_actions.csv"), _case_action_csv)
+
+    _disc_csv = [["Case Pair", "Pairwise SNP result", "Outbreaker2", "Pairwise SNP", "Posterior", "Interpretation", "Code"]]
+    for _dp in sorted(discordant_pairs, key=lambda x: x["posterior"], reverse=True):
+        _disc_csv.append([
+            _dp["pair"],
+            _dp.get("snp_result", "n/a"),
+            _dp.get("out_result", "n/a"),
+            str(_dp["pairwise"]) if _dp["pairwise"] is not None else "n/a",
+            f"{_dp['posterior']:.3f}" if _dp["posterior"] else "n/a",
+            _dp["interpretation"],
+            _dp.get("disc_code", ""),
+        ])
+    _write_csv_rows(_export_path("appendix_b_full_discordance_review.csv"), _disc_csv)
 
     # ── Action CSV rows (for load) ─────────────────────────────────────────────
     row_limit = None if full else 25
@@ -1789,17 +1866,39 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
     # ─────────────────────────────────────────────────────────────────────────
 
     # 1. Status banner
+    _appendices_missing = not action_rows_csv or not discordance_rows_csv
     if missing_repro:
         status_html = f'<span class="status-banner status-draft">DRAFT — {len(missing_repro)} reproducibility field(s) missing</span>'
+    elif _appendices_missing:
+        status_html = '<span class="status-banner status-draft">INCOMPLETE &#8212; Appendices missing; not eligible for circulation</span>'
     else:
         status_html = '<span class="status-banner status-ready">Governance gate passed — eligible for circulation</span>'
 
+    # QC and SNP warning callouts for executive summary
+    _qc_warning_html = (
+        f'<div class="callout callout-alert" style="margin-bottom:.6rem">'
+        f'<strong>&#9888; Interpretation limited by QC failure rate.</strong> '
+        f'QC pass rate is {summary_qc_pass} ({denom_qc_pass}/{denom_sequenced} sequenced), '
+        f'below the &ge;90% target. Cluster assignments and model-based transmission links rely on '
+        f'QC-pass genomes only. All conclusions are provisional pending QC resolution.</div>'
+    ) if (qc_pass_pct is not None and float(qc_pass_pct) < 90) else ""
+    _snp_warning_html = (
+        f'<div class="callout callout-alert" style="margin-bottom:.6rem">'
+        f'<strong>No SNP-supported direct transmission links identified.</strong> '
+        f'Zero pairwise SNP links at &le;12 SNPs exist in this dataset. '
+        f'All {high_confidence_all_count} model link(s) &ge;0.70 posterior probability are '
+        f'<em>exploratory only</em> and must not trigger field investigation without '
+        f'SNP &le;12 and epidemiological corroboration.</div>'
+    ) if pairwise_links_le_12 == 0 else ""
+
     # 2. Dashboard cards
+    _seq_sub = f"of {denom_notified} notified ({summary_coverage})"
+    _qc_sub = f"of {denom_sequenced} sequenced ({summary_qc_pass})"
     dashboard_html = f"""
 <div class="metrics-grid">
-  {_metric_card("Total cases", str(summary_total), f"{summary_sequenced} sequenced")}
-  {_metric_card("Sequencing coverage", summary_coverage, "target ≥80%", alert=seq_pct is not None and float(seq_pct) < 80)}
-  {_metric_card("QC pass rate", summary_qc_pass, "target ≥90%", alert=qc_pass_pct is not None and float(qc_pass_pct) < 90)}
+  {_metric_card("Notified cases", str(denom_notified), "Population denominator")}
+  {_metric_card("Sequenced", str(denom_sequenced), _seq_sub, alert=seq_pct is not None and float(seq_pct) < 80)}
+  {_metric_card("QC-pass genomes", str(denom_qc_pass), _qc_sub, alert=qc_pass_pct is not None and float(qc_pass_pct) < 90)}
   {_metric_card("QC unresolved", str(qc_status_counts['fail'] + qc_status_counts['not_reported'] + qc_status_counts['contamination']), f"{qc_status_counts['pass']} passed", alert=(qc_status_counts['fail'] + qc_status_counts['contamination']) > 0)}
   {_metric_card("Open clusters", str(open_clusters), f"{high_priority_open} priority >10")}
   {_metric_card("Model links ≥0.70", str(high_confidence_all_count), "Posterior ≥0.70 — validate with SNP+epi")}
@@ -2133,7 +2232,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
         [("Case", "Case"), ("Cluster", "Cluster"), ("Pairwise SNP?", "Pairwise SNP?"),
          ("NN SNP", "NN SNP"), ("Likely link", "Likely link"), ("Posterior", "Posterior"),
          ("Tier", "Tier"), ("QC", "QC"), ("Recommended action", "Recommended action")],
-        "No case-level action export found. Generate the PDF report first to populate exports/appendix_a_case_level_actions.csv."
+        "No case-level action data available. No cases with sequencing data were found for this outbreak."
     )
     discordance_csv_html = _data_table_html(
         discordance_rows_csv,
@@ -2142,6 +2241,44 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
          ("Posterior", "Posterior"), ("Code", "Code"), ("Interpretation", "Interpretation")],
         "No discordance review export found."
     )
+
+    # Appendix A/B class and content (precomputed here since data is available)
+    if action_rows_csv:
+        appendix_a_class = 'card'
+        appendix_a_body_html = f'<details open><summary>Table A1 \u2014 Case actions ({_safe_html(action_limit_label)})</summary><div>{actions_csv_html}</div></details>'
+    else:
+        appendix_a_class = 'card card-alert'
+        appendix_a_body_html = '<div class="callout callout-alert"><strong>REPORT INCOMPLETE &#8212; Appendix A is missing.</strong> No case-level action data was generated. This appendix is required for MDT sign-off. The report cannot be circulated until case sequencing data is available. Ensure cases with sequencing results are loaded and re-generate this HTML report.</div>'
+    if discordance_rows_csv:
+        appendix_b_class = 'card'
+        appendix_b_body_html = f'<details open><summary>Discordance table ({_safe_html(action_limit_label)})</summary><div>{discordance_csv_html}</div></details>'
+    else:
+        appendix_b_class = 'card card-alert'
+        appendix_b_body_html = '<div class="callout callout-alert"><strong>REPORT INCOMPLETE &#8212; Appendix B is missing.</strong> No discordance data was generated. This may indicate insufficient sequencing data or no discordant model/SNP pairs in the current dataset. Ensure sequencing results are loaded and re-generate this HTML report.</div>'
+
+    # By-cluster epi-completeness table (all domains default Red — field epi not in pipeline)
+    if cluster_action_rows:
+        _cluster_epi_rows = "".join(
+            f"<tr><td class='mono'>{_safe_html(str(r.get('cluster_id', ''))[:12])}</td>"
+            f"<td>{_safe_html(str(r.get('case_count', 0)))}</td>"
+            f"<td><span class='badge badge-red'>Red &#8212; incomplete</span></td>"
+            f"<td><span class='badge badge-red'>Red &#8212; incomplete</span></td>"
+            f"<td><span class='badge badge-red'>Red &#8212; incomplete</span></td>"
+            f"<td><span class='badge badge-red'>Red &#8212; incomplete</span></td>"
+            f"<td><span class='badge badge-red'>Red &#8212; incomplete</span></td>"
+            f"<td><span class='badge badge-red'>Blocked &#8212; epi incomplete</span></td></tr>"
+            for r in cluster_action_rows
+        )
+        _cluster_epi_complete_html = (
+            f"<div class='tbl-wrap'><table><thead><tr><th>Cluster</th><th>Cases</th>"
+            f"<th>Demographics</th><th>Exposure setting</th><th>Contact tracing</th>"
+            f"<th>Vulnerability factors</th><th>Timeline complete</th><th>MDT sign-off status</th>"
+            f"</tr></thead><tbody>{_cluster_epi_rows}</tbody></table></div>"
+            f'<div class="callout callout-alert" style="margin-top:.4rem"><strong>No cluster may be signed off at MDT until all Red fields are resolved.</strong>'
+            f' Complete field epi data in the case management system before MDT review.</div>'
+        )
+    else:
+        _cluster_epi_complete_html = '<p class="muted">No cluster data available for epi-completeness table.</p>'
 
     # 17. Transmission network section
     key_nodes_html = _data_table_html(
@@ -2313,7 +2450,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
     <section class="card" id="executive">
       <h2>Executive summary</h2>
       {dashboard_html}
-      {'<div class="callout callout-alert"><strong>DRAFT REPORT:</strong> Missing reproducibility fields: ' + _safe_html(', '.join(missing_repro)) + '. External circulation is blocked until these are populated.</div>' if missing_repro else '<div class="callout"><strong>Governance gate passed.</strong> Reproducibility metadata is complete. Publish only after information-governance review.</div>'}
+      {_qc_warning_html}{_snp_warning_html}{'<div class="callout callout-alert"><strong>DRAFT REPORT:</strong> Missing reproducibility fields: ' + _safe_html(', '.join(missing_repro)) + '. External circulation is blocked until these are populated.</div>' if missing_repro else '<div class="callout"><strong>Governance gate passed.</strong> Reproducibility metadata is complete. Publish only after information-governance review.</div>'}
     </section>
 
     <!-- TOP ACTIONS -->
@@ -2475,12 +2612,16 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
 
     <section class="card" id="mutations">
       <h2>Drug-resistance mutation details</h2>
-      <div class="callout callout-alert">
-        <strong>CLINICAL SAFETY NOTICE:</strong> All genomic resistance predictions are <em>not for clinical use until phenotypic DST is confirmed</em>.
-        Gene-drug combinations marked <span class="badge badge-red">Unusual</span> (e.g. gyrA linked to pyrazinamide) indicate a possible
-        data-mapping error and <strong>must be suppressed from operational reports</strong> until the bioinformatics pipeline is validated.
-        If unusual mappings are observed, quarantine the affected samples and notify the bioinformatics lead immediately.
-        Catalogue version used for this analysis: <strong>{_safe_html(resist_cat or 'Not recorded — required')}</strong>.
+      <div class="card card-alert" style="border-width:2px;padding:1rem;margin-bottom:.9rem">
+        <strong>&#128683; BLOCKING SAFETY ISSUE &#8212; Drug-resistance pipeline validation required before any clinical or operational use.</strong><br>
+        Unusual gene-drug mappings have been detected (e.g. <em>gyrA</em> linked to pyrazinamide, <em>embB</em> linked to fluoroquinolones, <em>pncA</em> linked to rifampicin). These indicate a likely bioinformatics pipeline data-mapping error.
+        <ul style="margin:.5rem 0 .4rem 1.2rem;font-size:.87rem">
+          <li>All resistance calls with <span class="badge badge-red">Unusual gene-drug mapping</span> are classified as <strong><span class="badge badge-red">Suppressed</span></strong> &#8212; must not be reported, acted on, or shared until the pipeline is validated.</li>
+          <li>Resistance calls with <span class="badge badge-green">Valid expected gene</span> are classified as <strong><span class="badge badge-amber">Not validated</span></strong> &#8212; require phenotypic DST confirmation before clinical use.</li>
+          <li>No resistance call in this report should be treated as <strong>Validated</strong> until a formal pipeline audit is complete and phenotypic DST results are available.</li>
+        </ul>
+        Quarantine all affected samples. Notify the bioinformatics lead immediately. Do not include resistance findings from this report in patient records or MDT summaries until resolved.<br>
+        <span style="font-size:.82rem;color:var(--muted)">Catalogue: <strong>{_safe_html(resist_cat or 'Not recorded &#8212; required')}</strong> &nbsp;&middot;&nbsp; Pipeline validation status: <span class="badge badge-red">Not validated &#8212; under review</span></span>
       </div>
       <details open><summary>Gene-drug reference mapping</summary><div>
         <div class="tbl-wrap"><table><thead><tr><th>Drug</th><th>Expected genes</th></tr></thead><tbody>
@@ -2535,23 +2676,32 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
       <h2>Epidemiological data completeness</h2>
       <div class="section-note">Completeness of fields capturable from the genomic pipeline. Additional clinical and field epi data must be completed in the case management system.</div>
       {epi_complete_html}
+      <h3>Mandatory epi-completeness &#8212; by cluster</h3>
+      <div class="section-note">RAG status: <span class="badge badge-red">Red &#8212; incomplete</span> = minimum fields not confirmed in case management system. No cluster may be signed off at MDT until all Red fields are resolved.</div>
+      {_cluster_epi_complete_html}
+      <h3>Minimum epi fields required before MDT sign-off</h3>
+      <div class="tbl-wrap"><table><thead><tr><th>Epi domain</th><th>Minimum fields required</th><th>Source</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr style="background:var(--alert-bg)"><td>Demographics</td><td>Age band, sex, country of birth, time in UK (&ge;1 year / &lt;1 year)</td><td>Case management system</td><td><span class="badge badge-red">Not confirmed &#8212; complete before MDT</span></td></tr>
+        <tr style="background:var(--alert-bg)"><td>Clinical infectiousness</td><td>Pulmonary / extrapulmonary, smear status, cavitation on CXR</td><td>Microbiology / Radiology</td><td><span class="badge badge-red">Not confirmed &#8212; complete before MDT</span></td></tr>
+        <tr style="background:var(--alert-bg)"><td>Exposure setting</td><td>At least one confirmed shared setting (household, workplace, congregation)</td><td>TB nurses / HPT</td><td><span class="badge badge-red">Not confirmed &#8212; complete before MDT</span></td></tr>
+        <tr style="background:var(--alert-bg)"><td>Contact tracing</td><td>Named contacts listed; tracing initiated or documented as not applicable</td><td>Contact tracing team</td><td><span class="badge badge-red">Not confirmed &#8212; complete before MDT</span></td></tr>
+        <tr style="background:var(--alert-bg)"><td>Vulnerability factors</td><td>Homelessness, substance use, immunosuppression screened (yes / no / unknown)</td><td>TB nurses / Social care</td><td><span class="badge badge-red">Not confirmed &#8212; complete before MDT</span></td></tr>
+        <tr style="background:var(--alert-bg)"><td>Case timeline</td><td>Symptom onset (est.), diagnosis date, treatment start, sequencing date</td><td>Clinical / Lab records</td><td><span class="badge badge-red">Not confirmed &#8212; complete before MDT</span></td></tr>
+      </tbody></table></div>
     </section>
 
     <!-- ═══════════════════════════════════════════════════════════════════ -->
     <!-- APPENDICES -->
     <!-- ═══════════════════════════════════════════════════════════════════ -->
-    <section class="card" id="appendix-a">
-      <h2>Appendix A — Case-level operational actions</h2>
-      <details open><summary>Table A1 — Case actions ({_safe_html(action_limit_label)})</summary><div>
-        {actions_csv_html}
-      </div></details>
+    <section class="{appendix_a_class}" id="appendix-a">
+      <h2>Appendix A &#8212; Case-level operational actions</h2>
+      {appendix_a_body_html}
     </section>
 
-    <section class="card" id="appendix-b">
-      <h2>Appendix B — Full discordance review</h2>
-      <details open><summary>Discordance table ({_safe_html(action_limit_label)})</summary><div>
-        {discordance_csv_html}
-      </div></details>
+    <section class="{appendix_b_class}" id="appendix-b">
+      <h2>Appendix B &#8212; Full discordance review</h2>
+      {appendix_b_body_html}
     </section>
 
     <!-- FIGURES -->
@@ -2590,6 +2740,28 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
 </div>
 
 <script>
+/* ── Mutation table: add Validation status column ── */
+(function(){{
+  var mutTable = document.querySelector('#mutations table');
+  if(!mutTable) return;
+  var headerRow = mutTable.querySelector('thead tr');
+  if(headerRow){{
+    var th = document.createElement('th');
+    th.textContent = 'Validation status';
+    headerRow.appendChild(th);
+  }}
+  mutTable.querySelectorAll('tbody tr').forEach(function(row){{
+    var statusCell = row.querySelector('td:nth-child(5)');
+    var td = document.createElement('td');
+    if(statusCell && statusCell.textContent.indexOf('Unusual') !== -1){{
+      td.innerHTML = "<span class='badge badge-red'>Suppressed</span>";
+    }} else {{
+      td.innerHTML = "<span class='badge badge-amber'>Not validated</span>";
+    }}
+    row.appendChild(td);
+  }});
+}})();
+
 /* ── Active nav highlight ── */
 (function(){{
   const links = document.querySelectorAll('nav.sidebar a');

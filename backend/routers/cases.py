@@ -11,8 +11,9 @@ from statistics import median
 from itertools import combinations
 
 from datetime import datetime
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse, HTMLResponse
+from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from backend.database import SessionLocal
@@ -27,6 +28,40 @@ logger = logging.getLogger(__name__)
 def _export_path(*parts: str) -> str:
     """Return an absolute path under the repository export directory."""
     return os.path.join(PROJECT_ROOT, "exports", *parts)
+
+
+# ── Pipeline validation sign-off helpers ──────────────────────────────────────
+
+def _ensure_signoff_table(db: Session) -> None:
+    """Create the signoffs table if it doesn't exist yet (idempotent)."""
+    db.execute(text("""
+        CREATE TABLE IF NOT EXISTS pipeline_validation_signoffs (
+            id                SERIAL PRIMARY KEY,
+            pipeline          TEXT NOT NULL DEFAULT 'resistance_validation',
+            decision          TEXT NOT NULL,
+            reviewer          TEXT NOT NULL,
+            notes             TEXT,
+            catalogue_version TEXT,
+            signed_off_at     TIMESTAMP DEFAULT NOW()
+        )
+    """))
+    db.commit()
+
+
+def _get_latest_signoff(db: Session) -> dict | None:
+    """Return the most recent signoff row for the resistance pipeline, or None."""
+    try:
+        _ensure_signoff_table(db)
+        row = db.execute(text("""
+            SELECT id, pipeline, decision, reviewer, notes, catalogue_version, signed_off_at
+            FROM pipeline_validation_signoffs
+            WHERE pipeline = 'resistance_validation'
+            ORDER BY signed_off_at DESC
+            LIMIT 1
+        """)).mappings().first()
+        return dict(row) if row else None
+    except Exception:
+        return None
 
 
 def get_db():
@@ -1266,6 +1301,80 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
     gen_time_mean  = str(_params.get("gen_time_mean") or _params.get("generation_time_mean") or "")
     gen_time_sd    = str(_params.get("gen_time_sd") or _params.get("generation_time_sd") or "")
     sampling_prob  = str(_params.get("sampling_prob") or _params.get("pi") or "")
+
+    # ── Pipeline validation sign-off ───────────────────────────────────────────
+    _signoff = _get_latest_signoff(db)
+    if _signoff and _signoff.get("decision") == "approved":
+        _pipeline_valid_badge = (
+            f'<span class="badge badge-green">Approved &#8212; '
+            f'{_safe_html(str(_signoff["reviewer"]))} &middot; '
+            f'{_safe_html(str(_signoff["signed_off_at"])[:10])}</span>'
+        )
+    elif _signoff and _signoff.get("decision") == "rejected":
+        _pipeline_valid_badge = (
+            f'<span class="badge badge-red">Sign-off rejected &#8212; '
+            f'{_safe_html(str(_signoff["reviewer"]))} &middot; '
+            f'{_safe_html(str(_signoff["signed_off_at"])[:10])}</span>'
+        )
+    else:
+        _pipeline_valid_badge = '<span class="badge badge-red">Not validated &#8212; under review</span>'
+
+    _resist_cat_html = _safe_html(resist_cat or 'Not recorded &#8212; required')
+
+    # ── Resistance blocking card (dynamic based on sign-off) ───────────────────
+    if _signoff and _signoff.get("decision") == "approved":
+        _signoff_note_parts = [
+            f'Pipeline validation approved by <strong>{_safe_html(str(_signoff["reviewer"]))}</strong>'
+            f' on {_safe_html(str(_signoff["signed_off_at"])[:10])}.'
+        ]
+        if _signoff.get("notes"):
+            _signoff_note_parts.append(f' Reviewer notes: {_safe_html(str(_signoff["notes"]))}')
+        _signoff_note = "".join(_signoff_note_parts)
+        _blocking_card_html = (
+            f'<div class="card card-warn" style="border-width:2px;padding:1rem;margin-bottom:.9rem">'
+            f'<strong>&#9888; Pipeline validation sign-off recorded &#8212; phenotypic DST '
+            f'confirmation still required before clinical use.</strong><br>'
+            f'Unusual gene-drug mappings were detected and reviewed. {_signoff_note}'
+            f'<ul style="margin:.5rem 0 .4rem 1.2rem;font-size:.87rem">'
+            f'<li>Resistance calls with <span class="badge badge-red">Unusual gene-drug mapping</span>'
+            f' remain <strong><span class="badge badge-red">Suppressed</span></strong> &#8212; '
+            f'a full bioinformatics audit is required before any clinical use.</li>'
+            f'<li>Resistance calls with <span class="badge badge-green">Valid expected gene</span>'
+            f' are classified as <strong><span class="badge badge-amber">Not validated</span></strong>'
+            f' &#8212; require phenotypic DST confirmation before clinical use.</li>'
+            f'</ul>'
+            f'<span style="font-size:.82rem;color:var(--muted)">Resistance catalogue/version: '
+            f'<strong>{_resist_cat_html}</strong>'
+            f' &nbsp;&middot;&nbsp; Local pipeline validation status: {_pipeline_valid_badge}</span>'
+            f'</div>'
+        )
+    else:
+        _blocking_card_html = (
+            f'<div class="card card-alert" style="border-width:2px;padding:1rem;margin-bottom:.9rem">'
+            f'<strong>&#128683; BLOCKING SAFETY ISSUE &#8212; Local drug-resistance pipeline '
+            f'validation required before any clinical or operational use.</strong><br>'
+            f'This is an internal report safety screen, not wording or case-level interpretation '
+            f'supplied directly by WHO. Unusual gene-drug mappings have been detected '
+            f'(e.g. <em>gyrA</em> linked to pyrazinamide, <em>embB</em> linked to fluoroquinolones, '
+            f'<em>pncA</em> linked to rifampicin). These indicate a likely local bioinformatics '
+            f'pipeline data-mapping error.'
+            f'<ul style="margin:.5rem 0 .4rem 1.2rem;font-size:.87rem">'
+            f'<li>All resistance calls with <span class="badge badge-red">Unusual gene-drug mapping</span>'
+            f' are classified by this local report as <strong><span class="badge badge-red">Suppressed</span></strong>'
+            f' &#8212; must not be reported, acted on, or shared until the pipeline is validated.</li>'
+            f'<li>Resistance calls with <span class="badge badge-green">Valid expected gene</span>'
+            f' are classified by this local report as <strong><span class="badge badge-amber">Not validated</span></strong>'
+            f' &#8212; require phenotypic DST confirmation before clinical use.</li>'
+            f'<li>No resistance call in this report should be treated as <strong>Validated</strong>'
+            f' until a formal pipeline audit is complete and phenotypic DST results are available.</li>'
+            f'</ul>'
+            f'Quarantine all affected samples. Notify the bioinformatics lead immediately. '
+            f'Do not include resistance findings from this report in patient records or MDT summaries until resolved.<br>'
+            f'<span style="font-size:.82rem;color:var(--muted)">Configured resistance catalogue/version metadata: '
+            f'<strong>{_resist_cat_html}</strong>'
+            f' &nbsp;&middot;&nbsp; Local pipeline validation status: {_pipeline_valid_badge}</span>'
+            f'</div>'
+        )
 
     # ── Reproduce metadata gate ────────────────────────────────────────────────
     # Uses the already-resolved DB variables so the DB is the source of truth.
@@ -2778,17 +2887,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
 
     <section class="card" id="mutations">
       <h2>Drug-resistance mutation details</h2>
-      <div class="card card-alert" style="border-width:2px;padding:1rem;margin-bottom:.9rem">
-        <strong>&#128683; BLOCKING SAFETY ISSUE &#8212; Local drug-resistance pipeline validation required before any clinical or operational use.</strong><br>
-        This is an internal report safety screen, not wording or case-level interpretation supplied directly by WHO. Unusual gene-drug mappings have been detected (e.g. <em>gyrA</em> linked to pyrazinamide, <em>embB</em> linked to fluoroquinolones, <em>pncA</em> linked to rifampicin). These indicate a likely local bioinformatics pipeline data-mapping error.
-        <ul style="margin:.5rem 0 .4rem 1.2rem;font-size:.87rem">
-          <li>All resistance calls with <span class="badge badge-red">Unusual gene-drug mapping</span> are classified by this local report as <strong><span class="badge badge-red">Suppressed</span></strong> &#8212; must not be reported, acted on, or shared until the pipeline is validated.</li>
-          <li>Resistance calls with <span class="badge badge-green">Valid expected gene</span> are classified by this local report as <strong><span class="badge badge-amber">Not validated</span></strong> &#8212; require phenotypic DST confirmation before clinical use.</li>
-          <li>No resistance call in this report should be treated as <strong>Validated</strong> until a formal pipeline audit is complete and phenotypic DST results are available.</li>
-        </ul>
-        Quarantine all affected samples. Notify the bioinformatics lead immediately. Do not include resistance findings from this report in patient records or MDT summaries until resolved.<br>
-        <span style="font-size:.82rem;color:var(--muted)">Configured resistance catalogue/version metadata: <strong>{_safe_html(resist_cat or 'Not recorded &#8212; required')}</strong> &nbsp;&middot;&nbsp; Local pipeline validation status: <span class="badge badge-red">Not validated &#8212; under review</span></span>
-      </div>
+      {_blocking_card_html}
       <details open><summary>Local expected gene-drug screen</summary><div>
         <p class="muted">This table is a conservative local screen for obvious mapping errors. It is not a complete WHO catalogue extract and does not validate individual resistance calls.</p>
         <div class="tbl-wrap"><table><thead><tr><th>Drug</th><th>Expected genes</th></tr></thead><tbody>
@@ -2983,6 +3082,71 @@ document.addEventListener('DOMContentLoaded', function(){{
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(html)
     return html
+
+
+# ── Resistance pipeline validation sign-off endpoints ─────────────────────────
+
+class _ResistanceSignoffRequest(BaseModel):
+    decision: str          # 'approved' | 'rejected' | 'under_review'
+    reviewer: str
+    notes: str = ""
+    catalogue_version: str = ""
+
+
+@router.post("/resistance-validation/approve")
+def resistance_validation_approve(
+    payload: _ResistanceSignoffRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Record a formal sign-off for the local resistance pipeline validation.
+
+    ``decision`` must be one of ``approved``, ``rejected``, or ``under_review``.
+    Each call appends an immutable record; the latest row determines the status
+    shown in the HTML report.
+    """
+    allowed = {"approved", "rejected", "under_review"}
+    if payload.decision not in allowed:
+        raise HTTPException(
+            status_code=422,
+            detail=f"decision must be one of {sorted(allowed)}",
+        )
+    if not payload.reviewer.strip():
+        raise HTTPException(status_code=422, detail="reviewer must not be empty")
+
+    _ensure_signoff_table(db)
+    row = db.execute(
+        text("""
+            INSERT INTO pipeline_validation_signoffs
+                (pipeline, decision, reviewer, notes, catalogue_version)
+            VALUES ('resistance_validation', :decision, :reviewer, :notes, :cat_ver)
+            RETURNING id, pipeline, decision, reviewer, notes,
+                      catalogue_version, signed_off_at
+        """),
+        {
+            "decision": payload.decision.strip(),
+            "reviewer": payload.reviewer.strip(),
+            "notes": (payload.notes or "").strip(),
+            "cat_ver": (payload.catalogue_version or "").strip(),
+        },
+    ).mappings().first()
+    db.commit()
+    result = dict(row)
+    if result.get("signed_off_at"):
+        result["signed_off_at"] = str(result["signed_off_at"])
+    return result
+
+
+@router.get("/resistance-validation/status")
+def resistance_validation_status(db: Session = Depends(get_db)):
+    """Return the current pipeline validation status (latest sign-off record)."""
+    signoff = _get_latest_signoff(db)
+    if signoff is None:
+        return {"status": "under_review", "signoff": None}
+    so = dict(signoff)
+    if so.get("signed_off_at"):
+        so["signed_off_at"] = str(so["signed_off_at"])
+    return {"status": so["decision"], "signoff": so}
 
 
 @router.get("/outbreak-report.html", response_class=HTMLResponse)

@@ -81,3 +81,16 @@ CREATE TABLE audit_log (
   details JSONB,
   timestamp TIMESTAMP
 );
+
+-- ─── Pipeline validation sign-offs ────────────────────────────────────────────
+-- Records formal reviewer sign-offs for pipeline validation steps.
+-- Each row is an immutable record; the latest row per pipeline determines current status.
+CREATE TABLE IF NOT EXISTS pipeline_validation_signoffs (
+  id                SERIAL PRIMARY KEY,
+  pipeline          TEXT NOT NULL DEFAULT 'resistance_validation',
+  decision          TEXT NOT NULL CHECK (decision IN ('approved', 'rejected', 'under_review')),
+  reviewer          TEXT NOT NULL,
+  notes             TEXT,
+  catalogue_version TEXT,
+  signed_off_at     TIMESTAMP DEFAULT NOW()
+);

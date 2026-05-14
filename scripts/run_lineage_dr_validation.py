@@ -32,6 +32,7 @@ ROOT = Path(__file__).resolve().parent.parent
 EXPORTS = ROOT / "exports"
 UPLOADS = ROOT / "uploads"
 OUT_JSON = EXPORTS / "lineage_dr_validation.json"
+MAX_FASTA_SAMPLES = 10
 
 # Add project root to import path for direct script execution.
 sys.path.insert(0, str(ROOT))
@@ -117,7 +118,22 @@ def _discover_inputs() -> dict[str, Any]:
 
 
 def _discover_fasta_inputs() -> list[Path]:
-    return sorted([*EXPORTS.glob("*.fasta"), *UPLOADS.glob("*.fasta"), *UPLOADS.glob("*.fa")])
+    explicit = os.getenv("LINEAGE_DR_FASTA") or os.getenv("TB_LINEAGE_DR_FASTA")
+    if explicit:
+        explicit_path = Path(explicit)
+        return [explicit_path] if explicit_path.exists() else []
+
+    exports_fasta = sorted(EXPORTS.glob("*.fasta"), key=lambda p: p.stat().st_mtime, reverse=True)
+    upload_fasta = sorted([*UPLOADS.glob("*.fasta"), *UPLOADS.glob("*.fa")], key=lambda p: p.stat().st_mtime, reverse=True)
+
+    dna_export = EXPORTS / "dna.fasta"
+    if dna_export.exists():
+        return [dna_export]
+    if exports_fasta:
+        return [exports_fasta[0]]
+    if upload_fasta:
+        return [upload_fasta[0]]
+    return []
 
 
 def _probe_docker() -> dict[str, Any]:
@@ -254,6 +270,13 @@ def _to_container_path(path: Path) -> str:
     return "/work/" + str(relative).replace("\\", "/")
 
 
+def _written_during_run(path: Path, started_at: float) -> bool:
+    try:
+        return path.exists() and path.stat().st_mtime >= started_at
+    except OSError:
+        return False
+
+
 def _split_fasta_records(path: Path, max_records: int = 10) -> list[tuple[str, str]]:
     records: list[tuple[str, str]] = []
     header: str | None = None
@@ -278,6 +301,82 @@ def _split_fasta_records(path: Path, max_records: int = 10) -> list[tuple[str, s
         records.append((header, "".join(chunks)))
 
     return records[:max_records]
+
+
+def _prepare_fasta_sample_inputs(fasta_files: list[Path], max_samples: int = MAX_FASTA_SAMPLES) -> list[dict[str, Any]]:
+    sample_inputs: list[dict[str, Any]] = []
+    for fasta in fasta_files[:1]:
+        for sample_id, sequence in _split_fasta_records(fasta, max_records=max_samples):
+            sample_inputs.append(
+                {
+                    "sample_id": sample_id,
+                    "sequence": sequence,
+                    "source_fasta": str(fasta.as_posix()),
+                }
+            )
+            if len(sample_inputs) >= max_samples:
+                break
+    return sample_inputs
+
+
+def _fasta_input_metadata(fasta_files: list[Path], sample_inputs: list[dict[str, Any]]) -> dict[str, Any]:
+    return {
+        "selected_fasta_files": [str(p.as_posix()) for p in fasta_files],
+        "selection_policy": (
+            "explicit LINEAGE_DR_FASTA/TB_LINEAGE_DR_FASTA path"
+            if (os.getenv("LINEAGE_DR_FASTA") or os.getenv("TB_LINEAGE_DR_FASTA"))
+            else "exports/dna.fasta, otherwise newest exports FASTA, otherwise newest uploads FASTA"
+        ),
+        "attempted_sample_ids": [str(item["sample_id"]) for item in sample_inputs],
+    }
+
+
+def _validate_fasta_sample_inputs(sample_inputs: list[dict[str, Any]]) -> dict[str, Any]:
+    if not sample_inputs:
+        return {
+            "status": "no_samples",
+            "message": "No FASTA records selected for lineage/DR tool execution",
+            "matched_sample_ids": [],
+            "unmatched_sample_ids": [],
+        }
+
+    db = SessionLocal()
+    sample_map = _load_sample_id_map()
+    matched: list[str] = []
+    unmatched: list[str] = []
+    try:
+        for item in sample_inputs:
+            sample_id = str(item["sample_id"])
+            if _resolve_case_sample_id(db, sample_id, sample_map):
+                matched.append(sample_id)
+            else:
+                unmatched.append(sample_id)
+    except Exception as exc:
+        return {
+            "status": "validation_error",
+            "message": f"Unable to validate FASTA sample IDs against cases: {exc}",
+            "matched_sample_ids": matched,
+            "unmatched_sample_ids": unmatched,
+        }
+    finally:
+        db.close()
+
+    if matched and not unmatched:
+        status = "matched"
+        message = "All selected FASTA sample IDs resolve to active cases"
+    elif matched:
+        status = "partial_match"
+        message = "Some selected FASTA sample IDs do not resolve to active cases"
+    else:
+        status = "no_matching_cases"
+        message = "Selected FASTA sample IDs do not resolve to active cases"
+
+    return {
+        "status": status,
+        "message": message,
+        "matched_sample_ids": matched,
+        "unmatched_sample_ids": unmatched,
+    }
 
 
 def _sample_id_map_paths() -> list[Path]:
@@ -407,7 +506,7 @@ def _extract_lineage_and_resistance(result_json: Path) -> dict[str, Any]:
     }
 
 
-def _run_tbprofiler_on_fasta(tbprofiler_exec: str, fasta_files: list[Path]) -> dict[str, Any]:
+def _run_tbprofiler_on_fasta(tbprofiler_exec: str, fasta_files: list[Path], sample_inputs: list[dict[str, Any]]) -> dict[str, Any]:
     run_dir = EXPORTS / "tbprofiler"
     run_dir.mkdir(parents=True, exist_ok=True)
 
@@ -422,22 +521,15 @@ def _run_tbprofiler_on_fasta(tbprofiler_exec: str, fasta_files: list[Path]) -> d
             "failures": [],
         }
 
-    sample_inputs: list[tuple[str, str]] = []
-    for fasta in fasta_files[:2]:
-        for sample_id, sequence in _split_fasta_records(fasta, max_records=10):
-            sample_inputs.append((sample_id, sequence))
-            if len(sample_inputs) >= 10:
-                break
-        if len(sample_inputs) >= 10:
-            break
-
     output_jsons: list[str] = []
     failures: list[dict[str, Any]] = []
     successful_samples = 0
 
     with tempfile.TemporaryDirectory(prefix="tbprofiler_") as tmp_dir:
         tmp_base = Path(tmp_dir)
-        for sample_id, sequence in sample_inputs:
+        for item in sample_inputs:
+            sample_id = str(item["sample_id"])
+            sequence = str(item["sequence"])
             sample_fasta = tmp_base / f"{sample_id}.fasta"
             sample_fasta.write_text(f">{sample_id}\n{sequence}\n", encoding="utf-8")
 
@@ -451,6 +543,7 @@ def _run_tbprofiler_on_fasta(tbprofiler_exec: str, fasta_files: list[Path]) -> d
                 str(run_dir),
             ])
 
+            started_at = datetime.now().timestamp() - 1.0
             proc = subprocess.run(
                 cmd,
                 stdout=subprocess.PIPE,
@@ -462,7 +555,7 @@ def _run_tbprofiler_on_fasta(tbprofiler_exec: str, fasta_files: list[Path]) -> d
             )
 
             result_json = run_dir / "results" / f"{sample_id}.results.json"
-            if proc.returncode == 0 and result_json.exists():
+            if proc.returncode == 0 and _written_during_run(result_json, started_at):
                 successful_samples += 1
                 output_jsons.append(str(result_json.as_posix()))
             else:
@@ -481,6 +574,8 @@ def _run_tbprofiler_on_fasta(tbprofiler_exec: str, fasta_files: list[Path]) -> d
         "runner": "local",
         "message": "tb-profiler execution finished" if successful_samples else "tb-profiler execution failed",
         "attempted_samples": len(sample_inputs),
+        "input_fasta_files": [str(p.as_posix()) for p in fasta_files],
+        "attempted_sample_ids": [str(item["sample_id"]) for item in sample_inputs],
         "successful_samples": successful_samples,
         "failed_samples": len(sample_inputs) - successful_samples,
         "output_jsons": output_jsons,
@@ -488,7 +583,7 @@ def _run_tbprofiler_on_fasta(tbprofiler_exec: str, fasta_files: list[Path]) -> d
     }
 
 
-def _run_tbprofiler_on_fasta_docker(fasta_files: list[Path], image: str) -> dict[str, Any]:
+def _run_tbprofiler_on_fasta_docker(fasta_files: list[Path], sample_inputs: list[dict[str, Any]], image: str) -> dict[str, Any]:
     run_dir = EXPORTS / "tbprofiler"
     run_dir.mkdir(parents=True, exist_ok=True)
 
@@ -504,22 +599,15 @@ def _run_tbprofiler_on_fasta_docker(fasta_files: list[Path], image: str) -> dict
             "failures": [],
         }
 
-    sample_inputs: list[tuple[str, str]] = []
-    for fasta in fasta_files[:2]:
-        for sample_id, sequence in _split_fasta_records(fasta, max_records=10):
-            sample_inputs.append((sample_id, sequence))
-            if len(sample_inputs) >= 10:
-                break
-        if len(sample_inputs) >= 10:
-            break
-
     output_jsons: list[str] = []
     failures: list[dict[str, Any]] = []
     successful_samples = 0
 
     with tempfile.TemporaryDirectory(prefix="tbprofiler_input_", dir=str(EXPORTS)) as tmp_dir:
         tmp_base = Path(tmp_dir)
-        for sample_id, sequence in sample_inputs:
+        for item in sample_inputs:
+            sample_id = str(item["sample_id"])
+            sequence = str(item["sequence"])
             sample_fasta = tmp_base / f"{sample_id}.fasta"
             sample_fasta.write_text(f">{sample_id}\n{sequence}\n", encoding="utf-8")
 
@@ -545,6 +633,7 @@ def _run_tbprofiler_on_fasta_docker(fasta_files: list[Path], image: str) -> dict
                 container_run_dir,
             ]
 
+            started_at = datetime.now().timestamp() - 1.0
             proc = subprocess.run(
                 cmd,
                 stdout=subprocess.PIPE,
@@ -556,7 +645,7 @@ def _run_tbprofiler_on_fasta_docker(fasta_files: list[Path], image: str) -> dict
             )
 
             result_json = run_dir / "results" / f"{sample_id}.results.json"
-            if proc.returncode == 0 and result_json.exists():
+            if proc.returncode == 0 and _written_during_run(result_json, started_at):
                 successful_samples += 1
                 output_jsons.append(str(result_json.as_posix()))
             else:
@@ -576,6 +665,8 @@ def _run_tbprofiler_on_fasta_docker(fasta_files: list[Path], image: str) -> dict
         "image": image,
         "message": "tb-profiler docker execution finished" if successful_samples else "tb-profiler docker execution failed",
         "attempted_samples": len(sample_inputs),
+        "input_fasta_files": [str(p.as_posix()) for p in fasta_files],
+        "attempted_sample_ids": [str(item["sample_id"]) for item in sample_inputs],
         "successful_samples": successful_samples,
         "failed_samples": len(sample_inputs) - successful_samples,
         "output_jsons": output_jsons,
@@ -583,7 +674,7 @@ def _run_tbprofiler_on_fasta_docker(fasta_files: list[Path], image: str) -> dict
     }
 
 
-def _run_tbprofiler_on_fasta_wsl(fasta_files: list[Path], wsl_env: str) -> dict[str, Any]:
+def _run_tbprofiler_on_fasta_wsl(fasta_files: list[Path], sample_inputs: list[dict[str, Any]], wsl_env: str) -> dict[str, Any]:
     run_dir = EXPORTS / "tbprofiler"
     run_dir.mkdir(parents=True, exist_ok=True)
 
@@ -598,15 +689,6 @@ def _run_tbprofiler_on_fasta_wsl(fasta_files: list[Path], wsl_env: str) -> dict[
             "output_jsons": [],
             "failures": [],
         }
-
-    sample_inputs: list[tuple[str, str]] = []
-    for fasta in fasta_files[:2]:
-        for sample_id, sequence in _split_fasta_records(fasta, max_records=10):
-            sample_inputs.append((sample_id, sequence))
-            if len(sample_inputs) >= 10:
-                break
-        if len(sample_inputs) >= 10:
-            break
 
     output_jsons: list[str] = []
     failures: list[dict[str, Any]] = []
@@ -627,7 +709,9 @@ def _run_tbprofiler_on_fasta_wsl(fasta_files: list[Path], wsl_env: str) -> dict[
 
     with tempfile.TemporaryDirectory(prefix="tbprofiler_wsl_") as tmp_dir:
         tmp_base = Path(tmp_dir)
-        for sample_id, sequence in sample_inputs:
+        for item in sample_inputs:
+            sample_id = str(item["sample_id"])
+            sequence = str(item["sequence"])
             sample_fasta = tmp_base / f"{sample_id}.fasta"
             sample_fasta.write_text(f">{sample_id}\n{sequence}\n", encoding="utf-8")
 
@@ -648,6 +732,7 @@ def _run_tbprofiler_on_fasta_wsl(fasta_files: list[Path], wsl_env: str) -> dict[
                 f'--prefix "{sample_id}" '
                 f'--dir "{run_dir_wsl}"'
             )
+            started_at = datetime.now().timestamp() - 1.0
             proc = subprocess.run(
                 ["wsl", "--", "bash", "-lc", bash_cmd],
                 stdout=subprocess.PIPE,
@@ -659,7 +744,7 @@ def _run_tbprofiler_on_fasta_wsl(fasta_files: list[Path], wsl_env: str) -> dict[
             )
 
             result_json = run_dir / "results" / f"{sample_id}.results.json"
-            if proc.returncode == 0 and result_json.exists():
+            if proc.returncode == 0 and _written_during_run(result_json, started_at):
                 successful_samples += 1
                 output_jsons.append(str(result_json.as_posix()))
             else:
@@ -679,6 +764,8 @@ def _run_tbprofiler_on_fasta_wsl(fasta_files: list[Path], wsl_env: str) -> dict[
         "wsl_env": wsl_env,
         "message": "tb-profiler WSL execution finished" if successful_samples else "tb-profiler WSL execution failed",
         "attempted_samples": len(sample_inputs),
+        "input_fasta_files": [str(p.as_posix()) for p in fasta_files],
+        "attempted_sample_ids": [str(item["sample_id"]) for item in sample_inputs],
         "successful_samples": successful_samples,
         "failed_samples": len(sample_inputs) - successful_samples,
         "output_jsons": output_jsons,
@@ -686,7 +773,7 @@ def _run_tbprofiler_on_fasta_wsl(fasta_files: list[Path], wsl_env: str) -> dict[
     }
 
 
-def _run_mykrobe_on_fasta_wsl(fasta_files: list[Path], wsl_env: str) -> dict[str, Any]:
+def _run_mykrobe_on_fasta_wsl(fasta_files: list[Path], sample_inputs: list[dict[str, Any]], wsl_env: str) -> dict[str, Any]:
     run_dir = EXPORTS / "mykrobe"
     run_dir.mkdir(parents=True, exist_ok=True)
 
@@ -701,15 +788,6 @@ def _run_mykrobe_on_fasta_wsl(fasta_files: list[Path], wsl_env: str) -> dict[str
             "output_jsons": [],
             "failures": [],
         }
-
-    sample_inputs: list[tuple[str, str]] = []
-    for fasta in fasta_files[:2]:
-        for sample_id, sequence in _split_fasta_records(fasta, max_records=10):
-            sample_inputs.append((sample_id, sequence))
-            if len(sample_inputs) >= 10:
-                break
-        if len(sample_inputs) >= 10:
-            break
 
     output_jsons: list[str] = []
     failures: list[dict[str, Any]] = []
@@ -730,7 +808,9 @@ def _run_mykrobe_on_fasta_wsl(fasta_files: list[Path], wsl_env: str) -> dict[str
 
     with tempfile.TemporaryDirectory(prefix="mykrobe_wsl_") as tmp_dir:
         tmp_base = Path(tmp_dir)
-        for sample_id, sequence in sample_inputs:
+        for item in sample_inputs:
+            sample_id = str(item["sample_id"])
+            sequence = str(item["sequence"])
             sample_fasta = tmp_base / f"{sample_id}.fasta"
             sample_fasta.write_text(f">{sample_id}\n{sequence}\n", encoding="utf-8")
 
@@ -756,6 +836,7 @@ def _run_mykrobe_on_fasta_wsl(fasta_files: list[Path], wsl_env: str) -> dict[str
                 f'--format json '
                 f'--output "{result_json_wsl}"'
             )
+            started_at = datetime.now().timestamp() - 1.0
             proc = subprocess.run(
                 ["wsl", "--", "bash", "-lc", bash_cmd],
                 stdout=subprocess.PIPE,
@@ -766,7 +847,7 @@ def _run_mykrobe_on_fasta_wsl(fasta_files: list[Path], wsl_env: str) -> dict[str
                 check=False,
             )
 
-            if proc.returncode == 0 and result_json.exists():
+            if proc.returncode == 0 and _written_during_run(result_json, started_at):
                 successful_samples += 1
                 output_jsons.append(str(result_json.as_posix()))
             else:
@@ -786,6 +867,8 @@ def _run_mykrobe_on_fasta_wsl(fasta_files: list[Path], wsl_env: str) -> dict[str
         "wsl_env": wsl_env,
         "message": "mykrobe WSL execution finished" if successful_samples else "mykrobe WSL execution failed",
         "attempted_samples": len(sample_inputs),
+        "input_fasta_files": [str(p.as_posix()) for p in fasta_files],
+        "attempted_sample_ids": [str(item["sample_id"]) for item in sample_inputs],
         "successful_samples": successful_samples,
         "failed_samples": len(sample_inputs) - successful_samples,
         "output_jsons": output_jsons,
@@ -1215,6 +1298,12 @@ def main() -> None:
     mykrobe_exec = _which_many(["mykrobe", "mykrobe.exe"])
     inputs = _discover_inputs()
     fasta_inputs = _discover_fasta_inputs()
+    fasta_sample_inputs = _prepare_fasta_sample_inputs(fasta_inputs)
+    fasta_metadata = _fasta_input_metadata(fasta_inputs, fasta_sample_inputs)
+    fasta_validation = _validate_fasta_sample_inputs(fasta_sample_inputs)
+    fasta_ready_for_tools = fasta_validation["status"] == "matched"
+    inputs.update(fasta_metadata)
+    inputs["sample_id_validation"] = fasta_validation
 
     tbprofiler = {
         "status": "not_installed",
@@ -1365,8 +1454,17 @@ def main() -> None:
         "warnings": [],
     }
 
-    if tbprofiler["status"] == "installed" and fasta_inputs:
-        tbprofiler_local_run = _run_tbprofiler_on_fasta(tbprofiler_exec, fasta_inputs)
+    if fasta_inputs and not fasta_ready_for_tools:
+        blocked_message = fasta_validation["message"]
+        tbprofiler_run["message"] = blocked_message
+        tbprofiler_local_run["message"] = blocked_message
+        tbprofiler_wsl_run["message"] = blocked_message
+        tbprofiler_docker_run["message"] = blocked_message
+        mykrobe_run["message"] = blocked_message
+        mykrobe_wsl_run["message"] = blocked_message
+
+    if tbprofiler["status"] == "installed" and fasta_inputs and fasta_ready_for_tools:
+        tbprofiler_local_run = _run_tbprofiler_on_fasta(tbprofiler_exec, fasta_inputs, fasta_sample_inputs)
         tbprofiler_run = tbprofiler_local_run
     elif tbprofiler["status"] == "installed_but_unusable":
         tbprofiler_local_run = {
@@ -1383,6 +1481,7 @@ def main() -> None:
     if (
         wsl_fallback_enabled
         and fasta_inputs
+        and fasta_ready_for_tools
         and wsl.get("available")
         and wsl_tbprofiler.get("status") == "installed"
         and (
@@ -1390,7 +1489,7 @@ def main() -> None:
             or tbprofiler["status"] in {"not_installed", "installed_but_unusable"}
         )
     ):
-        tbprofiler_wsl_run = _run_tbprofiler_on_fasta_wsl(fasta_inputs, wsl_env_name)
+        tbprofiler_wsl_run = _run_tbprofiler_on_fasta_wsl(fasta_inputs, fasta_sample_inputs, wsl_env_name)
         if tbprofiler_wsl_run["status"] == "completed":
             tbprofiler_run = tbprofiler_wsl_run
         elif tbprofiler_run["status"] == "skipped":
@@ -1399,6 +1498,7 @@ def main() -> None:
     if (
         docker_fallback_enabled
         and fasta_inputs
+        and fasta_ready_for_tools
         and docker.get("available")
         and docker.get("daemon_running")
         and (
@@ -1406,7 +1506,7 @@ def main() -> None:
             or tbprofiler["status"] in {"not_installed", "installed_but_unusable"}
         )
     ):
-        tbprofiler_docker_run = _run_tbprofiler_on_fasta_docker(fasta_inputs, docker_image)
+        tbprofiler_docker_run = _run_tbprofiler_on_fasta_docker(fasta_inputs, fasta_sample_inputs, docker_image)
         if tbprofiler_docker_run["status"] == "completed":
             tbprofiler_run = tbprofiler_docker_run
         elif tbprofiler_run["status"] == "skipped":
@@ -1419,10 +1519,11 @@ def main() -> None:
     if (
         wsl_fallback_enabled
         and fasta_inputs
+        and fasta_ready_for_tools
         and wsl.get("available")
         and wsl_mykrobe.get("status") == "installed"
     ):
-        mykrobe_wsl_run = _run_mykrobe_on_fasta_wsl(fasta_inputs, wsl_env_name)
+        mykrobe_wsl_run = _run_mykrobe_on_fasta_wsl(fasta_inputs, fasta_sample_inputs, wsl_env_name)
         mykrobe_run = mykrobe_wsl_run
 
     # Import order: Mykrobe first (fills base data), TBProfiler second (overwrites as authoritative).
@@ -1442,12 +1543,14 @@ def main() -> None:
 
     ready_inputs = inputs["fastq_count"] > 0 or inputs["vcf_count"] > 0 or inputs["fasta_count"] > 0
     overall_status = "completed"
-    if tbprofiler["status"] not in {"installed", "installed_but_unusable"} and mykrobe["status"] != "installed":
+    if not ready_inputs:
+        overall_status = "ready_missing_inputs"
+    elif fasta_inputs and not fasta_ready_for_tools:
+        overall_status = "blocked_sample_id_mismatch"
+    elif tbprofiler["status"] not in {"installed", "installed_but_unusable"} and mykrobe["status"] != "installed":
         overall_status = "blocked_no_tools"
     elif tbprofiler["status"] == "installed_but_unusable" and mykrobe["status"] != "installed":
         overall_status = "blocked_tool_dependencies"
-    elif not ready_inputs:
-        overall_status = "ready_missing_inputs"
     elif tbprofiler_run["status"] == "failed":
         overall_status = "failed_tbprofiler_runtime"
 

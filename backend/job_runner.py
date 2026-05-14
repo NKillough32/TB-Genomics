@@ -180,9 +180,9 @@ def run_job(job_name):
 
 # Ordered steps for the full pipeline
 PIPELINE_STEPS = [
-    "run_lineage_dr_validation",
     "derive_sequence_clusters",
     "export_outbreaker",
+    "run_lineage_dr_validation",
     "run_outbreaker2",
     "compare_clustering_methods",
 ]

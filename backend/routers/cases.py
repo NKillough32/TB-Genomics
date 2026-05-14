@@ -486,8 +486,6 @@ def _confidence_tier(
         return "High confidence"
     if pairwise_distance is not None and pairwise_distance <= 12 and same_cluster:
         return "Moderate confidence"
-    if outbreaker_probability is not None and outbreaker_probability >= 0.70 and same_cluster:
-        return "Moderate confidence"
     return "Exploratory"
 
 
@@ -1896,6 +1894,16 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
     _dr_imported_rows = int((_tbp_import.get("imported_rows") or 0) + (_mk_import.get("imported_rows") or 0))
     _dr_skipped_rows = int((_tbp_import.get("skipped_rows") or 0) + (_mk_import.get("skipped_rows") or 0))
     _dr_unlinked = bool(lineage_dr_data) and _dr_skipped_rows > 0 and _dr_imported_rows == 0
+    _dr_status = str((lineage_dr_data or {}).get("status") or "")
+    _dr_tool_runs = [
+        (lineage_dr_data or {}).get("tbprofiler_run") or {},
+        (lineage_dr_data or {}).get("mykrobe_run") or {},
+    ]
+    _dr_any_attempted = any(int(run.get("attempted_samples") or 0) > 0 for run in _dr_tool_runs)
+    _dr_skipped_or_blocked = bool(lineage_dr_data) and (
+        _dr_status in {"ready_missing_inputs", "blocked_sample_id_mismatch", "blocked_no_tools", "blocked_tool_dependencies"}
+        or (denom_sequenced > 0 and not _dr_any_attempted and _dr_imported_rows == 0)
+    )
     _science_limitations = []
     if extract_qc_pass_pct is not None and extract_qc_pass_pct < 90:
         _science_limitations.append("QC below target")
@@ -1903,6 +1911,8 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
         _science_limitations.append("model exploratory")
     if _dr_unlinked:
         _science_limitations.append("lineage/DR outputs unlinked")
+    elif _dr_skipped_or_blocked:
+        _science_limitations.append("lineage/DR validation unavailable")
     if missing_repro:
         status_html = f'<span class="status-banner status-draft">DRAFT — {len(missing_repro)} reproducibility field(s) missing</span>'
     elif _appendices_missing:
@@ -1927,6 +1937,13 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
         f'<code>tb_interpretation</code>. Treat lineage and resistance summaries as unavailable '
         f'until sample IDs are mapped to case IDs.</div>'
     ) if _dr_unlinked else ""
+    _dr_skipped_warning_html = (
+        f'<div class="callout callout-alert" style="margin-bottom:.6rem">'
+        f'<strong>Lineage/DR validation did not run on the active FASTA.</strong> '
+        f'Status: <code>{_safe_html(_dr_status or "unknown")}</code>. '
+        f'Treat lineage and resistance summaries as unavailable until the pipeline is rerun '
+        f'after <code>exports/dna.fasta</code> is generated and sample IDs validate against active cases.</div>'
+    ) if (_dr_skipped_or_blocked and not _dr_unlinked) else ""
     _snp_warning_html = (
         f'<div class="callout callout-alert" style="margin-bottom:.6rem">'
         f'<strong>No SNP-supported direct transmission links identified.</strong> '
@@ -2114,6 +2131,14 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
             '<strong>Linked lineage/DR calls unavailable.</strong> Tool outputs exist, '
             'but sample IDs did not match active case IDs during import. Provide a sample ID map '
             'or regenerate tool inputs from the active case FASTA before using this section operationally.'
+            '</div>'
+            + lineage_table_html
+        )
+    elif _dr_skipped_or_blocked:
+        lineage_table_html = (
+            '<div class="callout callout-alert" style="margin-bottom:.6rem">'
+            '<strong>Linked lineage/DR calls unavailable.</strong> Validation did not run successfully '
+            'against the active FASTA. Rerun the full pipeline after outbreaker input export completes.'
             '</div>'
             + lineage_table_html
         )
@@ -2520,7 +2545,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
     <section class="card" id="executive">
       <h2>Executive summary</h2>
       {dashboard_html}
-      {_qc_warning_html}{_snp_warning_html}{_dr_unlinked_warning_html}{'<div class="callout callout-alert"><strong>DRAFT REPORT:</strong> Missing reproducibility fields: ' + _safe_html(', '.join(missing_repro)) + '. External circulation is blocked until these are populated.</div>' if missing_repro else '<div class="callout"><strong>Artifact completeness gate passed.</strong> Reproducibility metadata and appendices are present. Operational use still requires MDT, QC, and information-governance review.</div>'}
+      {_qc_warning_html}{_snp_warning_html}{_dr_unlinked_warning_html}{_dr_skipped_warning_html}{'<div class="callout callout-alert"><strong>DRAFT REPORT:</strong> Missing reproducibility fields: ' + _safe_html(', '.join(missing_repro)) + '. External circulation is blocked until these are populated.</div>' if missing_repro else '<div class="callout"><strong>Artifact completeness gate passed.</strong> Reproducibility metadata and appendices are present. Operational use still requires MDT, QC, and information-governance review.</div>'}
     </section>
 
     <!-- TOP ACTIONS -->

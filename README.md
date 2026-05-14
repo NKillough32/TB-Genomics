@@ -170,15 +170,23 @@ Lineage and drug resistance calling
 
 Scripts are wired as named jobs and called by the backend job runner.
 
+Full pipeline order:
+1. Derive sequence clusters.
+2. Export outbreaker inputs (`exports/cases.csv` and `exports/dna.fasta`).
+3. Run lineage and drug-resistance validation against the active FASTA.
+4. Run outbreaker2.
+5. Compare clustering methods.
+
 TBProfiler (primary engine):
-- Runs via WSL (`tbtools` mamba env) first; falls back to Docker if WSL is unavailable.
+- Uses the active FASTA selected by `LINEAGE_DR_FASTA` / `TB_LINEAGE_DR_FASTA`, or `exports/dna.fasta` from the current pipeline run.
+- Tries the local executable when usable; otherwise uses WSL (`tbtools` mamba env) and then Docker when enabled and available.
 - Output artifact: `exports/tbprofiler/` and imported into `tb_interpretation`.
 
-Mykrobe (parallel secondary engine):
-- Runs in parallel with TBProfiler (not as a fallback) whenever WSL is available and FASTA inputs are present.
+Mykrobe (secondary engine):
+- Runs via WSL whenever available and the active FASTA sample IDs validate against cases.
 - Output artifact: `exports/mykrobe/<sample_id>_mykrobe.json`.
 - Results imported first; TBProfiler results overwrite as authoritative source of truth.
-- Import order: Mykrobe → TBProfiler (TBProfiler always wins on conflict).
+- Import order: Mykrobe -> TBProfiler (TBProfiler always wins on conflict).
 
 DR concordance checking:
 - After both tools run, per-drug R/S calls are compared for each sample.

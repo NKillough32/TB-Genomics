@@ -255,6 +255,47 @@
 
     </div><!-- /cicPanel -->
   </section>
+
+  <section class="card" id="analyticsCard">
+    <h2>Step 7 - Phylogenetic and Visual Analytics</h2>
+    <p class="hint">Analyst views: SNP matrix, phylogenetic tree, timeline, map, growth curves, dossier export, and genomic vs epidemiological link comparison.</p>
+    <div class="analytics-controls">
+      <button onclick="loadAnalyticsSnapshot()">Load analytics snapshot</button>
+      <label>Cluster selector
+        <select id="analyticsClusterSelect" onchange="selectAnalyticsCluster()">
+          <option value="">All clusters</option>
+        </select>
+      </label>
+      <label>Cluster ID (optional)
+        <input id="analyticsClusterId" type="text" placeholder="UUID for cluster-specific views" />
+      </label>
+      <div class="analytics-threshold-grid">
+        <label>SNP threshold
+          <input id="analyticsSnpThreshold" type="number" min="1" max="100" value="12" />
+        </label>
+        <label>Epi window (days)
+          <input id="analyticsEpiWindowDays" type="number" min="1" max="365" value="45" />
+        </label>
+        <label>Posterior minimum
+          <input id="analyticsPosteriorMin" type="number" min="0" max="1" step="0.01" value="0.00" />
+        </label>
+      </div>
+      <div class="analytics-inline-actions">
+        <button onclick="loadSnpMatrixView()">SNP distance matrix</button>
+        <button onclick="loadPhyloTreeView()">Phylogenetic tree</button>
+        <button onclick="loadTimelineView()">Specimen timeline</button>
+        <button onclick="loadGeoMapView()">Geography map</button>
+        <button onclick="loadGrowthCurvesView()">Cluster growth curves</button>
+        <button onclick="loadGenomicVsEpiView()">Genomic vs epi links</button>
+      </div>
+      <div class="analytics-inline-actions">
+        <button class="btn-export-zip" onclick="exportClusterDossier('json')">Export cluster dossier (JSON)</button>
+        <button class="btn-export-zip" onclick="exportClusterDossier('html')">Export cluster dossier (HTML)</button>
+      </div>
+    </div>
+    <div id="analyticsSummary" class="analytics-summary"></div>
+    <div id="analyticsPrimaryView" class="analytics-view"></div>
+  </section>
 </main>
 
 <div id="demoModeModal" class="modal-overlay" aria-hidden="true">

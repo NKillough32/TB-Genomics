@@ -770,3 +770,113 @@ footer {
   .cic-form-grid { grid-template-columns: 1fr; }
   .cic-tabs { flex-wrap: wrap; }
 }
+
+/* -- Step 7: Visual Analytics ----------------------------------------------- */
+.analytics-controls {
+  display: grid;
+  gap: .65rem;
+  margin-bottom: .75rem;
+}
+
+.analytics-controls label {
+  display: grid;
+  gap: .25rem;
+  font-size: .85rem;
+  font-weight: 600;
+}
+
+.analytics-controls input {
+  max-width: 560px;
+}
+
+.analytics-threshold-grid {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(140px, 1fr));
+	gap: .55rem;
+	max-width: 760px;
+}
+
+.analytics-inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .45rem;
+}
+
+.analytics-inline-actions button {
+  width: auto;
+  margin: 0;
+}
+
+.analytics-summary {
+  margin: .5rem 0;
+}
+
+.analytics-view {
+  margin-top: .75rem;
+  border-top: 1px solid #e5e7eb;
+  padding-top: .75rem;
+}
+
+.analytics-table-wrap {
+  overflow-x: auto;
+}
+
+.snp-matrix th,
+.snp-matrix td {
+  text-align: center;
+  min-width: 34px;
+  font-size: .75rem;
+}
+
+.snp-self { background: #f8fafc; color: #334155; }
+.snp-close { background: #dcfce7; }
+.snp-mid { background: #fef9c3; }
+.snp-far { background: #fee2e2; }
+
+.analytics-image-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+  gap: .75rem;
+}
+
+.analytics-svg {
+  width: 100%;
+  max-width: 760px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  display: block;
+  margin-bottom: .65rem;
+}
+
+.map-svg {
+  background: linear-gradient(180deg, #eff6ff 0%, #dbeafe 100%);
+}
+
+.analytics-subcard {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: .6rem .75rem;
+  margin-bottom: .6rem;
+  background: #fff;
+}
+
+@media (max-width: 800px) {
+  .analytics-image-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+	.analytics-threshold-grid {
+		grid-template-columns: 1fr;
+	}
+
+  .analytics-inline-actions {
+    flex-direction: column;
+  }
+
+  .analytics-inline-actions button {
+    width: 100%;
+  }
+}

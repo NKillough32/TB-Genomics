@@ -614,6 +614,252 @@ function cicOpenReport(){
 	window.open(`${API}/cluster-investigations/${encodeURIComponent(_cicCurrentCluster)}/report`, '_blank');
 }
 
+// ── Step 7: Phylogenetic + Visual Analytics ────────────────────────────────
+function _analyticsClusterId(){
+	return (document.getElementById('analyticsClusterId')?.value||'').trim();
+}
+
+function _analyticsParams(){
+	const snpThreshold=Number(document.getElementById('analyticsSnpThreshold')?.value||12);
+	const epiWindowDays=Number(document.getElementById('analyticsEpiWindowDays')?.value||45);
+	const posteriorMin=Number(document.getElementById('analyticsPosteriorMin')?.value||0);
+	return {
+		snpThreshold: Number.isFinite(snpThreshold)?Math.max(1,Math.min(100,snpThreshold)):12,
+		epiWindowDays: Number.isFinite(epiWindowDays)?Math.max(1,Math.min(365,epiWindowDays)):45,
+		posteriorMin: Number.isFinite(posteriorMin)?Math.max(0,Math.min(1,posteriorMin)):0,
+	};
+}
+
+function selectAnalyticsCluster(){
+	const sel=document.getElementById('analyticsClusterSelect');
+	const input=document.getElementById('analyticsClusterId');
+	if(sel&&input) input.value=sel.value||'';
+}
+
+async function loadAnalyticsClusters(){
+	const sel=document.getElementById('analyticsClusterSelect');
+	if(!sel) return;
+	try{
+		const d=await fetch(`${API}/analytics/clusters`).then(r=>r.json());
+		sel.innerHTML='<option value="">All clusters</option>';
+		for(const c of (d.clusters||[])){
+			const o=document.createElement('option');
+			o.value=c.cluster_id;
+			o.textContent=`${c.cluster_short} (${c.case_count})`;
+			sel.appendChild(o);
+		}
+	}catch(_e){
+		// keep default option on backend issues
+	}
+}
+
+async function loadAnalyticsSnapshot(){
+	const box=document.getElementById('analyticsSummary');
+	box.textContent='Loading analytics snapshot...';
+	try{
+		const p=_analyticsParams();
+		const [timeline,geo,growth,cmp]=await Promise.all([
+			fetch(`${API}/analytics/timeline`).then(r=>r.json()),
+			fetch(`${API}/analytics/geo-map`).then(r=>r.json()),
+			fetch(`${API}/analytics/cluster-growth`).then(r=>r.json()),
+			fetch(`${API}/analytics/genomic-vs-epi?snp_threshold=${encodeURIComponent(p.snpThreshold)}&epi_window_days=${encodeURIComponent(p.epiWindowDays)}&posterior_min=${encodeURIComponent(p.posteriorMin)}`).then(r=>r.json()),
+		]);
+		const curves=(growth.curves||[]);
+		const topCurve=curves.length?curves[0]:null;
+		const s=cmp.summary||{};
+		box.innerHTML=`<div class="kpi-strip">
+			Timeline events: ${escapeHtml(timeline.event_count||0)} |
+			Mapped regions: ${escapeHtml(geo.point_count||0)} |
+			Tracked clusters: ${escapeHtml(curves.length)} |
+			Largest cluster: ${escapeHtml(topCurve?topCurve.cluster_short+' ('+topCurve.final_size+')':'n/a')}
+		</div>
+		<div class="kpi-strip">
+			Genomic vs epi pairs: ${escapeHtml(s.total_pairs||0)} |
+			Both supported: ${escapeHtml(s.both_supported||0)} |
+			Genomic only: ${escapeHtml(s.genomic_only||0)} |
+			Epi only: ${escapeHtml(s.epi_only||0)}
+		</div>`;
+	}catch(e){
+		box.textContent='Failed to load analytics snapshot: '+e;
+	}
+}
+
+async function loadSnpMatrixView(){
+	const view=document.getElementById('analyticsPrimaryView');
+	view.textContent='Loading SNP matrix...';
+	try{
+		const cid=_analyticsClusterId();
+		const p=_analyticsParams();
+		const base=`${API}/analytics/snp-matrix?snp_threshold=${encodeURIComponent(p.snpThreshold)}`;
+		const url=cid?`${base}&cluster_id=${encodeURIComponent(cid)}`:base;
+		const d=await fetch(url).then(r=>r.json());
+		if(!d.case_count){ view.textContent='No sequenced cases available for SNP matrix.'; return; }
+		let html=`<h4>SNP Distance Matrix (${escapeHtml(d.case_count)} cases)</h4><p class="hint">${escapeHtml(d.message||'')}</p>`;
+		html+='<div class="analytics-table-wrap"><table class="data-table snp-matrix"><thead><tr><th>Case</th>';
+		for(const sid of d.short_case_ids){ html+=`<th>${escapeHtml(sid)}</th>`; }
+		html+='</tr></thead><tbody>';
+		for(let i=0;i<d.case_count;i++){
+			html+=`<tr><th>${escapeHtml(d.short_case_ids[i])}</th>`;
+			for(let j=0;j<d.case_count;j++){
+				const val=d.matrix[i][j];
+				const cls=val===0?'snp-self':(val<=12?'snp-close':(val<=25?'snp-mid':'snp-far'));
+				html+=`<td class="${cls}">${escapeHtml(val)}</td>`;
+			}
+			html+='</tr>';
+		}
+		html+='</tbody></table></div>';
+		view.innerHTML=html;
+	}catch(e){
+		view.textContent='Failed to load SNP matrix: '+e;
+	}
+}
+
+async function loadPhyloTreeView(){
+	const view=document.getElementById('analyticsPrimaryView');
+	view.textContent='Loading phylogenetic view...';
+	try{
+		const d=await fetch(`${API}/analytics/phylo-tree`).then(r=>r.json());
+		const g=d.graph||{};
+		let html='<h4>Phylogenetic Tree Visualisation</h4>';
+		html+=`<div class="kpi-strip">Nodes: ${escapeHtml(g.node_count||0)} | Edges: ${escapeHtml(g.edge_count||0)}</div>`;
+		html+='<div class="analytics-image-row">';
+		html+=`<img class="media-plot" src="${escapeAttr(API+(d.images?.outbreaker_tree||''))}" alt="outbreaker tree"/>`;
+		html+=`<img class="media-plot" src="${escapeAttr(API+(d.images?.outbreaker_phylo||''))}" alt="phylogenetic tree"/>`;
+		html+='</div>';
+		if(Array.isArray(g.edges)&&g.edges.length){
+			html+='<h5>Top inferred transmission links</h5><table class="data-table"><tr><th>Source</th><th>Target</th><th>Posterior</th><th>Confidence</th></tr>';
+			for(const e of g.edges.slice(0,20)){
+				html+=`<tr><td>${escapeHtml(String(e.source).slice(0,8))}</td><td>${escapeHtml(String(e.target).slice(0,8))}</td><td>${escapeHtml((e.posterior||0).toFixed(3))}</td><td>${escapeHtml(e.confidence||'')}</td></tr>`;
+			}
+			html+='</table>';
+		}
+		view.innerHTML=html;
+	}catch(e){
+		view.textContent='Failed to load phylogenetic view: '+e;
+	}
+}
+
+function _sparkline(points, valueKey){
+	if(!points.length) return '';
+	const w=700,h=170,pad=26;
+	const vals=points.map(p=>Number(p[valueKey]||0));
+	const max=Math.max(1,...vals);
+	const step=points.length>1?(w-pad*2)/(points.length-1):0;
+	const path=points.map((p,i)=>{
+		const x=pad+i*step;
+		const y=h-pad-(Number(p[valueKey]||0)/max)*(h-pad*2);
+		return `${i===0?'M':'L'}${x},${y}`;
+	}).join(' ');
+	const labels=points.map((p,i)=>{
+		if(i%Math.max(1,Math.floor(points.length/8))!==0 && i!==points.length-1) return '';
+		const x=pad+i*step;
+		return `<text x="${x}" y="${h-7}" text-anchor="middle" font-size="10" fill="#6b7280">${escapeHtml((p.month||'').slice(2))}</text>`;
+	}).join('');
+	return `<svg viewBox="0 0 ${w} ${h}" class="analytics-svg">
+		<line x1="${pad}" y1="${h-pad}" x2="${w-pad}" y2="${h-pad}" stroke="#d1d5db"/>
+		<path d="${path}" fill="none" stroke="#1d4ed8" stroke-width="2.5"/>
+		${labels}
+	</svg>`;
+}
+
+async function loadTimelineView(){
+	const view=document.getElementById('analyticsPrimaryView');
+	view.textContent='Loading timeline...';
+	try{
+		const d=await fetch(`${API}/analytics/timeline`).then(r=>r.json());
+		const months=d.monthly_counts||[];
+		let html='<h4>Specimen Timeline by Month</h4>';
+		html+=_sparkline(months,'count');
+		html+='<table class="data-table"><tr><th>Month</th><th>Cases</th></tr>';
+		for(const m of months){ html+=`<tr><td>${escapeHtml(m.month)}</td><td>${escapeHtml(m.count)}</td></tr>`; }
+		html+='</table>';
+		view.innerHTML=html;
+	}catch(e){
+		view.textContent='Failed to load timeline: '+e;
+	}
+}
+
+function _geoToSvg(lon,lat,w,h){
+	const x=((Number(lon)+180)/360)*w;
+	const y=((90-Number(lat))/180)*h;
+	return {x,y};
+}
+
+async function loadGeoMapView(){
+	const view=document.getElementById('analyticsPrimaryView');
+	view.textContent='Loading geography map...';
+	try{
+		const d=await fetch(`${API}/analytics/geo-map`).then(r=>r.json());
+		const points=d.points||[];
+		const w=760,h=340;
+		const max=Math.max(1,...points.map(p=>Number(p.case_count||0)));
+		let dots='';
+		for(const p of points){
+			const c=_geoToSvg(p.lon,p.lat,w,h);
+			const r=3+(Number(p.case_count||0)/max)*10;
+			dots+=`<circle cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="${r.toFixed(1)}" fill="#0ea5e9" fill-opacity="0.55" stroke="#0369a1"><title>${escapeHtml(p.region)}: ${escapeHtml(p.case_count)} cases</title></circle>`;
+		}
+		let html='<h4>Geography Map (region centroids)</h4>';
+		html+=`<svg viewBox="0 0 ${w} ${h}" class="analytics-svg map-svg"><rect x="0" y="0" width="${w}" height="${h}" fill="#eff6ff"/>${dots}</svg>`;
+		html+='<table class="data-table"><tr><th>Region</th><th>Cases</th><th>Clusters</th><th>Recent 90d</th></tr>';
+		for(const p of points.slice(0,20)){
+			html+=`<tr><td>${escapeHtml(p.region)}</td><td>${escapeHtml(p.case_count)}</td><td>${escapeHtml(p.cluster_count)}</td><td>${escapeHtml(p.recent_cases_90d)}</td></tr>`;
+		}
+		html+='</table>';
+		view.innerHTML=html;
+	}catch(e){
+		view.textContent='Failed to load map: '+e;
+	}
+}
+
+async function loadGrowthCurvesView(){
+	const view=document.getElementById('analyticsPrimaryView');
+	view.textContent='Loading cluster growth curves...';
+	try{
+		const d=await fetch(`${API}/analytics/cluster-growth`).then(r=>r.json());
+		const curves=d.curves||[];
+		if(!curves.length){ view.textContent='No cluster growth data available.'; return; }
+		let html='<h4>Cluster Growth Curves</h4>';
+		for(const c of curves.slice(0,6)){
+			html+=`<div class="analytics-subcard"><strong>${escapeHtml(c.cluster_short)}</strong> (${escapeHtml(c.final_size)} cases)`;
+			html+=_sparkline(c.points||[],'cumulative');
+			html+='</div>';
+		}
+		view.innerHTML=html;
+	}catch(e){
+		view.textContent='Failed to load growth curves: '+e;
+	}
+}
+
+async function loadGenomicVsEpiView(){
+	const view=document.getElementById('analyticsPrimaryView');
+	view.textContent='Loading genomic vs epi comparison...';
+	try{
+		const p=_analyticsParams();
+		const d=await fetch(`${API}/analytics/genomic-vs-epi?snp_threshold=${encodeURIComponent(p.snpThreshold)}&epi_window_days=${encodeURIComponent(p.epiWindowDays)}&posterior_min=${encodeURIComponent(p.posteriorMin)}`).then(r=>r.json());
+		const s=d.summary||{};
+		const cfg=d.parameters||{};
+		let html='<h4>Genomic vs Epidemiological Link Comparison</h4>';
+		html+=`<p class="hint">Using SNP <= ${escapeHtml(cfg.snp_threshold??p.snpThreshold)}, epi window ${escapeHtml(cfg.epi_window_days??p.epiWindowDays)} days, posterior >= ${escapeHtml((cfg.posterior_min??p.posteriorMin).toFixed ? (cfg.posterior_min??p.posteriorMin).toFixed(2) : (cfg.posterior_min??p.posteriorMin))}</p>`;
+		html+=`<div class="kpi-strip">Total: ${escapeHtml(s.total_pairs||0)} | Both: ${escapeHtml(s.both_supported||0)} | Genomic-only: ${escapeHtml(s.genomic_only||0)} | Epi-only: ${escapeHtml(s.epi_only||0)} | Neither: ${escapeHtml(s.neither||0)}</div>`;
+		html+='<table class="data-table"><tr><th>Pair</th><th>Posterior</th><th>SNP</th><th>Genomic</th><th>Epi</th><th>Category</th></tr>';
+		for(const p of (d.pairs||[]).slice(0,40)){
+			html+=`<tr><td>${escapeHtml(p.pair)}</td><td>${escapeHtml((p.posterior||0).toFixed(3))}</td><td>${escapeHtml(p.snp_distance??'n/a')}</td><td>${p.genomic_supported?'Y':'N'}</td><td>${p.epi_supported?'Y':'N'}</td><td>${escapeHtml(p.category)}</td></tr>`;
+		}
+		html+='</table>';
+		if(Array.isArray(d.notes)&&d.notes.length){ html+=`<p class="hint">${escapeHtml(d.notes.join(' '))}</p>`; }
+		view.innerHTML=html;
+	}catch(e){
+		view.textContent='Failed to load genomic vs epi view: '+e;
+	}
+}
+
+function exportClusterDossier(format){
+	const cid=_analyticsClusterId();
+	if(!cid){ alert('Enter a cluster UUID first.'); return; }
+	window.open(`${API}/analytics/cluster-dossier/${encodeURIComponent(cid)}/export?format=${encodeURIComponent(format)}`,'_blank');
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function loadRegions(){
@@ -633,4 +879,4 @@ async function loadRegions(){
 		// Backend unavailable — leave placeholder only
 	}
 }
-(async()=>{try{await fetch(`${API}/`);document.getElementById('status').innerHTML='<li>✅ Backend running</li>';}catch{document.getElementById('status').innerHTML='<li>❌ Backend unavailable</li>';}refreshDemoModeStatus();loadRegions();loadKPIBanner();loadDataSafety();})();
+(async()=>{try{await fetch(`${API}/`);document.getElementById('status').innerHTML='<li>✅ Backend running</li>';}catch{document.getElementById('status').innerHTML='<li>❌ Backend unavailable</li>';}refreshDemoModeStatus();loadRegions();loadKPIBanner();loadDataSafety();loadAnalyticsClusters();})();

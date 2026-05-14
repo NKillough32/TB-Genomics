@@ -1,4 +1,8 @@
-from scripts.run_lineage_dr_validation import _discover_fasta_inputs, _import_status
+from scripts.run_lineage_dr_validation import (
+    _discover_fasta_inputs,
+    _import_status,
+    _resistance_validation_record,
+)
 
 
 def test_import_status_does_not_report_success_when_all_rows_skipped():
@@ -34,3 +38,35 @@ def test_discover_fasta_inputs_prefers_export_dna(monkeypatch, tmp_path):
     monkeypatch.delenv("TB_LINEAGE_DR_FASTA", raising=False)
 
     assert _discover_fasta_inputs() == [export_dna]
+
+
+def test_resistance_validation_suppresses_unusual_gene_drug_mapping():
+    record = _resistance_validation_record(
+        sample_id="case-1",
+        drug="pyrazinamide",
+        gene="gyrA",
+        mutation="A90V",
+        confidence="high",
+        predicted_drug_resistance={"pyrazinamide": "resistant"},
+        catalogue="local-test",
+    )
+
+    assert record["mapping_status"] == "unusual_gene_drug_mapping"
+    assert record["report_status"] == "suppressed"
+    assert record["clinical_status"] == "do_not_report_mapping_error"
+
+
+def test_resistance_validation_keeps_expected_gene_not_validated():
+    record = _resistance_validation_record(
+        sample_id="case-2",
+        drug="rifampicin",
+        gene="rpoB",
+        mutation="S450L",
+        confidence="high",
+        predicted_drug_resistance={"rifampicin": "resistant"},
+        catalogue="local-test",
+    )
+
+    assert record["mapping_status"] == "expected_gene"
+    assert record["report_status"] == "not_validated"
+    assert record["clinical_status"] == "requires_phenotypic_dst_confirmation"

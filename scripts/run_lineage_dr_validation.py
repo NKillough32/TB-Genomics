@@ -32,6 +32,7 @@ ROOT = Path(__file__).resolve().parent.parent
 EXPORTS = ROOT / "exports"
 UPLOADS = ROOT / "uploads"
 OUT_JSON = EXPORTS / "lineage_dr_validation.json"
+RESISTANCE_VALIDATION_JSON = EXPORTS / "resistance_validation.json"
 MAX_FASTA_SAMPLES = 10
 
 # Add project root to import path for direct script execution.
@@ -454,6 +455,226 @@ def _import_status(tool_name: str, imported: int, skipped: int) -> tuple[str, st
     if skipped:
         return "no_matching_cases", f"{tool_name} results were generated but none matched cases"
     return "no_results", f"No {tool_name} results available to import"
+
+
+def _normalise_token(value: object) -> str:
+    return "".join(ch for ch in str(value or "").lower() if ch.isalnum())
+
+
+def _expected_genes_for_drug(drug: object) -> list[str]:
+    """Local safety-screen map for obvious TB drug/gene parser errors."""
+    drug_text = str(drug or "").lower()
+    mapping = [
+        ("rifabutin", ["rpoB"]),
+        ("rifapentine", ["rpoB"]),
+        ("rifamp", ["rpoB"]),
+        ("isoniazid", ["katG", "inhA", "fabG1", "ahpC", "kasA"]),
+        ("prothionamide", ["ethA", "ethR", "inhA", "fabG1", "mshA"]),
+        ("ethionamide", ["ethA", "ethR", "inhA", "fabG1", "mshA"]),
+        ("pyrazinamide", ["pncA", "rpsA", "panD"]),
+        ("ethambutol", ["embB", "embA", "embC", "embR", "iniB"]),
+        ("moxifloxacin", ["gyrA", "gyrB"]),
+        ("levofloxacin", ["gyrA", "gyrB"]),
+        ("ciprofloxacin", ["gyrA", "gyrB"]),
+        ("ofloxacin", ["gyrA", "gyrB"]),
+        ("gatifloxacin", ["gyrA", "gyrB"]),
+        ("fluoroquinolone", ["gyrA", "gyrB"]),
+        ("fluoroquin", ["gyrA", "gyrB"]),
+        ("amikacin", ["rrs", "eis"]),
+        ("kanamycin", ["rrs", "eis"]),
+        ("capreomycin", ["rrs", "tlyA"]),
+        ("streptomycin", ["rpsL", "rrs", "gid"]),
+        ("bedaquiline", ["atpE", "Rv0678", "pepQ", "mmpL5", "mmpS5"]),
+        ("linezolid", ["rrl", "rplC"]),
+        ("clofazimine", ["Rv0678", "pepQ", "mmpL5", "mmpS5"]),
+        ("delamanid", ["ddn", "fgd1", "fbiA", "fbiB", "fbiC"]),
+        ("pretomanid", ["ddn", "fgd1", "fbiA", "fbiB", "fbiC", "Rv3547"]),
+        ("aminosalicylic", ["thyA", "folC", "thyX"]),
+        ("para-amino", ["thyA", "folC", "thyX"]),
+        ("terizidone", ["ald", "alr"]),
+        ("cycloserine", ["ald", "alr"]),
+        ("imipenem", ["blaC"]),
+        ("meropenem", ["blaC"]),
+        ("clavulanate", ["blaC"]),
+    ]
+    for marker, genes in mapping:
+        if marker in drug_text:
+            return genes
+    return []
+
+
+def _drug_gene_mapping_status(drug: object, gene: object) -> str:
+    expected = _expected_genes_for_drug(drug)
+    gene_text = _normalise_token(gene)
+    if not expected or not gene_text or gene_text == "na":
+        return "unknown_catalogue_mapping"
+    if any(_normalise_token(expected_gene) in gene_text for expected_gene in expected):
+        return "expected_gene"
+    return "unusual_gene_drug_mapping"
+
+
+def _coerce_json_value(value: object) -> Any:
+    if isinstance(value, (dict, list)):
+        return value
+    if value is None:
+        return None
+    try:
+        return json.loads(str(value))
+    except Exception:
+        return value
+
+
+def _iter_resistance_mutations(mutations: object):
+    mutations = _coerce_json_value(mutations)
+    if not mutations:
+        return
+
+    if isinstance(mutations, dict):
+        for drug, value in mutations.items():
+            if isinstance(value, list):
+                for item in value:
+                    if isinstance(item, dict):
+                        yield {
+                            "drug": str(item.get("drug") or drug),
+                            "mutation": str(item.get("mutation") or item.get("variant") or item.get("change") or item),
+                            "gene": str(item.get("gene") or "n/a"),
+                            "confidence": item.get("confidence") or item.get("support"),
+                        }
+                    else:
+                        yield {"drug": str(drug), "mutation": str(item), "gene": "n/a", "confidence": None}
+            elif isinstance(value, dict):
+                yield {
+                    "drug": str(value.get("drug") or drug),
+                    "mutation": str(value.get("mutation") or value.get("variant") or value.get("change") or value),
+                    "gene": str(value.get("gene") or "n/a"),
+                    "confidence": value.get("confidence") or value.get("support"),
+                }
+            else:
+                yield {"drug": str(drug), "mutation": str(value), "gene": "n/a", "confidence": None}
+        return
+
+    if isinstance(mutations, list):
+        for item in mutations:
+            if isinstance(item, dict):
+                yield {
+                    "drug": str(item.get("drug") or "n/a"),
+                    "mutation": str(item.get("mutation") or item.get("variant") or item.get("change") or item),
+                    "gene": str(item.get("gene") or "n/a"),
+                    "confidence": item.get("confidence") or item.get("support"),
+                }
+            else:
+                yield {"drug": "n/a", "mutation": str(item), "gene": "n/a", "confidence": None}
+
+
+def _resistance_validation_record(
+    *,
+    sample_id: str,
+    drug: str,
+    gene: str,
+    mutation: str,
+    confidence: object,
+    predicted_drug_resistance: object,
+    catalogue: str | None,
+) -> dict[str, Any]:
+    mapping_status = _drug_gene_mapping_status(drug, gene)
+    if mapping_status == "unusual_gene_drug_mapping":
+        report_status = "suppressed"
+        clinical_status = "do_not_report_mapping_error"
+    elif mapping_status == "expected_gene":
+        report_status = "not_validated"
+        clinical_status = "requires_phenotypic_dst_confirmation"
+    else:
+        report_status = "not_validated"
+        clinical_status = "requires_catalogue_review"
+
+    return {
+        "sample_id": sample_id,
+        "drug": drug,
+        "gene": gene,
+        "mutation": mutation,
+        "tool_confidence": confidence,
+        "predicted_drug_resistance": _coerce_json_value(predicted_drug_resistance),
+        "catalogue_version": catalogue,
+        "mapping_status": mapping_status,
+        "report_status": report_status,
+        "clinical_status": clinical_status,
+    }
+
+
+def _generate_resistance_validation_artifact(catalogue: str | None = None) -> dict[str, Any]:
+    db = SessionLocal()
+    records: list[dict[str, Any]] = []
+    try:
+        rows = db.execute(
+            text(
+                """
+                SELECT
+                    sample_id::text AS sample_id,
+                    resistance_mutations,
+                    predicted_drug_resistance,
+                    confidence_score
+                FROM tb_interpretation
+                WHERE resistance_mutations IS NOT NULL
+                AND resistance_mutations::text NOT IN ('null', '{}', '[]')
+                ORDER BY sample_id::text
+                """
+            )
+        ).mappings().all()
+
+        for row in rows:
+            for mut in _iter_resistance_mutations(row.get("resistance_mutations")):
+                records.append(
+                    _resistance_validation_record(
+                        sample_id=str(row.get("sample_id") or ""),
+                        drug=str(mut.get("drug") or "n/a"),
+                        gene=str(mut.get("gene") or "n/a"),
+                        mutation=str(mut.get("mutation") or "n/a"),
+                        confidence=mut.get("confidence") or row.get("confidence_score"),
+                        predicted_drug_resistance=row.get("predicted_drug_resistance"),
+                        catalogue=catalogue,
+                    )
+                )
+
+        summary = {
+            "total_mutation_calls": len(records),
+            "expected_gene_calls": sum(1 for r in records if r["mapping_status"] == "expected_gene"),
+            "unusual_gene_drug_mapping_calls": sum(1 for r in records if r["mapping_status"] == "unusual_gene_drug_mapping"),
+            "unknown_mapping_calls": sum(1 for r in records if r["mapping_status"] == "unknown_catalogue_mapping"),
+            "suppressed_calls": sum(1 for r in records if r["report_status"] == "suppressed"),
+            "validated_calls": 0,
+        }
+        payload = {
+            "generated_at": _iso_now(),
+            "status": "completed" if records else "no_mutation_calls",
+            "validation_scope": "local expected gene-drug mapping screen; clinical validation requires curated catalogue review and phenotypic DST",
+            "catalogue_version": catalogue,
+            "pipeline_validation_status": "not_validated_under_review",
+            "summary": summary,
+            "records": records,
+        }
+    except Exception as exc:
+        payload = {
+            "generated_at": _iso_now(),
+            "status": "failed",
+            "message": str(exc),
+            "validation_scope": "local expected gene-drug mapping screen",
+            "catalogue_version": catalogue,
+            "pipeline_validation_status": "not_validated_under_review",
+            "summary": {
+                "total_mutation_calls": 0,
+                "expected_gene_calls": 0,
+                "unusual_gene_drug_mapping_calls": 0,
+                "unknown_mapping_calls": 0,
+                "suppressed_calls": 0,
+                "validated_calls": 0,
+            },
+            "records": [],
+        }
+    finally:
+        db.close()
+
+    RESISTANCE_VALIDATION_JSON.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return payload
 
 
 def _extract_lineage_and_resistance(result_json: Path) -> dict[str, Any]:
@@ -1293,6 +1514,7 @@ def main() -> None:
     docker_fallback_enabled = os.getenv("TBPROFILER_DOCKER_FALLBACK", "1") == "1"
     wsl_fallback_enabled = os.getenv("TBPROFILER_WSL_FALLBACK", "1") == "1"
     wsl_env_name = os.getenv("TBPROFILER_WSL_ENV", "tbtools")
+    resistance_catalogue = os.getenv("TB_RESISTANCE_CATALOGUE", "WHO TB catalogue v2 (2023)")
 
     tbprofiler_exec = _which_many(["tb-profiler", "tb-profiler.exe", "tb_profiler", "tb-profiler-tools"])
     mykrobe_exec = _which_many(["mykrobe", "mykrobe.exe"])
@@ -1533,6 +1755,8 @@ def main() -> None:
     if tbprofiler_run["status"] == "completed" and tbprofiler_run["output_jsons"]:
         tbprofiler_import = _import_tbprofiler_results(tbprofiler_run["output_jsons"])
 
+    resistance_validation = _generate_resistance_validation_artifact(resistance_catalogue)
+
     # Discordance check: flag samples where both tools ran but disagree on R/S.
     dr_concordance: list[dict[str, Any]] = []
     if tbprofiler_run["output_jsons"] and mykrobe_run["output_jsons"]:
@@ -1597,6 +1821,12 @@ def main() -> None:
         "mykrobe_run": mykrobe_run,
         "mykrobe_wsl_run": mykrobe_wsl_run,
         "mykrobe_db_import": mykrobe_import,
+        "resistance_validation": {
+            "status": resistance_validation.get("status"),
+            "artifact": str(RESISTANCE_VALIDATION_JSON.as_posix()),
+            "summary": resistance_validation.get("summary", {}),
+            "pipeline_validation_status": resistance_validation.get("pipeline_validation_status"),
+        },
         "dr_concordance": {
             "samples_compared": len(dr_concordance),
             "all_concordant": all(d["concordant"] for d in dr_concordance) if dr_concordance else None,

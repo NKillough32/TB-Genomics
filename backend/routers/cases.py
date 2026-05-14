@@ -349,11 +349,12 @@ def _normalise_token(value: object) -> str:
 
 
 def _expected_genes_for_drug(drug: object) -> list[str]:
-    """Return the WHO TB Mutation Catalogue v2 expected resistance genes for a given drug.
+    """Return the local expected-gene screen used to catch obvious drug mapping errors.
 
     Ordered from most-specific to least-specific substring so that e.g.
     "rifabutin" is matched before the broader "rifamp" prefix.
-    Gene names are case-sensitive per standard TB nomenclature.
+    This is a conservative report safety screen, not a substitute for a curated
+    WHO catalogue lookup or formal pipeline validation.
     """
     drug_text = str(drug or "").lower()
     # (substring_marker, [expected_genes])  — first match wins
@@ -430,6 +431,51 @@ def _drug_gene_status_label(drug: object, gene: object) -> str:
     if compatibility == "check_catalogue":
         return "Unusual gene-drug mapping"
     return "Unknown / catalogue not available"
+
+
+def _resistance_validation_key(sample_id: object, drug: object, gene: object, mutation: object) -> tuple[str, str, str, str]:
+    return (
+        str(sample_id or "").strip().lower(),
+        _normalise_token(drug),
+        _normalise_token(gene),
+        _normalise_token(mutation),
+    )
+
+
+def _resistance_validation_lookup(validation_data: object) -> dict[tuple[str, str, str, str], dict]:
+    if not isinstance(validation_data, dict):
+        return {}
+    records = validation_data.get("records")
+    if not isinstance(records, list):
+        return {}
+    lookup: dict[tuple[str, str, str, str], dict] = {}
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        key = _resistance_validation_key(
+            record.get("sample_id"),
+            record.get("drug"),
+            record.get("gene"),
+            record.get("mutation"),
+        )
+        lookup[key] = record
+    return lookup
+
+
+def _resistance_report_status_label(validation_record: object, drug: object, gene: object) -> str:
+    if isinstance(validation_record, dict):
+        status = str(validation_record.get("report_status") or "").strip().lower()
+        if status == "suppressed":
+            return "Suppressed"
+        if status == "validated":
+            return "Validated"
+        if status == "not_validated":
+            return "Not validated"
+
+    compatibility = _drug_gene_compatibility(drug, gene)
+    if compatibility == "check_catalogue":
+        return "Suppressed"
+    return "Not validated"
 
 
 def _pair_key(left: str, right: str) -> tuple[str, str]:
@@ -946,6 +992,7 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
     summary_data = _load_export_json("outbreaker_summary.json")
     transmission_data = _load_export_json("transmission_network.json")
     lineage_dr_data = _load_export_json("lineage_dr_validation.json")
+    resistance_validation_data = _load_export_json("resistance_validation.json")
     secondary_validation_data = _load_export_json("secondary_engine_validation.json")
     method_comparison_data = _load_export_json("cluster_method_comparison.json")
     sequence_summary_data = _load_export_json("sequence_clustering_summary.json")
@@ -2206,6 +2253,22 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
         run_qc_html = '<p class="muted">Run-level QC unavailable — reported_at or run_id not recorded.</p>'
 
     # 12. Drug-resistance mutation table
+    resistance_validation_lookup = _resistance_validation_lookup(resistance_validation_data)
+    resistance_validation_summary = (resistance_validation_data or {}).get("summary") if isinstance(resistance_validation_data, dict) else {}
+    if not isinstance(resistance_validation_summary, dict):
+        resistance_validation_summary = {}
+    dr_validation_summary_html = ""
+    if resistance_validation_data:
+        dr_validation_summary_html = (
+            "<div class='callout callout-warn'>"
+            "<strong>Local resistance validation artifact:</strong> "
+            f"{_safe_html(str((resistance_validation_data or {}).get('status') or 'unknown'))}. "
+            f"Mutation calls: {_safe_html(str(resistance_validation_summary.get('total_mutation_calls', 0)))}; "
+            f"suppressed: {_safe_html(str(resistance_validation_summary.get('suppressed_calls', 0)))}; "
+            f"validated: {_safe_html(str(resistance_validation_summary.get('validated_calls', 0)))}. "
+            "Suppressed calls must not be reported operationally; not-validated calls require phenotype/catalogue review before clinical use."
+            "</div>"
+        )
     mut_rows_html = ""
     mut_count = 0
     for base in mutation_rows_raw:
@@ -2213,13 +2276,20 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
         for mut in _iter_resistance_mutations(base.get("resistance_mutations")):
             drug = str(mut.get("drug") or "n/a")
             gene = str(mut.get("gene") or "n/a")
+            mutation = str(mut.get("mutation") or "n/a")
+            validation_record = resistance_validation_lookup.get(
+                _resistance_validation_key(case_id_mut, drug, gene, mutation)
+            )
             validity = _drug_gene_status_label(drug, gene)
+            report_status = _resistance_report_status_label(validation_record, drug, gene)
             pred_text = _resistance_profile_text(base.get("predicted_drug_resistance"))
             badge_class = "badge-green" if "Valid" in validity else ("badge-red" if "Unusual" in validity else "badge-grey")
+            report_badge_class = "badge-red" if report_status == "Suppressed" else ("badge-green" if report_status == "Validated" else "badge-amber")
             mut_rows_html += (f"<tr><td class='mono'>{_safe_html(_short_case_id(case_id_mut))}</td>"
-                              f"<td>{_safe_html(drug)}</td><td class='mono'>{_safe_html(str(mut.get('mutation','n/a')))}</td>"
+                              f"<td>{_safe_html(drug)}</td><td class='mono'>{_safe_html(mutation)}</td>"
                               f"<td class='mono'>{_safe_html(gene)}</td>"
                               f"<td><span class='badge {badge_class}'>{_safe_html(validity)}</span></td>"
+                              f"<td><span class='badge {report_badge_class}'>{_safe_html(report_status)}</span></td>"
                               f"<td>{_safe_html(str(mut.get('confidence','n/a')))}</td>"
                               f"<td>{_safe_html(pred_text)}</td></tr>")
             mut_count += 1
@@ -2229,8 +2299,8 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
             break
     dr_table_html = ""
     if mut_rows_html:
-        dr_table_html = (f"<div class='tbl-wrap'><table><thead><tr><th>Case</th><th>Drug</th><th>Mutation</th>"
-                         f"<th>Gene</th><th>Gene-drug status</th><th>Confidence</th><th>Predicted profile</th>"
+        dr_table_html = (f"{dr_validation_summary_html}<div class='tbl-wrap'><table><thead><tr><th>Case</th><th>Drug</th><th>Mutation</th>"
+                         f"<th>Gene</th><th>Gene-drug status</th><th>Report status</th><th>Confidence</th><th>Predicted profile</th>"
                          f"</tr></thead><tbody>{mut_rows_html}</tbody></table></div>")
     else:
         dr_table_html = '<p class="muted">No structured resistance-mutation details found.</p>'
@@ -2475,6 +2545,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
   <details><summary>Transmission network artifact</summary><div><pre>{_safe_html(json.dumps(transmission_data, indent=2, default=str) if transmission_data else 'No artifact found.')}</pre></div></details>
   <details><summary>Sequence clustering summary</summary><div><pre>{_safe_html(json.dumps(sequence_summary_data, indent=2, default=str) if sequence_summary_data else 'No artifact found.')}</pre></div></details>
   <details><summary>Lineage/DR validation</summary><div><pre>{_safe_html(json.dumps(lineage_dr_data, indent=2, default=str) if lineage_dr_data else 'No artifact found.')}</pre></div></details>
+  <details><summary>Resistance validation</summary><div><pre>{_safe_html(json.dumps(resistance_validation_data, indent=2, default=str) if resistance_validation_data else 'No artifact found.')}</pre></div></details>
 </div>"""
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -2708,17 +2779,18 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
     <section class="card" id="mutations">
       <h2>Drug-resistance mutation details</h2>
       <div class="card card-alert" style="border-width:2px;padding:1rem;margin-bottom:.9rem">
-        <strong>&#128683; BLOCKING SAFETY ISSUE &#8212; Drug-resistance pipeline validation required before any clinical or operational use.</strong><br>
-        Unusual gene-drug mappings have been detected (e.g. <em>gyrA</em> linked to pyrazinamide, <em>embB</em> linked to fluoroquinolones, <em>pncA</em> linked to rifampicin). These indicate a likely bioinformatics pipeline data-mapping error.
+        <strong>&#128683; BLOCKING SAFETY ISSUE &#8212; Local drug-resistance pipeline validation required before any clinical or operational use.</strong><br>
+        This is an internal report safety screen, not wording or case-level interpretation supplied directly by WHO. Unusual gene-drug mappings have been detected (e.g. <em>gyrA</em> linked to pyrazinamide, <em>embB</em> linked to fluoroquinolones, <em>pncA</em> linked to rifampicin). These indicate a likely local bioinformatics pipeline data-mapping error.
         <ul style="margin:.5rem 0 .4rem 1.2rem;font-size:.87rem">
-          <li>All resistance calls with <span class="badge badge-red">Unusual gene-drug mapping</span> are classified as <strong><span class="badge badge-red">Suppressed</span></strong> &#8212; must not be reported, acted on, or shared until the pipeline is validated.</li>
-          <li>Resistance calls with <span class="badge badge-green">Valid expected gene</span> are classified as <strong><span class="badge badge-amber">Not validated</span></strong> &#8212; require phenotypic DST confirmation before clinical use.</li>
+          <li>All resistance calls with <span class="badge badge-red">Unusual gene-drug mapping</span> are classified by this local report as <strong><span class="badge badge-red">Suppressed</span></strong> &#8212; must not be reported, acted on, or shared until the pipeline is validated.</li>
+          <li>Resistance calls with <span class="badge badge-green">Valid expected gene</span> are classified by this local report as <strong><span class="badge badge-amber">Not validated</span></strong> &#8212; require phenotypic DST confirmation before clinical use.</li>
           <li>No resistance call in this report should be treated as <strong>Validated</strong> until a formal pipeline audit is complete and phenotypic DST results are available.</li>
         </ul>
         Quarantine all affected samples. Notify the bioinformatics lead immediately. Do not include resistance findings from this report in patient records or MDT summaries until resolved.<br>
-        <span style="font-size:.82rem;color:var(--muted)">Catalogue: <strong>{_safe_html(resist_cat or 'Not recorded &#8212; required')}</strong> &nbsp;&middot;&nbsp; Pipeline validation status: <span class="badge badge-red">Not validated &#8212; under review</span></span>
+        <span style="font-size:.82rem;color:var(--muted)">Configured resistance catalogue/version metadata: <strong>{_safe_html(resist_cat or 'Not recorded &#8212; required')}</strong> &nbsp;&middot;&nbsp; Local pipeline validation status: <span class="badge badge-red">Not validated &#8212; under review</span></span>
       </div>
-      <details open><summary>Gene-drug reference mapping</summary><div>
+      <details open><summary>Local expected gene-drug screen</summary><div>
+        <p class="muted">This table is a conservative local screen for obvious mapping errors. It is not a complete WHO catalogue extract and does not validate individual resistance calls.</p>
         <div class="tbl-wrap"><table><thead><tr><th>Drug</th><th>Expected genes</th></tr></thead><tbody>
           <tr><td>Rifampicin</td><td>rpoB</td></tr>
           <tr><td>Isoniazid</td><td>katG, inhA, fabG1</td></tr>
@@ -2999,6 +3071,7 @@ def outbreak_report(db: Session = Depends(get_db)):
             return None
 
     lineage_dr_data = load_json_artifact("lineage_dr_validation.json")
+    resistance_validation_data = load_json_artifact("resistance_validation.json")
     secondary_validation_data = load_json_artifact("secondary_engine_validation.json")
     method_comparison_data = load_json_artifact("cluster_method_comparison.json")
     sequence_summary_data = load_json_artifact("sequence_clustering_summary.json")
@@ -3299,20 +3372,26 @@ def outbreak_report(db: Session = Depends(get_db)):
     ).mappings().all()
 
     mutation_validation_rows = []
+    resistance_validation_lookup = _resistance_validation_lookup(resistance_validation_data)
     for row in mutation_rows_raw:
         predicted_text = _resistance_profile_text(row.get("predicted_drug_resistance"))
         for mut in _iter_resistance_mutations(row.get("resistance_mutations")):
             gene = str(mut.get("gene") or "n/a")
             drug = str(mut.get("drug") or "n/a")
+            mutation = str(mut.get("mutation") or "n/a")
+            validation_record = resistance_validation_lookup.get(
+                _resistance_validation_key(row.get("case_id"), drug, gene, mutation)
+            )
             validation = _drug_gene_compatibility(drug, gene)
             mutation_validation_rows.append(
                 {
                     "case_id": str(row.get("case_id") or ""),
                     "drug": drug,
-                    "mutation": str(mut.get("mutation") or "n/a"),
+                    "mutation": mutation,
                     "gene": gene,
                     "confidence": str(mut.get("confidence") or "n/a"),
                     "validation": validation,
+                    "report_status": _resistance_report_status_label(validation_record, drug, gene),
                     "expected_genes": ", ".join(_expected_genes_for_drug(drug)) or "n/a",
                     "predicted_text": predicted_text,
                     "phenotypic_dst": "pending",
@@ -5160,7 +5239,8 @@ def outbreak_report(db: Session = Depends(get_db)):
     story.append(Paragraph(
         "WARNING: The mapping between predicted mutations and drug resistance is preliminary. "
         "All genomic resistance predictions must be confirmed by phenotypic DST (drug susceptibility testing) before clinical use. "
-        "Invalid gene-drug combinations are flagged below and should not be reported operationally until pipeline validation is complete.",
+        "Invalid gene-drug combinations are flagged by a local report safety screen and should not be reported operationally until pipeline validation is complete. "
+        "This screen is not a complete WHO catalogue extract and is not supplied directly by WHO.",
         section_note_style,
     ))
     # Minimum expected gene-drug mapping reference
@@ -5181,12 +5261,23 @@ def outbreak_report(db: Session = Depends(get_db)):
     gene_drug_ref_table.setStyle(standard_table_style(font_size=7.2, header=True))
     append_table_with_caption(
         gene_drug_ref_table,
-        "Minimum expected gene-drug mapping reference (WHO/standard TB resistance catalogue). "
-        "Pairings outside the Expected genes column indicate pipeline misconfiguration and must be resolved before clinical reporting. "
-        "Validate all calls against WHO TB mutation catalogue v2 or equivalent.",
+        "Minimum local expected gene-drug screen for obvious mapping errors. "
+        "Pairings outside the Expected genes column indicate possible local pipeline misconfiguration and must be resolved before clinical reporting. "
+        "Validate all calls against a curated resistance catalogue, formal pipeline audit, and phenotypic DST.",
         spacer_after=0.08,
     )
-    mutation_rows = [["Case", "Drug", "Mutation", "Gene", "Gene-drug status", "Confidence", "Predicted", "DST"]]
+    if isinstance(resistance_validation_data, dict):
+        rv_summary = resistance_validation_data.get("summary") if isinstance(resistance_validation_data.get("summary"), dict) else {}
+        story.append(Paragraph(
+            "Local resistance validation artifact: "
+            f"status={resistance_validation_data.get('status') or 'unknown'}; "
+            f"mutation calls={rv_summary.get('total_mutation_calls', 0)}; "
+            f"suppressed={rv_summary.get('suppressed_calls', 0)}; "
+            f"validated={rv_summary.get('validated_calls', 0)}. "
+            "Suppressed calls must not be reported operationally; not-validated calls require curated catalogue review and phenotypic DST before clinical use.",
+            section_note_style,
+        ))
+    mutation_rows = [["Case", "Drug", "Mutation", "Gene", "Gene-drug status", "Report status", "Confidence", "Predicted"]]
     for base in mutation_rows_raw:
         case_id = str(base.get("case_id") or "")
         predicted = base.get("predicted_drug_resistance")
@@ -5194,16 +5285,21 @@ def outbreak_report(db: Session = Depends(get_db)):
         for mut in _iter_resistance_mutations(base.get("resistance_mutations")):
             drug = str(mut.get("drug") or "n/a")
             gene = str(mut.get("gene") or "n/a")
+            mutation = str(mut.get("mutation") or "n/a")
+            validation_record = resistance_validation_lookup.get(
+                _resistance_validation_key(case_id, drug, gene, mutation)
+            )
             validity_display = _drug_gene_status_label(drug, gene)
+            report_status = _resistance_report_status_label(validation_record, drug, gene)
             mutation_rows.append([
                 _short_case_id(case_id),
                 drug,
-                str(mut.get("mutation") or "n/a"),
+                mutation,
                 gene,
                 validity_display,
+                report_status,
                 str(mut.get("confidence") or "n/a"),
                 predicted_text,
-                "not_available",
             ])
             if len(mutation_rows) >= 60:
                 break
@@ -5213,7 +5309,7 @@ def outbreak_report(db: Session = Depends(get_db)):
     if len(mutation_rows) > 1:
         mut_table = Table(
             wrap_rows(mutation_rows),
-            colWidths=fit_col_widths([0.72 * inch, 1.0 * inch, 0.95 * inch, 0.62 * inch, 1.15 * inch, 0.64 * inch, 0.95 * inch, 0.72 * inch], fill=True),
+            colWidths=fit_col_widths([0.68 * inch, 0.9 * inch, 0.9 * inch, 0.58 * inch, 1.08 * inch, 0.82 * inch, 0.58 * inch, 0.88 * inch], fill=True),
             repeatRows=1,
         )
         mut_table.setStyle(standard_table_style(font_size=6.2, header=True))

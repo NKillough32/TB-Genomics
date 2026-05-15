@@ -697,6 +697,9 @@ function _renderSynthesisClusterTable(clusters){
 async function loadTransmissionSynthesisOverview(){
 	const summary=document.getElementById('synthesisSummary');
 	const view=document.getElementById('synthesisPrimaryView');
+	const btn=document.getElementById('loadSynthesisBtn');
+	const originalBtnLabel=btn?.textContent || 'Load synthesis overview';
+	if(btn){ btn.disabled=true; btn.textContent='Loading synthesis…'; }
 	if(summary) summary.textContent='Loading synthesis overview...';
 	if(view) view.textContent='';
 	try{
@@ -736,6 +739,8 @@ async function loadTransmissionSynthesisOverview(){
 	}catch(e){
 		if(summary) summary.textContent='Failed to load synthesis overview: '+e;
 		if(view) view.textContent='';
+	}finally{
+		if(btn){ btn.disabled=false; btn.textContent=originalBtnLabel; }
 	}
 }
 
@@ -990,4 +995,4 @@ async function loadRegions(){
 		// Backend unavailable — leave placeholder only
 	}
 }
-(async()=>{try{await fetch(`${API}/`);document.getElementById('status').innerHTML='<li>✅ Backend running</li>';}catch{document.getElementById('status').innerHTML='<li>❌ Backend unavailable</li>';}refreshDemoModeStatus();loadRegions();loadKPIBanner();loadDataSafety();loadAnalyticsClusters();})();
+(async()=>{try{await fetch(`${API}/`);document.getElementById('status').innerHTML='<li>✅ Backend running</li>';}catch{document.getElementById('status').innerHTML='<li>❌ Backend unavailable</li>';}refreshDemoModeStatus();loadRegions();loadKPIBanner();loadDataSafety();loadAnalyticsClusters();loadTransmissionSynthesisOverview();})();

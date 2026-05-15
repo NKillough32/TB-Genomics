@@ -183,34 +183,95 @@ tryCatch({
     metric_vals <- as.numeric(seq_len(nrow(chain_df)))
   }
 
-  png("exports/outbreaker_trace.png", width = 1200, height = 800)
+  burnin_effective_for_plot <- min(burnin_iters, max(0, length(metric_vals) - 1))
+  post_metric_vals <- if (burnin_effective_for_plot < length(metric_vals)) {
+    metric_vals[(burnin_effective_for_plot + 1):length(metric_vals)]
+  } else {
+    metric_vals
+  }
+  metric_label <- ifelse(
+    is.na(metric_col), "Iteration index", paste0(toupper(metric_col), " value")
+  )
+  recent_window <- min(250, length(post_metric_vals))
+  early_mean <- if (length(post_metric_vals) > recent_window) {
+    mean(post_metric_vals[1:recent_window], na.rm = TRUE)
+  } else {
+    NA_real_
+  }
+  late_mean <- if (length(post_metric_vals) > recent_window) {
+    mean(tail(post_metric_vals, recent_window), na.rm = TRUE)
+  } else {
+    NA_real_
+  }
+  late_drift <- if (!is.na(early_mean) && abs(early_mean) > 0) {
+    abs(late_mean - early_mean) / abs(early_mean)
+  } else {
+    NA_real_
+  }
+  diagnostic_status <- if (!is.na(late_drift) && late_drift > 0.10) {
+    "Trace still drifting - repeat with longer chains"
+  } else {
+    "No strong late drift by simple mean check"
+  }
+
+  png("exports/outbreaker_trace.png", width = 1400, height = 900, res = 140)
+  par(mar = c(4.8, 5.2, 4.6, 1.5), family = "sans")
   plot(
     metric_vals,
     type = "l",
-    col = "#1f77b4",
-    lwd = 1.4,
+    col = "#2563eb",
+    lwd = 1.2,
     xlab = "Iteration",
-    ylab = ifelse(
-      is.na(metric_col), "Iteration Index", toupper(metric_col)
-    ),
-    main = "Outbreaker2 MCMC Trace"
+    ylab = metric_label,
+    main = "Outbreaker2 MCMC Trace",
+    cex.main = 1.15,
+    cex.lab = 0.95,
+    cex.axis = 0.85
   )
-  grid(col = "grey85")
+  grid(col = "grey88", lty = "dotted")
+  if (burnin_effective_for_plot > 0) {
+    abline(v = burnin_effective_for_plot, col = "#dc2626", lty = 2, lwd = 1.2)
+    legend(
+      "bottomright",
+      legend = c("Trace", "Burn-in cutoff"),
+      col = c("#2563eb", "#dc2626"),
+      lty = c(1, 2),
+      lwd = c(1.2, 1.2),
+      bty = "n",
+      cex = 0.82
+    )
+  }
+  mtext(diagnostic_status, side = 3, line = 0.35, cex = 0.78, col = "#475569")
   dev.off()
   cat("✓ Trace plot saved\n")
 
-  png("exports/outbreaker_hist.png", width = 1200, height = 800)
+  png("exports/outbreaker_hist.png", width = 1400, height = 900, res = 140)
+  par(mar = c(4.8, 5.2, 4.6, 1.5), family = "sans")
   hist(
-    metric_vals,
+    post_metric_vals,
     breaks = 40,
-    col = "#60a5fa",
+    col = "#93c5fd",
     border = "white",
-    main = "Outbreaker2 Posterior Distribution",
-    xlab = ifelse(
-      is.na(metric_col), "Iteration Index", toupper(metric_col)
-    )
+    main = "Outbreaker2 Posterior Distribution After Burn-in",
+    xlab = metric_label,
+    ylab = "Frequency",
+    cex.main = 1.15,
+    cex.lab = 0.95,
+    cex.axis = 0.85
   )
-  grid(col = "grey85")
+  grid(col = "grey88", lty = "dotted")
+  abline(v = mean(post_metric_vals, na.rm = TRUE), col = "#1d4ed8", lwd = 1.4)
+  legend(
+    "topleft",
+    legend = c("Posterior samples", "Mean"),
+    fill = c("#93c5fd", NA),
+    border = c("white", NA),
+    lty = c(NA, 1),
+    col = c(NA, "#1d4ed8"),
+    lwd = c(NA, 1.4),
+    bty = "n",
+    cex = 0.82
+  )
   dev.off()
   cat("✓ Histogram saved\n")
 
@@ -282,6 +343,8 @@ tryCatch({
     ),
     transmission_edges = length(network$edges),
     posterior_samples = network$posterior_samples,
+    mcmc_diagnostic_status = diagnostic_status,
+    mcmc_late_drift_fraction = ifelse(is.na(late_drift), NA_real_, late_drift),
     data_provenance = "real",
     analysis_engine = "outbreaker2",
     generated_at = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC")

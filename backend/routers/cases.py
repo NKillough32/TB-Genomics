@@ -1032,6 +1032,79 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
     method_comparison_data = _load_export_json("cluster_method_comparison.json")
     sequence_summary_data = _load_export_json("sequence_clustering_summary.json")
 
+    def _build_analysis_quality_warnings() -> str:
+        warnings: list[str] = []
+
+        if isinstance(summary_data, dict):
+            diagnostic_status = str(summary_data.get("mcmc_diagnostic_status") or "").strip()
+            if diagnostic_status and "drifting" in diagnostic_status.lower():
+                drift_fraction = summary_data.get("mcmc_late_drift_fraction")
+                drift_text = ""
+                try:
+                    drift_text = f" Late-chain drift estimate: {float(drift_fraction) * 100:.1f}%."
+                except Exception:
+                    drift_text = ""
+                warnings.append(
+                    "MCMC trace is still drifting. Treat transmission probabilities as exploratory "
+                    f"and repeat with longer chains before circulation.{drift_text}"
+                )
+
+        if isinstance(lineage_dr_data, dict):
+            engines = lineage_dr_data.get("engines") if isinstance(lineage_dr_data.get("engines"), dict) else {}
+            tb_profiler = engines.get("tb_profiler") if isinstance(engines.get("tb_profiler"), dict) else {}
+            mykrobe = engines.get("mykrobe") if isinstance(engines.get("mykrobe"), dict) else {}
+
+            tb_status = str(tb_profiler.get("status") or "").strip()
+            tb_status_ok = tb_status.lower() in {"ok", "available", "completed", "installed", "success"}
+            if tb_status and not tb_status_ok:
+                detail = str(tb_profiler.get("error") or tb_profiler.get("message") or "").strip()
+                warnings.append(
+                    "TBProfiler did not complete usable validation"
+                    + (f" ({tb_status}: {detail})." if detail else f" ({tb_status}).")
+                )
+
+            mykrobe_status = str(mykrobe.get("status") or "").strip()
+            mykrobe_ok = mykrobe_status.lower() in {"ok", "available", "completed", "installed", "success"}
+            if mykrobe_status and not mykrobe_ok:
+                warnings.append(f"Mykrobe validation is unavailable ({mykrobe_status}).")
+
+            dr_concordance = lineage_dr_data.get("dr_concordance")
+            if isinstance(dr_concordance, dict):
+                compared = dr_concordance.get("samples_compared")
+                try:
+                    compared_count = int(compared or 0)
+                except Exception:
+                    compared_count = 0
+                if compared_count == 0:
+                    warnings.append(
+                        "No samples were compared for drug-resistance concordance. "
+                        "Resistance heatmaps remain useful for review, but are not externally validated."
+                    )
+
+        if isinstance(method_comparison_data, dict):
+            try:
+                precision = float(method_comparison_data.get("precision_sequence_given_outbreaker"))
+            except Exception:
+                precision = None
+            if precision is not None and precision < 0.5:
+                warnings.append(
+                    "Sequence cluster and outbreaker assignments have low overlap "
+                    f"(precision {precision:.2f}). Review model-only links before operational escalation."
+                )
+
+        if not warnings:
+            return ""
+
+        items = "".join(f"<li>{_safe_html(item)}</li>" for item in warnings)
+        return (
+            '<div class="callout callout-warn" style="margin-top:.7rem">'
+            '<strong>Analysis quality checks need review.</strong>'
+            f'<ul class="compact-list">{items}</ul>'
+            '</div>'
+        )
+
+    analysis_quality_warnings_html = _build_analysis_quality_warnings()
+
     try:
         kpi_data = surveillance_kpis(weeks=12, db=db)
     except Exception as exc:
@@ -1476,7 +1549,8 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
         "outbreaker_tree": (
             "Posterior Transmission Tree",
             "Arrows show the most probable who-infected-whom direction from outbreaker2 posterior "
-            "marginal modes. These are probabilistic hypotheses, not confirmed routes. "
+            "marginal modes. Edge colour and width show posterior support; the embedded legend maps "
+            "support bands and cluster colours. These are probabilistic hypotheses, not confirmed routes. "
             "Validate each link with pairwise SNP distance ≤12 and epidemiological corroboration "
             "before operational action.",
         ),
@@ -1490,7 +1564,8 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
         "outbreaker_resistance": (
             "Drug Resistance Profile Heatmap",
             "Rows = case isolates, columns = drug classes. "
-            "Green = susceptible, yellow = intermediate, red = resistant. "
+            "Rows are sorted by resistance burden. Grey = no call, green = susceptible, "
+            "yellow = intermediate, red = resistant. "
             "All genomic resistance predictions must be confirmed by phenotypic DST before clinical use.",
         ),
     }
@@ -1861,12 +1936,12 @@ details[open] summary::before{content:'▼ '}
 details > div{padding:.9rem 1rem}
 
 /* ── Figures ── */
-.figures-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.2rem;margin:.6rem 0}
-.fig-card{border:1px solid var(--rule);border-radius:10px;background:#fff;overflow:hidden;display:flex;flex-direction:column;transition:box-shadow .2s}
+.figures-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:1.2rem;margin:.6rem 0}
+.fig-card{border:1px solid var(--rule);border-radius:8px;background:#fff;overflow:hidden;display:flex;flex-direction:column;transition:box-shadow .2s}
 .fig-card:hover{box-shadow:0 6px 20px rgba(21,38,64,.12)}
-.fig-img-wrap{position:relative;background:#f8fafc;overflow:hidden;line-height:0}
+.fig-img-wrap{position:relative;background:#fff;overflow:auto;line-height:0}
 .fig-img{width:100%;height:auto;display:block;cursor:zoom-in;transition:transform .25s}
-.fig-card:hover .fig-img{transform:scale(1.02)}
+.fig-card:hover .fig-img{transform:scale(1.01)}
 .fig-zoom-btn{position:absolute;bottom:.4rem;right:.4rem;background:rgba(29,53,87,.82);color:#fff;border:none;border-radius:6px;padding:.3rem .45rem;font-size:.85rem;cursor:pointer;line-height:1;opacity:0;transition:opacity .2s}
 .fig-card:hover .fig-zoom-btn{opacity:1}
 .fig-card figcaption{padding:.65rem .75rem .7rem;flex:1;display:flex;flex-direction:column;gap:.25rem}
@@ -1876,8 +1951,10 @@ details > div{padding:.9rem 1rem}
 .fig-dl:hover{text-decoration:underline}
 .figure-missing{font-style:italic;color:var(--muted);padding:.5rem 0}
 .fig-inline{margin:.75rem 0}
-.fig-full .fig-img-wrap{max-height:480px;overflow:hidden}
-.fig-full .fig-img{object-fit:contain;max-height:480px;width:100%}
+.fig-full .fig-img-wrap{max-height:none;overflow:auto}
+.fig-full .fig-img{object-fit:contain;max-height:720px;width:100%;padding:.35rem}
+.fig-thumb .fig-img-wrap{height:240px}
+.fig-thumb .fig-img{height:240px;object-fit:contain;padding:.35rem}
 
 /* ── Lightbox ── */
 dialog.lb{border:none;border-radius:14px;padding:0;max-width:96vw;max-height:96vh;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.55);background:#111}
@@ -1898,6 +1975,8 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
 .callout{background:var(--teal-bg);border-left:4px solid var(--teal);border-radius:0 8px 8px 0;padding:.7rem 1rem;margin:.5rem 0;font-size:.87rem}
 .callout-warn{background:var(--amber-bg);border-left-color:var(--amber)}
 .callout-alert{background:var(--alert-bg);border-left-color:var(--alert)}
+.compact-list{margin:.45rem 0 0 1.1rem;padding:0}
+.compact-list li{margin:.22rem 0}
 .section-note{background:var(--cloud);border:1px solid var(--sky);border-radius:8px;padding:.65rem .9rem;margin:.5rem 0;font-size:.84rem;color:var(--ink)}
 .tag{display:inline-flex;align-items:center;gap:.25rem;background:var(--cloud);border:1px solid var(--rule);border-radius:6px;padding:.1rem .45rem;font-size:.72rem;font-weight:600;color:var(--muted);margin:.1rem}
 
@@ -2790,6 +2869,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
     <section class="card" id="executive">
       <h2>Executive summary</h2>
       {dashboard_html}
+      {analysis_quality_warnings_html}
       {_qc_warning_html}{_snp_warning_html}{_dr_unlinked_warning_html}{_dr_skipped_warning_html}{'<div class="callout callout-alert"><strong>DRAFT REPORT:</strong> Missing reproducibility fields: ' + _safe_html(', '.join(missing_repro)) + '. External circulation is blocked until these are populated.</div>' if missing_repro else '<div class="callout"><strong>Artifact completeness gate passed.</strong> Reproducibility metadata and appendices are present. Operational use still requires MDT, QC, and information-governance review.</div>'}
     </section>
 
@@ -2827,6 +2907,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
     <section class="card" id="analysis">
       <h2>outbreaker2 analysis summary</h2>
       {analysis_html}
+      {analysis_quality_warnings_html}
       <div class="section-note" style="margin-top:.7rem">
         <strong>How to interpret:</strong> Pairs with high posterior transmission probability are model-prioritised hypotheses only.
         They should not be interpreted as direct transmission unless supported by pairwise SNP distance ≤12, QC pass status, and epidemiological corroboration.

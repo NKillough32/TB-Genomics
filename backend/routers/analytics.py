@@ -8,6 +8,11 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from backend.database import SessionLocal
+from backend.synthesis.transmission_synthesis import (
+    SynthesisConfig,
+    build_cluster_risk_summary,
+    build_transmission_synthesis,
+)
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
@@ -499,3 +504,83 @@ th,td{{border-bottom:1px solid #eee;padding:6px;text-align:left;}}
 </div></body></html>"""
     headers = {"Content-Disposition": f"attachment; filename=cluster_dossier_{cluster_id[:8]}.html"}
     return HTMLResponse(content=html, headers=headers)
+
+
+@router.get("/transmission-synthesis")
+def transmission_synthesis(
+    min_posterior: float = Query(0.0, ge=0.0, le=1.0),
+    low_snp_threshold: int = Query(12, ge=1, le=100),
+    high_snp_contradiction_threshold: int = Query(20, ge=1, le=200),
+    temporal_window_days: int = Query(45, ge=1, le=365),
+    high_posterior_threshold: float = Query(0.7, ge=0.0, le=1.0),
+    rapid_growth_recent_days: int = Query(90, ge=7, le=365),
+    rapid_growth_case_threshold: int = Query(4, ge=1, le=100),
+    wide_date_spread_days: int = Query(180, ge=1, le=2000),
+    db: Session = Depends(get_db),
+):
+    """Synthesis layer: combine genomic/model/temporal/region evidence into investigation outputs."""
+    cfg = SynthesisConfig(
+        low_snp_threshold=low_snp_threshold,
+        high_snp_contradiction_threshold=high_snp_contradiction_threshold,
+        temporal_window_days=temporal_window_days,
+        high_posterior_threshold=high_posterior_threshold,
+        min_posterior=min_posterior,
+        rapid_growth_recent_days=rapid_growth_recent_days,
+        rapid_growth_case_threshold=rapid_growth_case_threshold,
+        wide_date_spread_days=wide_date_spread_days,
+    )
+    return build_transmission_synthesis(db=db, cluster_id=None, config=cfg)
+
+
+@router.get("/transmission-synthesis/{cluster_id}")
+def transmission_synthesis_for_cluster(
+    cluster_id: str,
+    min_posterior: float = Query(0.0, ge=0.0, le=1.0),
+    low_snp_threshold: int = Query(12, ge=1, le=100),
+    high_snp_contradiction_threshold: int = Query(20, ge=1, le=200),
+    temporal_window_days: int = Query(45, ge=1, le=365),
+    high_posterior_threshold: float = Query(0.7, ge=0.0, le=1.0),
+    rapid_growth_recent_days: int = Query(90, ge=7, le=365),
+    rapid_growth_case_threshold: int = Query(4, ge=1, le=100),
+    wide_date_spread_days: int = Query(180, ge=1, le=2000),
+    db: Session = Depends(get_db),
+):
+    """Cluster-focused synthesis payload for investigation workflows."""
+    cid = _normalise_uuid(cluster_id)
+    cfg = SynthesisConfig(
+        low_snp_threshold=low_snp_threshold,
+        high_snp_contradiction_threshold=high_snp_contradiction_threshold,
+        temporal_window_days=temporal_window_days,
+        high_posterior_threshold=high_posterior_threshold,
+        min_posterior=min_posterior,
+        rapid_growth_recent_days=rapid_growth_recent_days,
+        rapid_growth_case_threshold=rapid_growth_case_threshold,
+        wide_date_spread_days=wide_date_spread_days,
+    )
+    return build_transmission_synthesis(db=db, cluster_id=cid, config=cfg)
+
+
+@router.get("/cluster-risk-summary")
+def cluster_risk_summary(
+    min_posterior: float = Query(0.0, ge=0.0, le=1.0),
+    low_snp_threshold: int = Query(12, ge=1, le=100),
+    high_snp_contradiction_threshold: int = Query(20, ge=1, le=200),
+    temporal_window_days: int = Query(45, ge=1, le=365),
+    high_posterior_threshold: float = Query(0.7, ge=0.0, le=1.0),
+    rapid_growth_recent_days: int = Query(90, ge=7, le=365),
+    rapid_growth_case_threshold: int = Query(4, ge=1, le=100),
+    wide_date_spread_days: int = Query(180, ge=1, le=2000),
+    db: Session = Depends(get_db),
+):
+    """Operational cluster ranking derived from synthesis outputs."""
+    cfg = SynthesisConfig(
+        low_snp_threshold=low_snp_threshold,
+        high_snp_contradiction_threshold=high_snp_contradiction_threshold,
+        temporal_window_days=temporal_window_days,
+        high_posterior_threshold=high_posterior_threshold,
+        min_posterior=min_posterior,
+        rapid_growth_recent_days=rapid_growth_recent_days,
+        rapid_growth_case_threshold=rapid_growth_case_threshold,
+        wide_date_spread_days=wide_date_spread_days,
+    )
+    return build_cluster_risk_summary(db=db, config=cfg)

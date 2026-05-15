@@ -1,0 +1,359 @@
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from typing import Any
+
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+
+from backend.synthesis.explanations import category_display, interpretation_text, recommended_actions
+from backend.synthesis.flags import cluster_flags, pair_flags
+from backend.synthesis.scoring import (
+    cluster_priority_score,
+    confidence_category,
+    pair_priority_score,
+    score_band,
+    serialise_parameters,
+)
+
+
+@dataclass(frozen=True)
+class SynthesisConfig:
+    low_snp_threshold: int = 12
+    high_snp_contradiction_threshold: int = 20
+    temporal_window_days: int = 45
+    high_posterior_threshold: float = 0.7
+    min_posterior: float = 0.0
+    rapid_growth_recent_days: int = 90
+    rapid_growth_case_threshold: int = 4
+    wide_date_spread_days: int = 180
+
+
+def _export_json(path: str) -> dict[str, Any]:
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+            return payload if isinstance(payload, dict) else {}
+    except Exception:
+        return {}
+
+
+def _snp_distance(a: str, b: str) -> int:
+    left = (a or "").upper()
+    right = (b or "").upper()
+    common = min(len(left), len(right))
+    mismatches = sum(1 for i in range(common) if left[i] != right[i])
+    return mismatches + abs(len(left) - len(right))
+
+
+def _is_resistant(value: Any) -> bool:
+    if isinstance(value, dict):
+        for status in value.values():
+            if str(status).strip().lower() in {"r", "resistant"}:
+                return True
+        return False
+    if isinstance(value, list):
+        return len(value) > 0
+    if isinstance(value, str):
+        return str(value).strip().lower() in {"r", "resistant", "mdr", "xdr"}
+    return False
+
+
+def _case_rows(db: Session, cluster_id: str | None = None):
+    sql = """
+        SELECT c.pseudonymised_case_id::text AS case_id,
+               c.specimen_date,
+               COALESCE(c.geographic_region, 'Unknown') AS region,
+               COALESCE(cc.cluster_id::text, '') AS cluster_id,
+               COALESCE(ti.lineage, '') AS lineage,
+               ti.predicted_drug_resistance,
+               cs.sequence,
+               LOWER(COALESCE(sqm.qc_status, 'not_reported')) AS qc_status,
+               COALESCE(sqm.contamination_flag, FALSE) AS contamination_flag
+        FROM cases c
+        LEFT JOIN case_clusters cc ON cc.sample_id = c.pseudonymised_case_id
+        LEFT JOIN tb_interpretation ti ON ti.sample_id = c.pseudonymised_case_id
+        LEFT JOIN consensus_sequences cs ON cs.sample_id = c.pseudonymised_case_id
+        LEFT JOIN sample_qc_metrics sqm ON sqm.sample_id = c.pseudonymised_case_id
+    """
+    params: dict[str, Any] = {}
+    if cluster_id:
+        sql += " WHERE cc.cluster_id = CAST(:cluster_id AS UUID)"
+        params["cluster_id"] = cluster_id
+
+    return db.execute(text(sql), params).mappings().all()
+
+
+def _normalise_cluster_id(cluster_id: str) -> str:
+    val = (cluster_id or "").strip()
+    if len(val) != 36 or val.count("-") != 4:
+        raise ValueError("cluster_id must be a UUID")
+    return val
+
+
+def _bool_temporal_support(source_date, target_date, window_days: int) -> bool:
+    if not source_date or not target_date:
+        return False
+    return abs((target_date - source_date).days) <= window_days
+
+
+def build_transmission_synthesis(
+    db: Session,
+    *,
+    cluster_id: str | None = None,
+    config: SynthesisConfig | None = None,
+) -> dict[str, Any]:
+    cfg = config or SynthesisConfig()
+    if cluster_id:
+        cluster_id = _normalise_cluster_id(cluster_id)
+
+    case_rows = _case_rows(db, cluster_id=cluster_id)
+    case_index: dict[str, dict[str, Any]] = {}
+    for row in case_rows:
+        cid = str(row["case_id"])
+        case_index[cid] = {
+            "case_id": cid,
+            "short_case_id": cid[:8],
+            "specimen_date": row["specimen_date"],
+            "region": str(row["region"]),
+            "cluster_id": str(row["cluster_id"] or ""),
+            "lineage": str(row["lineage"] or ""),
+            "predicted_drug_resistance": row["predicted_drug_resistance"],
+            "sequence": str(row["sequence"] or ""),
+            "qc_status": str(row["qc_status"] or "not_reported"),
+            "contamination_flag": bool(row["contamination_flag"]),
+        }
+
+    if not case_index:
+        return {
+            "generated_at": datetime.utcnow().isoformat() + "Z",
+            "cluster_id": cluster_id,
+            "summary": {"cluster_count": 0, "pair_count": 0},
+            "clusters": [],
+            "pairs": [],
+            "parameters": serialise_parameters(cfg.__dict__),
+        }
+
+    net = _export_json("exports/transmission_network.json")
+    edges = net.get("edges") or []
+
+    cluster_members: dict[str, set[str]] = {}
+    for case in case_index.values():
+        ckey = case["cluster_id"] or "unclustered"
+        cluster_members.setdefault(ckey, set()).add(case["case_id"])
+
+    pairs: list[dict[str, Any]] = []
+    cluster_pair_counts: dict[str, int] = {}
+    cluster_strong_or_contradictory: dict[str, int] = {}
+
+    for edge in edges:
+        source = str(edge.get("source") or "")
+        target = str(edge.get("target") or "")
+        posterior = float(edge.get("probability") or 0.0)
+        edge_conf = str(edge.get("confidence") or "unknown")
+
+        if posterior < cfg.min_posterior or not source or not target:
+            continue
+        if source not in case_index or target not in case_index:
+            continue
+
+        src = case_index[source]
+        tgt = case_index[target]
+
+        # Keep synthesis cluster-centric: pair belongs to source cluster unless mismatched.
+        pair_cluster = src["cluster_id"] or tgt["cluster_id"] or "unclustered"
+        if src["cluster_id"] and tgt["cluster_id"] and src["cluster_id"] != tgt["cluster_id"]:
+            pair_cluster = "cross_cluster"
+
+        source_has_seq = bool(src["sequence"])
+        target_has_seq = bool(tgt["sequence"])
+        snp = _snp_distance(src["sequence"], tgt["sequence"]) if source_has_seq and target_has_seq else None
+
+        temporal_support = _bool_temporal_support(src["specimen_date"], tgt["specimen_date"], cfg.temporal_window_days)
+        geographic_support = src["region"] == tgt["region"]
+
+        src_qc_ok = src["qc_status"] in {"pass", "passed"} and not src["contamination_flag"]
+        tgt_qc_ok = tgt["qc_status"] in {"pass", "passed"} and not tgt["contamination_flag"]
+
+        p_flags = pair_flags(
+            snp_distance=snp,
+            posterior_probability=posterior,
+            geographic_support=geographic_support,
+            edge_confidence=edge_conf,
+            source_has_sequence=source_has_seq,
+            target_has_sequence=target_has_seq,
+            source_qc_ok=src_qc_ok,
+            target_qc_ok=tgt_qc_ok,
+            low_snp_threshold=cfg.low_snp_threshold,
+            high_snp_contradiction_threshold=cfg.high_snp_contradiction_threshold,
+            high_posterior_threshold=cfg.high_posterior_threshold,
+        )
+
+        category = confidence_category(
+            snp_distance=snp,
+            posterior_probability=posterior,
+            temporal_support=temporal_support,
+            low_snp_threshold=cfg.low_snp_threshold,
+            high_snp_contradiction_threshold=cfg.high_snp_contradiction_threshold,
+            high_posterior_threshold=cfg.high_posterior_threshold,
+        )
+
+        interpretation = interpretation_text(category, p_flags)
+        priority = pair_priority_score(
+            category=category,
+            posterior_probability=posterior,
+            snp_distance=snp,
+            pair_flags=p_flags,
+        )
+        actions = recommended_actions(category, p_flags)
+
+        pairs.append(
+            {
+                "cluster_id": pair_cluster,
+                "source": source,
+                "target": target,
+                "snp_distance": snp,
+                "posterior_probability": round(posterior, 4),
+                "temporal_support": temporal_support,
+                "geographic_support": geographic_support,
+                "epi_support": "unknown",
+                "confidence": category_display(category),
+                "confidence_code": category,
+                "priority_score": priority,
+                "priority_band": score_band(priority),
+                "interpretation": interpretation,
+                "flags": p_flags,
+                "recommended_review_actions": actions,
+            }
+        )
+
+        cluster_pair_counts[pair_cluster] = cluster_pair_counts.get(pair_cluster, 0) + 1
+        if category in {"strong_support", "contradictory"}:
+            cluster_strong_or_contradictory[pair_cluster] = cluster_strong_or_contradictory.get(pair_cluster, 0) + 1
+
+    by_cluster: list[dict[str, Any]] = []
+    recent_cutoff = datetime.utcnow().date() - timedelta(days=cfg.rapid_growth_recent_days)
+
+    for cluster_key, members in sorted(cluster_members.items()):
+        if cluster_id and cluster_key != cluster_id:
+            continue
+
+        member_rows = [case_index[m] for m in members if m in case_index]
+        specimen_dates = [m["specimen_date"] for m in member_rows if m["specimen_date"]]
+        regions = {m["region"] for m in member_rows if m["region"]}
+        resistance_count = sum(1 for m in member_rows if _is_resistant(m["predicted_drug_resistance"]))
+        missing_sequence_or_qc = sum(
+            1
+            for m in member_rows
+            if (not m["sequence"]) or (m["qc_status"] not in {"pass", "passed"}) or m["contamination_flag"]
+        )
+        recent_case_count = sum(
+            1 for m in member_rows if m["specimen_date"] and m["specimen_date"] >= recent_cutoff
+        )
+
+        c_flags = cluster_flags(
+            cluster_regions=regions,
+            specimen_dates=specimen_dates,
+            resistance_case_count=resistance_count,
+            missing_sequence_or_qc_case_count=missing_sequence_or_qc,
+            recent_case_count=recent_case_count,
+            wide_date_spread_days=cfg.wide_date_spread_days,
+            rapid_growth_case_threshold=cfg.rapid_growth_case_threshold,
+        )
+
+        c_pair_count = cluster_pair_counts.get(cluster_key, 0)
+        c_strong_or_contradictory = cluster_strong_or_contradictory.get(cluster_key, 0)
+
+        c_priority = cluster_priority_score(
+            member_count=len(member_rows),
+            pair_count=c_pair_count,
+            strong_or_contradictory_pairs=c_strong_or_contradictory,
+            cluster_flags=c_flags,
+        )
+
+        cluster_pairs = [p for p in pairs if p["cluster_id"] == cluster_key]
+        cluster_pairs.sort(key=lambda x: (-x["priority_score"], -x["posterior_probability"]))
+
+        c_actions = recommended_actions("moderate_support", c_flags)
+        first_specimen = min(specimen_dates).isoformat() if specimen_dates else None
+        last_specimen = max(specimen_dates).isoformat() if specimen_dates else None
+
+        by_cluster.append(
+            {
+                "cluster_id": cluster_key,
+                "cluster_short": cluster_key[:8],
+                "summary": {
+                    "member_count": len(member_rows),
+                    "pair_count": c_pair_count,
+                    "regions": sorted(regions),
+                    "first_specimen": first_specimen,
+                    "last_specimen": last_specimen,
+                    "resistance_case_count": resistance_count,
+                    "missing_sequence_or_qc_case_count": missing_sequence_or_qc,
+                    "recent_case_count": recent_case_count,
+                    "priority_score": c_priority,
+                    "priority_band": score_band(c_priority),
+                },
+                "confidence_counts": {
+                    "strong_support": sum(1 for p in cluster_pairs if p["confidence_code"] == "strong_support"),
+                    "moderate_support": sum(1 for p in cluster_pairs if p["confidence_code"] == "moderate_support"),
+                    "genomic_only_signal": sum(1 for p in cluster_pairs if p["confidence_code"] == "genomic_only_signal"),
+                    "model_only_signal": sum(1 for p in cluster_pairs if p["confidence_code"] == "model_only_signal"),
+                    "contradictory": sum(1 for p in cluster_pairs if p["confidence_code"] == "contradictory"),
+                    "insufficient_evidence": sum(1 for p in cluster_pairs if p["confidence_code"] == "insufficient_evidence"),
+                },
+                "flags": c_flags,
+                "recommended_investigation_actions": c_actions,
+                "explanation": (
+                    "Synthesis integrates SNP distance, Outbreaker posterior, temporal plausibility, and region context "
+                    "into investigation-ready confidence categories and review priorities."
+                ),
+                "pairwise_transmission_evidence": cluster_pairs,
+            }
+        )
+
+    by_cluster.sort(key=lambda x: (-x["summary"]["priority_score"], x["cluster_id"]))
+    pairs.sort(key=lambda x: (-x["priority_score"], -x["posterior_probability"]))
+
+    return {
+        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "cluster_id": cluster_id,
+        "summary": {
+            "cluster_count": len(by_cluster),
+            "pair_count": len(pairs),
+            "high_priority_pairs": sum(1 for p in pairs if p["priority_score"] >= 70),
+            "contradictory_pairs": sum(1 for p in pairs if p["confidence_code"] == "contradictory"),
+        },
+        "clusters": by_cluster,
+        "pairs": pairs,
+        "parameters": serialise_parameters(cfg.__dict__),
+    }
+
+
+def build_cluster_risk_summary(db: Session, *, config: SynthesisConfig | None = None) -> dict[str, Any]:
+    payload = build_transmission_synthesis(db, cluster_id=None, config=config)
+    items = []
+    for cluster in payload.get("clusters", []):
+        summary = cluster.get("summary", {})
+        items.append(
+            {
+                "cluster_id": cluster.get("cluster_id"),
+                "cluster_short": cluster.get("cluster_short"),
+                "member_count": summary.get("member_count", 0),
+                "pair_count": summary.get("pair_count", 0),
+                "priority_score": summary.get("priority_score", 0),
+                "priority_band": summary.get("priority_band", "low"),
+                "flags": cluster.get("flags", []),
+                "top_recommended_actions": cluster.get("recommended_investigation_actions", [])[:3],
+            }
+        )
+
+    items.sort(key=lambda x: (-int(x.get("priority_score", 0)), str(x.get("cluster_id") or "")))
+    return {
+        "generated_at": payload.get("generated_at"),
+        "summary": payload.get("summary", {}),
+        "clusters": items,
+        "parameters": payload.get("parameters", {}),
+    }

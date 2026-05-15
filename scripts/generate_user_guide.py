@@ -80,7 +80,8 @@ story.append(Paragraph(f"<i>Generated: {datetime.now().strftime('%d %B %Y')}</i>
 story.append(Spacer(1, 0.5*inch))
 story.append(Paragraph(
     "This guide provides current instructions for deploying, configuring, and operating "
-    "the TB Genomic Surveillance PoC system on Windows using the updated workflow.",
+    "the TB Genomic Surveillance PoC system on Windows using the updated workflow. "
+    "It now also explains the synthesis layer that combines analysis outputs for review.",
     styles['Normal']
 ))
 
@@ -98,7 +99,7 @@ toc_items = [
     "5. Frontend Server Setup",
     "6. Generating Synthetic Data",
     "7. Running Analysis Jobs",
-    "8. Interpreting Results",
+    "8. Synthesis Layer and Interpreting Results",
     "9. Troubleshooting"
 ]
 
@@ -351,7 +352,7 @@ story.append(Paragraph("1. Click <b>Run outbreaker2</b>", step_style))
 story.append(Paragraph("2. This may take 30-60 seconds", step_style))
 story.append(Paragraph("3. Status will show when analysis completes", step_style))
 story.append(Paragraph(
-    "Result: Outbreak analysis completes and generates diagnostic plots, an enhanced transmission network, and a PDF outbreak report.",
+    "Result: Outbreak analysis completes and generates diagnostic plots, an enhanced transmission network, and synthesis-ready review outputs for the investigation team.",
     step_style
 ))
 story.append(Paragraph(
@@ -362,10 +363,38 @@ story.append(Paragraph(
 story.append(PageBreak())
 
 # Section 8: Interpreting Results
-story.append(Paragraph("8. INTERPRETING RESULTS", heading_style))
+story.append(Paragraph("8. SYNTHESIS LAYER AND INTERPRETING RESULTS", heading_style))
 story.append(Spacer(1, 0.15*inch))
 
-story.append(Paragraph("<b>Step 8.1: View Case Summary</b>", styles['Heading3']))
+story.append(Paragraph(
+    "The synthesis layer sits between analytics and investigation. It combines sequence-cluster evidence, Outbreaker2 posterior links, specimen dates, region, lineage, resistance patterns, and cluster context into a review summary.",
+    step_style
+))
+story.append(Paragraph(
+    "Important: the synthesis scores, flags, and priority values are heuristic and non-validated. They are designed to support human review, not replace sign-off or expert judgement.",
+    step_style
+))
+story.append(Paragraph("<b>What the synthesis layer gives you:</b>", styles['Heading3']))
+story.append(Paragraph(
+    "• <b>Transmission confidence:</b> High, moderate, low, or insufficient evidence<br/>"
+    "• <b>Contradiction flags:</b> Warnings for mismatched genomic, timing, geography, or resistance signals<br/>"
+    "• <b>Priority score:</b> A ranked review score that helps staff focus on the most important clusters or pairs first<br/>"
+    "• <b>Recommended review actions:</b> A short list of next steps for the investigation team",
+    step_style
+))
+story.append(Paragraph("<b>Common flags you may see:</b>", styles['Heading3']))
+story.append(Paragraph(
+    "• High posterior link but large genomic distance<br/>"
+    "• Low genomic support with no clear epidemiological or geographic link<br/>"
+    "• Missing sequence or QC data<br/>"
+    "• Wide date spread inside a single cluster<br/>"
+    "• Cluster spans multiple regions<br/>"
+    "• Resistance signal appears inside the cluster",
+    step_style
+))
+
+story.append(Spacer(1, 0.2*inch))
+story.append(Paragraph("<b>Step 8.2: View Case Summary</b>", styles['Heading3']))
 story.append(Spacer(1, 0.1*inch))
 story.append(Paragraph("In <b>Step 4 — Results</b>:", step_style))
 story.append(Paragraph("1. Click <b>View cases</b>", step_style))
@@ -373,7 +402,7 @@ story.append(Paragraph("2. A raw JSON view of all cases is displayed", step_styl
 story.append(Paragraph("Include fields: case ID, specimen date, region, lineage, resistance profile", step_style))
 
 story.append(Spacer(1, 0.2*inch))
-story.append(Paragraph("<b>Step 8.2: View Outbreak Analysis Plots</b>", styles['Heading3']))
+story.append(Paragraph("<b>Step 8.3: View Outbreak Analysis Plots</b>", styles['Heading3']))
 story.append(Spacer(1, 0.1*inch))
 story.append(Paragraph("In <b>Step 4 — Results</b>:", step_style))
 story.append(Paragraph("1. Click <b>View outbreaker2 summary</b>", step_style))
@@ -392,7 +421,7 @@ story.append(Paragraph(
 ))
 
 story.append(Spacer(1, 0.2*inch))
-story.append(Paragraph("<b>Step 8.3: Download the Outbreak Report PDF</b>", styles['Heading3']))
+story.append(Paragraph("<b>Step 8.4: Download the Outbreak Report PDF</b>", styles['Heading3']))
 story.append(Spacer(1, 0.1*inch))
 story.append(Paragraph("In <b>Step 4 — Results</b>:", step_style))
 story.append(Paragraph("1. Click <b>Download outbreak report (PDF)</b>", step_style))
@@ -400,7 +429,7 @@ story.append(Paragraph("2. Open the generated report", step_style))
 story.append(Paragraph("3. The updated report preserves image aspect ratios so plots are not stretched or squashed", step_style))
 
 story.append(Spacer(1, 0.2*inch))
-story.append(Paragraph("<b>Step 8.4: View Governance & Audit Trail</b>", styles['Heading3']))
+story.append(Paragraph("<b>Step 8.5: View Governance & Audit Trail</b>", styles['Heading3']))
 story.append(Spacer(1, 0.1*inch))
 story.append(Paragraph("In <b>Step 5 — Governance & Compliance</b>:", step_style))
 story.append(Paragraph("1. Click <b>View audit trail</b>", step_style))
@@ -448,6 +477,7 @@ story.append(Paragraph("<b>After PoC Validation:</b>", styles['Heading3']))
 story.append(Paragraph(
     "• Deploy to test environment<br/>"
     "• Connect to real TB genomic data sources<br/>"
+    "• Review synthesis-layer thresholds with public health and laboratory leads<br/>"
     "• Configure authentication (LDAP/AD integration)<br/>"
     "• Set up database backup and recovery procedures<br/>"
     "• Deploy Outbreaker2 R package on analysis servers<br/>"

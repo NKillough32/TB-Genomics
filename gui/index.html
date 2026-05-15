@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Source+Serif+4:opsz,wght@8..60,600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=2" />
+  <link rel="stylesheet" href="styles.css?v=3" />
 </head>
 <body>
 <div class="page-glow" aria-hidden="true"></div>
@@ -36,46 +36,56 @@
   </section>
   <section class="card">
     <h2>Step 2 - Upload data</h2>
-    <p class="hint">Upload CSV / JSON / FASTA files to enable analysis.</p>
-    <input type="file" id="fileInput" />
-    <button onclick="uploadFile()">Upload file</button>
-    <div id="uploadResult" class="message"></div>
-    <hr />
-    <p class="hint">Or generate a realistic synthetic dataset from online public TB incidence data.</p>
-    <p class="hint">This is useful for demos and training. It creates synthetic (not real patient) records.</p>
-    <div class="seed-controls">
-      <label for="seedCaseCount">Cases to generate</label>
-      <input id="seedCaseCount" type="number" min="10" max="5000" value="250" />
-      <label for="seedValue">Seed value</label>
-      <input id="seedValue" type="number" value="42" />
-      <label class="inline-checkbox" for="seedReset">
-        <input id="seedReset" type="checkbox" checked />
-        Reset existing synthetic data first
-      </label>
+    <div class="step2-grid">
+      <section class="step2-panel">
+        <h3>Upload existing data</h3>
+        <p class="hint">Upload CSV / JSON / FASTA files to enable analysis.</p>
+        <div class="upload-row">
+          <input type="file" id="fileInput" />
+          <button onclick="uploadFile()">Upload file</button>
+        </div>
+        <div id="uploadResult" class="message"></div>
+      </section>
+
+      <section class="step2-panel">
+        <h3>Generate synthetic dataset</h3>
+        <p class="hint">Or generate a realistic synthetic dataset from online public TB incidence data.</p>
+        <p class="hint">This is useful for demos and training. It creates synthetic (not real patient) records.</p>
+        <div class="seed-controls">
+          <label for="seedCaseCount">Cases to generate</label>
+          <input id="seedCaseCount" type="number" min="10" max="5000" value="250" />
+          <label for="seedValue">Seed value</label>
+          <input id="seedValue" type="number" value="42" />
+          <label class="inline-checkbox" for="seedReset">
+            <input id="seedReset" type="checkbox" checked />
+            Reset existing synthetic data first
+          </label>
+        </div>
+        <p class="field-help">Cases to generate: how many synthetic case records will be created.</p>
+        <p class="field-help">Seed value: a repeatable random key. Use the same seed + settings to recreate the same synthetic dataset.</p>
+        <label class="seed-country-label" for="seedCountries">Restrict to countries <span class="hint-inline">(Ctrl/Cmd+click to select multiple; leave blank for all)</span></label>
+        <select id="seedCountries" multiple size="5" class="country-select">
+          <option value="BGD">Bangladesh</option>
+          <option value="CHN">China</option>
+          <option value="GBR">United Kingdom</option>
+          <option value="IDN">Indonesia</option>
+          <option value="IND">India</option>
+          <option value="IRL">Ireland</option>
+          <option value="NGA">Nigeria</option>
+          <option value="PAK">Pakistan</option>
+          <option value="PER">Peru</option>
+          <option value="PHL">Philippines</option>
+          <option value="UKR">Ukraine</option>
+          <option value="ZAF">South Africa</option>
+        </select>
+        <div class="demo-mode-row">
+          <button id="activateDemoBtn" class="btn-warning" onclick="openDemoModeDialog()">Activate demo mode (synthetic)</button>
+          <span id="demoModeStatus" class="demo-mode-status">Demo mode: OFF</span>
+        </div>
+        <button onclick="seedSyntheticData()">Generate synthetic dataset</button>
+        <pre id="seedResult" class="log-box"></pre>
+      </section>
     </div>
-    <p class="field-help">Cases to generate: how many synthetic case records will be created.</p>
-    <p class="field-help">Seed value: a repeatable random key. Use the same seed + settings to recreate the same synthetic dataset.</p>
-    <label class="seed-country-label" for="seedCountries">Restrict to countries <span class="hint-inline">(Ctrl/Cmd+click to select multiple; leave blank for all)</span></label>
-    <select id="seedCountries" multiple size="5" class="country-select">
-      <option value="BGD">Bangladesh</option>
-      <option value="CHN">China</option>
-      <option value="GBR">United Kingdom</option>
-      <option value="IDN">Indonesia</option>
-      <option value="IND">India</option>
-      <option value="IRL">Ireland</option>
-      <option value="NGA">Nigeria</option>
-      <option value="PAK">Pakistan</option>
-      <option value="PER">Peru</option>
-      <option value="PHL">Philippines</option>
-      <option value="UKR">Ukraine</option>
-      <option value="ZAF">South Africa</option>
-    </select>
-    <div class="demo-mode-row">
-      <button id="activateDemoBtn" class="btn-warning" onclick="openDemoModeDialog()">Activate demo mode (synthetic)</button>
-      <span id="demoModeStatus" class="demo-mode-status">Demo mode: OFF</span>
-    </div>
-    <button onclick="seedSyntheticData()">Generate synthetic dataset</button>
-    <pre id="seedResult" class="log-box"></pre>
   </section>
   <section class="card">
     <h2>Step 3 - Run analysis</h2>

@@ -636,20 +636,131 @@ function selectAnalyticsCluster(){
 	if(sel&&input) input.value=sel.value||'';
 }
 
+function selectSynthesisCluster(){
+	const sel=document.getElementById('synthesisClusterSelect');
+	const input=document.getElementById('synthesisClusterId');
+	if(sel&&input) input.value=sel.value||'';
+}
+
 async function loadAnalyticsClusters(){
-	const sel=document.getElementById('analyticsClusterSelect');
-	if(!sel) return;
+	const selectors=[
+		document.getElementById('analyticsClusterSelect'),
+		document.getElementById('synthesisClusterSelect'),
+	].filter(Boolean);
+	if(!selectors.length) return;
 	try{
 		const d=await fetch(`${API}/analytics/clusters`).then(r=>r.json());
-		sel.innerHTML='<option value="">All clusters</option>';
+		for(const sel of selectors){
+			sel.innerHTML='<option value="">All clusters</option>';
+		}
 		for(const c of (d.clusters||[])){
-			const o=document.createElement('option');
-			o.value=c.cluster_id;
-			o.textContent=`${c.cluster_short} (${c.case_count})`;
-			sel.appendChild(o);
+			for(const sel of selectors){
+				const o=document.createElement('option');
+				o.value=c.cluster_id;
+				o.textContent=`${c.cluster_short} (${c.case_count})`;
+				sel.appendChild(o);
+			}
 		}
 	}catch(_e){
 		// keep default option on backend issues
+	}
+}
+
+function _synthesisClusterId(){
+	return (document.getElementById('synthesisClusterId')?.value||'').trim();
+}
+
+function _synthesisParams(){
+	const snpThreshold=Number(document.getElementById('synthesisSnpThreshold')?.value||12);
+	const temporalWindowDays=Number(document.getElementById('synthesisTemporalWindow')?.value||45);
+	const posteriorMin=Number(document.getElementById('synthesisPosteriorMin')?.value||0);
+	const highPosteriorThreshold=Number(document.getElementById('synthesisHighPosteriorThreshold')?.value||0.7);
+	return {
+		snpThreshold: Number.isFinite(snpThreshold)?Math.max(1,Math.min(100,snpThreshold)):12,
+		temporalWindowDays: Number.isFinite(temporalWindowDays)?Math.max(1,Math.min(365,temporalWindowDays)):45,
+		posteriorMin: Number.isFinite(posteriorMin)?Math.max(0,Math.min(1,posteriorMin)):0,
+		highPosteriorThreshold: Number.isFinite(highPosteriorThreshold)?Math.max(0,Math.min(1,highPosteriorThreshold)):0.7,
+	};
+}
+
+function _renderSynthesisClusterTable(clusters){
+	if(!clusters.length) return '<p class="hint">No synthesis clusters available for the current dataset.</p>';
+	let html='<table class="data-table"><thead><tr><th>Cluster</th><th>Members</th><th>Pairs</th><th>Priority</th><th>Band</th><th>Flags</th><th>Actions</th></tr></thead><tbody>';
+	for(const c of clusters.slice(0,10)){
+		const summary=c.summary||{};
+		html+=`<tr><td><code>${escapeHtml(c.cluster_short||String(c.cluster_id||'').slice(0,8))}</code></td><td>${escapeHtml(summary.member_count||0)}</td><td>${escapeHtml(summary.pair_count||0)}</td><td>${escapeHtml(summary.priority_score||0)}</td><td>${escapeHtml(summary.priority_band||'low')}</td><td>${escapeHtml((c.flags||[]).join(', ')||'none')}</td><td>${escapeHtml((c.recommended_investigation_actions||[]).slice(0,3).join(' | ')||'none')}</td></tr>`;
+	}
+	html+='</tbody></table>';
+	return html;
+}
+
+async function loadTransmissionSynthesisOverview(){
+	const summary=document.getElementById('synthesisSummary');
+	const view=document.getElementById('synthesisPrimaryView');
+	if(summary) summary.textContent='Loading synthesis overview...';
+	if(view) view.textContent='';
+	try{
+		const p=_synthesisParams();
+		const cid=_synthesisClusterId();
+		const url=cid
+			? `${API}/analytics/transmission-synthesis/${encodeURIComponent(cid)}?min_posterior=${encodeURIComponent(p.posteriorMin)}&low_snp_threshold=${encodeURIComponent(p.snpThreshold)}&high_posterior_threshold=${encodeURIComponent(p.highPosteriorThreshold)}&temporal_window_days=${encodeURIComponent(p.temporalWindowDays)}`
+			: `${API}/analytics/transmission-synthesis?min_posterior=${encodeURIComponent(p.posteriorMin)}&low_snp_threshold=${encodeURIComponent(p.snpThreshold)}&high_posterior_threshold=${encodeURIComponent(p.highPosteriorThreshold)}&temporal_window_days=${encodeURIComponent(p.temporalWindowDays)}`;
+		const d=await fetch(url).then(r=>r.json());
+		const s=d.summary||{};
+		const warning=d.warning?`<p class="hint">${escapeHtml(d.warning)}</p>`:'';
+		if(summary){
+			summary.innerHTML=`<div class="kpi-strip">
+				Clusters: ${escapeHtml(s.cluster_count||0)} |
+				Pairs: ${escapeHtml(s.pair_count||0)} |
+				High priority pairs: ${escapeHtml(s.high_priority_pairs||0)} |
+				Contradictory pairs: ${escapeHtml(s.contradictory_pairs||0)}
+			</div>${warning}`;
+		}
+		if(view){
+			const clusters=d.clusters||[];
+			let html=`<h4>${cid?'Cluster synthesis':'Transmission synthesis overview'}</h4>`;
+			html+=`<p class="hint">Validation: ${escapeHtml(d.validation_status||'unknown')} · Generated ${escapeHtml((d.generated_at||'').replace('T',' ').replace('Z',' UTC'))}</p>`;
+			html+=_renderSynthesisClusterTable(clusters);
+			if(cid && clusters[0]){
+				const cluster=clusters[0];
+				html+=`<h5>Pairwise evidence for ${escapeHtml(cluster.cluster_short||cid.slice(0,8))}</h5>`;
+				html+=`<div class="kpi-strip">${escapeHtml(cluster.explanation||'')}</div>`;
+				html+='<table class="data-table"><thead><tr><th>Source</th><th>Target</th><th>Posterior</th><th>SNP</th><th>Confidence</th><th>Interpretation</th></tr></thead><tbody>';
+				for(const pair of (cluster.pairwise_transmission_evidence||[]).slice(0,20)){
+					html+=`<tr><td>${escapeHtml(String(pair.source||'').slice(0,8))}</td><td>${escapeHtml(String(pair.target||'').slice(0,8))}</td><td>${escapeHtml(pair.posterior_probability??'')}</td><td>${escapeHtml(pair.snp_distance??'n/a')}</td><td>${escapeHtml(pair.confidence||'')}</td><td>${escapeHtml(pair.interpretation||'')}</td></tr>`;
+				}
+				html+='</tbody></table>';
+			}
+			view.innerHTML=html;
+		}
+	}catch(e){
+		if(summary) summary.textContent='Failed to load synthesis overview: '+e;
+		if(view) view.textContent='';
+	}
+}
+
+async function loadClusterRiskSummaryView(){
+	const summary=document.getElementById('synthesisSummary');
+	const view=document.getElementById('synthesisPrimaryView');
+	if(summary) summary.textContent='Loading cluster risk summary...';
+	if(view) view.textContent='';
+	try{
+		const p=_synthesisParams();
+		const d=await fetch(`${API}/analytics/cluster-risk-summary?min_posterior=${encodeURIComponent(p.posteriorMin)}&low_snp_threshold=${encodeURIComponent(p.snpThreshold)}&high_posterior_threshold=${encodeURIComponent(p.highPosteriorThreshold)}&temporal_window_days=${encodeURIComponent(p.temporalWindowDays)}`).then(r=>r.json());
+		if(summary){
+			summary.innerHTML=`<div class="kpi-strip">
+				Clusters ranked: ${escapeHtml((d.clusters||[]).length)} |
+				Validation: ${escapeHtml(d.validation_status||'unknown')}
+			</div>${d.warning?`<p class="hint">${escapeHtml(d.warning)}</p>`:''}`;
+		}
+		if(view){
+			let html='<h4>Cluster risk summary</h4>';
+			html+=_renderSynthesisClusterTable(d.clusters||[]);
+			view.innerHTML=html;
+		}
+	}catch(e){
+		if(summary) summary.textContent='Failed to load cluster risk summary: '+e;
+		if(view) view.textContent='';
 	}
 }
 

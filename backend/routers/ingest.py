@@ -33,7 +33,20 @@ def ingest_file(
     path = Path("uploads") / safe_name
     with open(path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
-    return {"status": "uploaded", "filename": safe_name}
+    return {
+        "status": "uploaded_only",
+        "filename": safe_name,
+        "database_loaded": False,
+        "next_steps": [
+            "Prepare a complete ingest bundle if needed.",
+            "Run scripts/validate_ingest_files.py before loading.",
+            "Run scripts/load_ingest_bundle.py to insert or update database rows.",
+        ],
+        "message": (
+            "File was saved to uploads/ only. This endpoint does not validate "
+            "or load data into the database."
+        ),
+    }
 
 
 @router.post("/seed-synthetic")

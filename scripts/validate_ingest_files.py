@@ -19,6 +19,7 @@ import csv
 import json
 import re
 import sys
+from datetime import datetime
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -70,8 +71,8 @@ UUID_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
     re.IGNORECASE,
 )
-DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 FASTA_HEADER_RE = re.compile(r"^>(.+)$")
+DATE_FORMATS = ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%Y/%m/%d")
 
 
 # ---------------------------------------------------------------------------
@@ -139,7 +140,16 @@ def is_uuid(value: str) -> bool:
 
 
 def is_date(value: str) -> bool:
-    return bool(DATE_RE.match(value.strip())) if value else False
+    v = value.strip()
+    if not v:
+        return False
+    for fmt in DATE_FORMATS:
+        try:
+            datetime.strptime(v, fmt)
+            return True
+        except ValueError:
+            continue
+    return False
 
 
 def is_float(value: str) -> bool:
@@ -172,7 +182,7 @@ def type_check(
             if dtype == "uuid" and not is_uuid(val):
                 type_errors.append(f"row {i} {col}: not a valid UUID ({val[:40]})")
             elif dtype == "date" and not is_date(val):
-                type_errors.append(f"row {i} {col}: not ISO date ({val[:20]})")
+                type_errors.append(f"row {i} {col}: not a supported date ({val[:20]})")
             elif dtype == "float" and not is_float(val):
                 type_errors.append(f"row {i} {col}: not numeric ({val[:20]})")
 
@@ -247,10 +257,21 @@ def validate_cases(path: Path) -> set[str]:
     return ids
 
 
-def validate_interpretation(path: Path, case_ids: set[str]) -> None:
+def missing_file(check: str, message: str, strict: bool) -> None:
+    if strict:
+        fail(check, f"{message} (required in --strict-analysis mode)")
+    else:
+        warn(check, message)
+
+
+def validate_interpretation(path: Path, case_ids: set[str], strict: bool = False) -> None:
     result = load_csv(path)
     if result is None:
-        warn("tb_interpretation.csv:exists", "File not found (optional but recommended)")
+        missing_file(
+            "tb_interpretation.csv:exists",
+            "File not found (optional but recommended)",
+            strict,
+        )
         return
     fieldnames, rows = result
     ok("tb_interpretation.csv:exists", f"Found with {len(rows)} rows")
@@ -299,10 +320,14 @@ def validate_interpretation(path: Path, case_ids: set[str]) -> None:
             ok(f"tb_interpretation.csv:{col}", f"Column '{col}' contains valid JSON")
 
 
-def validate_sequencing_runs(path: Path) -> set[str]:
+def validate_sequencing_runs(path: Path, strict: bool = False) -> set[str]:
     result = load_csv(path)
     if result is None:
-        warn("sequencing_runs.csv:exists", "File not found (required if using QC metrics)")
+        missing_file(
+            "sequencing_runs.csv:exists",
+            "File not found (required if using QC metrics)",
+            strict,
+        )
         return set()
     fieldnames, rows = result
     ok("sequencing_runs.csv:exists", f"Found with {len(rows)} rows")
@@ -314,10 +339,14 @@ def validate_sequencing_runs(path: Path) -> set[str]:
     return run_ids
 
 
-def validate_qc(path: Path, case_ids: set[str], run_ids: set[str]) -> None:
+def validate_qc(path: Path, case_ids: set[str], run_ids: set[str], strict: bool = False) -> None:
     result = load_csv(path)
     if result is None:
-        warn("sample_qc_metrics.csv:exists", "File not found (required for KPI reporting)")
+        missing_file(
+            "sample_qc_metrics.csv:exists",
+            "File not found (required for KPI reporting)",
+            strict,
+        )
         return
     fieldnames, rows = result
     ok("sample_qc_metrics.csv:exists", f"Found with {len(rows)} rows")
@@ -375,10 +404,14 @@ def validate_qc(path: Path, case_ids: set[str], run_ids: set[str]) -> None:
         ok("sample_qc_metrics.csv:low_depth", "All mean_depth values >= 20x")
 
 
-def validate_provenance(path: Path, case_ids: set[str]) -> None:
+def validate_provenance(path: Path, case_ids: set[str], strict: bool = False) -> None:
     result = load_csv(path)
     if result is None:
-        warn("analysis_provenance.csv:exists", "File not found (recommended for audit trail)")
+        missing_file(
+            "analysis_provenance.csv:exists",
+            "File not found (recommended for audit trail)",
+            strict,
+        )
         return
     fieldnames, rows = result
     ok("analysis_provenance.csv:exists", f"Found with {len(rows)} rows")
@@ -399,9 +432,13 @@ def validate_provenance(path: Path, case_ids: set[str]) -> None:
         ok("analysis_provenance.csv:fk", "All sample_id values reference known cases")
 
 
-def validate_fasta(path: Path, case_ids: set[str]) -> None:
+def validate_fasta(path: Path, case_ids: set[str], strict: bool = False) -> None:
     if not path.exists():
-        warn("dna.fasta:exists", "File not found (required for outbreaker2 analysis)")
+        missing_file(
+            "dna.fasta:exists",
+            "File not found (required for outbreaker2 analysis)",
+            strict,
+        )
         return
 
     headers: list[str] = []
@@ -433,7 +470,8 @@ def validate_fasta(path: Path, case_ids: set[str]) -> None:
         extra_seqs = set(headers) - case_ids
         if missing_seqs:
             sample = list(missing_seqs)[:3]
-            warn(
+            reporter = fail if strict else warn
+            reporter(
                 "dna.fasta:coverage",
                 f"{len(missing_seqs)} cases in cases.csv have no sequence in FASTA "
                 f"(e.g. {sample})",
@@ -442,7 +480,8 @@ def validate_fasta(path: Path, case_ids: set[str]) -> None:
             ok("dna.fasta:coverage", "All cases in cases.csv have a FASTA sequence")
 
         if extra_seqs:
-            warn(
+            reporter = fail if strict else warn
+            reporter(
                 "dna.fasta:orphan_seqs",
                 f"{len(extra_seqs)} FASTA headers not found in cases.csv "
                 f"(will be ignored at ingest)",
@@ -476,6 +515,14 @@ def main() -> None:
         help="Directory containing files to validate",
     )
     parser.add_argument("--json", action="store_true", help="Output results as JSON")
+    parser.add_argument(
+        "--strict-analysis",
+        action="store_true",
+        help=(
+            "Fail when analysis-critical optional files are missing or FASTA coverage "
+            "does not match cases.csv"
+        ),
+    )
     args = parser.parse_args()
 
     input_dir = Path(args.dir)
@@ -484,11 +531,11 @@ def main() -> None:
         sys.exit(2)
 
     case_ids = validate_cases(input_dir / "cases.csv")
-    run_ids = validate_sequencing_runs(input_dir / "sequencing_runs.csv")
-    validate_interpretation(input_dir / "tb_interpretation.csv", case_ids)
-    validate_qc(input_dir / "sample_qc_metrics.csv", case_ids, run_ids)
-    validate_provenance(input_dir / "analysis_provenance.csv", case_ids)
-    validate_fasta(input_dir / "dna.fasta", case_ids)
+    run_ids = validate_sequencing_runs(input_dir / "sequencing_runs.csv", args.strict_analysis)
+    validate_interpretation(input_dir / "tb_interpretation.csv", case_ids, args.strict_analysis)
+    validate_qc(input_dir / "sample_qc_metrics.csv", case_ids, run_ids, args.strict_analysis)
+    validate_provenance(input_dir / "analysis_provenance.csv", case_ids, args.strict_analysis)
+    validate_fasta(input_dir / "dna.fasta", case_ids, args.strict_analysis)
 
     if args.json:
         output = {

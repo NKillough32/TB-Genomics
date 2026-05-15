@@ -2,8 +2,9 @@
 """Load a prepared ingest bundle directory into the TB platform database.
 
 This is the server-side loader that runs on the Azure VM (or any host with
-direct database access).  It is idempotent — rows that already exist are
-skipped via ON CONFLICT DO NOTHING so it is safe to re-run.
+direct database access). It is idempotent: current-state rows are upserted
+so corrected records replace earlier values. Provenance rows remain
+append-only for audit/history.
 
 Expected bundle layout (identical to examples/ingest_bundle/):
 
@@ -151,7 +152,7 @@ class IngestResult:
         self.errors: List[str] = []
 
     def __str__(self) -> str:
-        parts = [f"{self.table}: +{self.inserted} inserted, ~{self.skipped} skipped"]
+        parts = [f"{self.table}: {self.inserted} rows processed"]
         if self.errors:
             parts.append(f"  ERRORS ({len(self.errors)}): {self.errors[:3]}")
         return "\n".join(parts)
@@ -176,7 +177,11 @@ def _load_cases(db: Any, rows: List[Dict[str, str]], dry_run: bool) -> IngestRes
                         "geographic_region, case_status) "
                         "VALUES (:pseudonymised_case_id, :local_lab_sample_id, :specimen_date, "
                         ":geographic_region, :case_status) "
-                        "ON CONFLICT (pseudonymised_case_id) DO NOTHING"
+                        "ON CONFLICT (pseudonymised_case_id) DO UPDATE SET "
+                        "local_lab_sample_id = EXCLUDED.local_lab_sample_id, "
+                        "specimen_date = EXCLUDED.specimen_date, "
+                        "geographic_region = EXCLUDED.geographic_region, "
+                        "case_status = EXCLUDED.case_status"
                     ),
                     params,
                 )
@@ -208,7 +213,13 @@ def _load_sequencing_runs(db: Any, rows: List[Dict[str, str]], dry_run: bool) ->
                         "reference_genome, started_at, completed_at) "
                         "VALUES (:run_id, :platform, :instrument_name, :pipeline_version, "
                         ":reference_genome, :started_at, :completed_at) "
-                        "ON CONFLICT (run_id) DO NOTHING"
+                        "ON CONFLICT (run_id) DO UPDATE SET "
+                        "platform = EXCLUDED.platform, "
+                        "instrument_name = EXCLUDED.instrument_name, "
+                        "pipeline_version = EXCLUDED.pipeline_version, "
+                        "reference_genome = EXCLUDED.reference_genome, "
+                        "started_at = EXCLUDED.started_at, "
+                        "completed_at = EXCLUDED.completed_at"
                     ),
                     params,
                 )
@@ -243,7 +254,14 @@ def _load_tb_interpretation(db: Any, rows: List[Dict[str, str]], dry_run: bool) 
                         "CAST(:resistance_mutations AS jsonb), "
                         "CAST(:predicted_drug_resistance AS jsonb), "
                         ":confidence_score, :interpretation_summary) "
-                        "ON CONFLICT (sample_id) DO NOTHING"
+                        "ON CONFLICT (sample_id) DO UPDATE SET "
+                        "species_confirmation = EXCLUDED.species_confirmation, "
+                        "lineage = EXCLUDED.lineage, "
+                        "sublineage = EXCLUDED.sublineage, "
+                        "resistance_mutations = EXCLUDED.resistance_mutations, "
+                        "predicted_drug_resistance = EXCLUDED.predicted_drug_resistance, "
+                        "confidence_score = EXCLUDED.confidence_score, "
+                        "interpretation_summary = EXCLUDED.interpretation_summary"
                     ),
                     params,
                 )
@@ -278,7 +296,15 @@ def _load_sample_qc_metrics(db: Any, rows: List[Dict[str, str]], dry_run: bool) 
                         "VALUES (:sample_id, :run_id, :mean_depth, :coverage_breadth, "
                         ":ambiguous_base_percent, :contamination_flag, :qc_status, "
                         ":qc_failure_reason, :reported_at) "
-                        "ON CONFLICT (sample_id) DO NOTHING"
+                        "ON CONFLICT (sample_id) DO UPDATE SET "
+                        "run_id = EXCLUDED.run_id, "
+                        "mean_depth = EXCLUDED.mean_depth, "
+                        "coverage_breadth = EXCLUDED.coverage_breadth, "
+                        "ambiguous_base_percent = EXCLUDED.ambiguous_base_percent, "
+                        "contamination_flag = EXCLUDED.contamination_flag, "
+                        "qc_status = EXCLUDED.qc_status, "
+                        "qc_failure_reason = EXCLUDED.qc_failure_reason, "
+                        "reported_at = EXCLUDED.reported_at"
                     ),
                     params,
                 )
@@ -331,7 +357,9 @@ def _load_fasta(db: Any, fasta_path: Path, dry_run: bool) -> IngestResult:
                     text(
                         "INSERT INTO consensus_sequences (sample_id, sequence, length) "
                         "VALUES (:sample_id, :sequence, :length) "
-                        "ON CONFLICT (sample_id) DO NOTHING"
+                        "ON CONFLICT (sample_id) DO UPDATE SET "
+                        "sequence = EXCLUDED.sequence, "
+                        "length = EXCLUDED.length"
                     ),
                     {"sample_id": seq_id, "sequence": sequence, "length": len(sequence)},
                 )

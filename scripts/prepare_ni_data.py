@@ -32,12 +32,11 @@ import hashlib
 import json
 import logging
 import os
-import shutil
 import sys
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("prepare_ni_data")
 
@@ -165,14 +164,50 @@ def _write_csv(rows: List[Dict[str, Optional[str]]], columns: List[str], out_pat
     return len(rows)
 
 
-def _copy_fasta(source_path: Path, out_dir: Path) -> None:
-    """Copy the FASTA file as-is — FASTA headers must already be UUIDs matching case IDs."""
-    if source_path.exists():
-        dest = out_dir / "dna.fasta"
-        shutil.copy2(source_path, dest)
-        logger.info("  Copied dna.fasta (%d bytes)", source_path.stat().st_size)
-    else:
-        logger.info("  FASTA source not found: %s — skipping", source_path)
+def _rewrite_fasta_headers(
+    source_path: Path,
+    out_dir: Path,
+    header_map: Dict[str, str],
+) -> None:
+    """Write dna.fasta with headers remapped to platform case UUIDs when possible."""
+    if not source_path.exists():
+        logger.info("  FASTA source not found: %s - skipping", source_path)
+        return
+
+    dest = out_dir / "dna.fasta"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    remapped = 0
+    unchanged = 0
+    unmapped = 0
+
+    with source_path.open(encoding="utf-8") as src, dest.open("w", encoding="utf-8") as out:
+        for line in src:
+            if not line.startswith(">"):
+                out.write(line)
+                continue
+
+            header = line[1:].rstrip()
+            parts = header.split(maxsplit=1)
+            token = parts[0] if parts else ""
+            suffix = f" {parts[1]}" if len(parts) > 1 else ""
+            mapped = header_map.get(token)
+
+            if mapped:
+                out.write(f">{mapped}{suffix}\n")
+                if mapped == token:
+                    unchanged += 1
+                else:
+                    remapped += 1
+            else:
+                out.write(line)
+                unmapped += 1
+
+    logger.info(
+        "  Wrote dna.fasta with remapped headers (%d remapped, %d unchanged, %d unmapped)",
+        remapped,
+        unchanged,
+        unmapped,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -246,12 +281,20 @@ def run(args: argparse.Namespace) -> None:
     print()
 
     totals: Dict[str, int] = {}
+    fasta_header_map: Dict[str, str] = {}
 
     # ── cases ──────────────────────────────────────────────────────────────
     cases_src = Path(source_files.get("cases", ""))
     if source_files.get("cases"):
         logger.info("Processing cases...")
         rows = _transform_csv(cases_src, config.get("cases", {}), CASES_COLS, args.dry_run)
+        for row in rows:
+            case_id = (row.get("pseudonymised_case_id") or "").strip()
+            lab_id = (row.get("local_lab_sample_id") or "").strip()
+            if case_id:
+                fasta_header_map[case_id] = case_id
+                if lab_id:
+                    fasta_header_map[lab_id] = case_id
         if not args.dry_run and rows:
             n = _write_csv(rows, CASES_COLS, out_dir / "cases.csv")
             totals["cases.csv"] = n
@@ -300,8 +343,8 @@ def run(args: argparse.Namespace) -> None:
     # ── FASTA ─────────────────────────────────────────────────────────────
     fasta_src = source_files.get("fasta", "")
     if fasta_src and not args.dry_run:
-        logger.info("Copying FASTA...")
-        _copy_fasta(Path(fasta_src), out_dir)
+        logger.info("Preparing FASTA...")
+        _rewrite_fasta_headers(Path(fasta_src), out_dir, fasta_header_map)
 
     if not args.dry_run:
         print("\n── Output summary ──────────────────────────────────────")

@@ -65,6 +65,16 @@ def _case_rows(db: Session):
     """)).mappings().all()
 
 
+def _validation_notice() -> dict[str, str]:
+    return {
+        "validation_status": "heuristic_non_validated",
+        "warning": (
+            "This analytics output is heuristic and non-validated. Scores and interpretations "
+            "require calibrated pipelines before real-world use."
+        ),
+    }
+
+
 @router.get("/snp-matrix")
 def snp_matrix(
     cluster_id: str | None = Query(None),
@@ -101,6 +111,7 @@ def snp_matrix(
         "matrix": matrix,
         "threshold_hint": snp_threshold,
         "message": f"Distances are pairwise SNP mismatches; <= {snp_threshold} indicates likely linkage under current setting.",
+        **_validation_notice(),
     }
 
 
@@ -128,7 +139,8 @@ def analytics_clusters(db: Session = Depends(get_db)):
                 "last_specimen": str(r["last_specimen"]) if r["last_specimen"] else None,
             }
             for r in rows
-        ]
+        ],
+        **_validation_notice(),
     }
 
 
@@ -173,6 +185,7 @@ def phylo_tree():
             "edge_count": len(graph_edges),
         },
         "note": "Use outbreaker tree as primary phylogenetic visual; graph payload supports custom frontend rendering.",
+        **_validation_notice(),
     }
 
 
@@ -210,6 +223,7 @@ def timeline(db: Session = Depends(get_db)):
         "monthly_counts": monthly_counts,
         "events": case_events,
         "event_count": len(case_events),
+        **_validation_notice(),
     }
 
 
@@ -261,7 +275,7 @@ def geo_map(db: Session = Depends(get_db)):
             "lat": lat,
         })
 
-    return {"points": points, "point_count": len(points)}
+    return {"points": points, "point_count": len(points), **_validation_notice()}
 
 
 @router.get("/cluster-growth")
@@ -293,7 +307,7 @@ def cluster_growth(db: Session = Depends(get_db)):
         })
 
     curves.sort(key=lambda c: (-c["final_size"], c["cluster_id"]))
-    return {"curves": curves}
+    return {"curves": curves, **_validation_notice()}
 
 
 def _epi_plausible(source_row: dict, target_row: dict, epi_window_days: int) -> bool:
@@ -392,6 +406,7 @@ def genomic_vs_epi(
             "Epi support here is heuristic: same region and specimen dates within configured window.",
             "Genomic support requires available pairwise sequence distance below configured SNP threshold.",
         ],
+        **_validation_notice(),
     }
 
 
@@ -459,6 +474,11 @@ def cluster_dossier(cluster_id: str, db: Session = Depends(get_db)):
             "cluster_investigation_report": f"/cluster-investigations/{cid}/report",
             "outbreak_report": "/cases/outbreak-report.full.html",
         },
+        "validation_status": "heuristic_non_validated",
+        "warning": (
+            "This dossier is heuristic and non-validated. SNP summary and operational interpretations "
+            "are for review support only and require calibrated pipelines before real-world use."
+        ),
     }
     return dossier
 
@@ -490,9 +510,11 @@ h1,h2{{margin:0 0 8px 0;}}
 table{{width:100%;border-collapse:collapse;font-size:13px;}}
 th,td{{border-bottom:1px solid #eee;padding:6px;text-align:left;}}
 .small{{color:#666;font-size:12px;}}
+.warning{{background:#fff7ed;border:1px solid #fdba74;color:#9a3412;padding:.9rem 1rem;border-radius:8px;margin-bottom:12px;}}
 </style></head><body>
 <h1>Cluster Dossier</h1>
 <p class=\"small\">Generated {dossier['generated_at']}</p>
+<div class=\"warning\"><strong>Heuristic / non-validated:</strong> {dossier['warning']}</div>
 <div class=\"card\"><h2>Summary</h2>
 <p><strong>Cluster:</strong> {dossier['cluster_id']}<br>
 <strong>Members:</strong> {dossier['member_count']}<br>

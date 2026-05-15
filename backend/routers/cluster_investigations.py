@@ -27,6 +27,16 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/cluster-investigations", tags=["cluster-investigations"])
 
 
+def _validation_notice() -> dict:
+    return {
+        "validation_status": "heuristic_non_validated",
+        "warning": (
+            "Risk scoring and investigation outputs are heuristic and non-validated. "
+            "Cluster-risk scores require calibration before any real-world use."
+        ),
+    }
+
+
 # ── DB helpers ─────────────────────────────────────────────────────────────────
 
 def get_db():
@@ -304,7 +314,7 @@ def list_investigations(db: Session = Depends(get_db)):
         })
 
     results.sort(key=lambda x: (-x["risk_score"], x["cluster_id"]))
-    return {"investigations": results, "total": len(results)}
+    return {"investigations": results, "total": len(results), **_validation_notice()}
 
 
 @router.get("/{cluster_id}")
@@ -353,6 +363,7 @@ def get_investigation(cluster_id: str, db: Session = Depends(get_db)):
             }
             for m in members
         ],
+        **_validation_notice(),
     }
 
 
@@ -379,7 +390,7 @@ def assign_reviewer(cluster_id: str, body: AssignRequest, db: Session = Depends(
     """), {"reviewer": reviewer, "cid": cluster_id})
     db.commit()
 
-    return {"ok": True, "assigned_to": reviewer}
+    return {"ok": True, "assigned_to": reviewer, **_validation_notice()}
 
 
 @router.put("/{cluster_id}/epi-notes")
@@ -394,7 +405,7 @@ def update_epi_notes(cluster_id: str, body: EpiNotesRequest, db: Session = Depen
         WHERE cluster_id = CAST(:cid AS UUID)
     """), {"notes": body.epi_notes, "cid": cluster_id})
     db.commit()
-    return {"ok": True}
+    return {"ok": True, **_validation_notice()}
 
 
 @router.post("/{cluster_id}/actions")
@@ -435,7 +446,7 @@ def record_action(cluster_id: str, body: ActionRequest, db: Session = Depends(ge
     })
     db.commit()
 
-    return {"ok": True, "action_id": new_action["id"]}
+    return {"ok": True, "action_id": new_action["id"], **_validation_notice()}
 
 
 @router.post("/{cluster_id}/sign-off")
@@ -473,7 +484,7 @@ def sign_off(cluster_id: str, body: SignOffRequest, db: Session = Depends(get_db
     """), {"by": body.decision_by, "cid": cluster_id, "decision": body.decision})
     db.commit()
 
-    return {"ok": True, "decision": body.decision, "decision_by": body.decision_by}
+    return {"ok": True, "decision": body.decision, "decision_by": body.decision_by, **_validation_notice()}
 
 
 @router.get("/{cluster_id}/report", response_class=HTMLResponse)
@@ -497,6 +508,7 @@ def generate_report(cluster_id: str, db: Session = Depends(get_db)):
     h = html_lib.escape
     actions: list[dict] = (inv["actions"] or []) if inv else []
     generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    validation_warning = _validation_notice()["warning"]
 
     band_colour = {
         "critical": "#b91c1c",
@@ -567,6 +579,7 @@ def generate_report(cluster_id: str, db: Session = Depends(get_db)):
   .kv dt{{font-weight:600;color:#374151;}}
   .kv dd{{margin:0;color:#111;}}
   pre{{background:#f3f4f6;padding:.75rem;border-radius:6px;font-size:.82rem;white-space:pre-wrap;}}
+    .warning{{background:#fff7ed;border:1px solid #fdba74;color:#9a3412;padding:.9rem 1rem;border-radius:8px;margin-bottom:1rem;}}
   .footer{{color:#6b7280;font-size:.8rem;text-align:center;margin-top:1.5rem;}}
   @media print{{body{{background:#fff;padding:1rem;}}header{{border-radius:0;}}}}
 </style>
@@ -576,6 +589,8 @@ def generate_report(cluster_id: str, db: Session = Depends(get_db)):
   <h1>Cluster Investigation Report</h1>
   <p>Cluster ID: {h(cluster_id)} &nbsp;|&nbsp; Generated: {h(generated_at)}</p>
 </header>
+
+<div class="warning"><strong>Heuristic / non-validated:</strong> {h(validation_warning)}</div>
 
 <section>
   <h2>Risk Assessment</h2>

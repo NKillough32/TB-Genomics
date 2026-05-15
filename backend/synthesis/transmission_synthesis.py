@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import csv
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
@@ -40,12 +41,48 @@ def _export_json(path: str) -> dict[str, Any]:
         return {}
 
 
-def _snp_distance(a: str, b: str) -> int:
-    left = (a or "").upper()
-    right = (b or "").upper()
-    common = min(len(left), len(right))
-    mismatches = sum(1 for i in range(common) if left[i] != right[i])
-    return mismatches + abs(len(left) - len(right))
+def _export_csv_map(path: str) -> dict[str, dict[str, str]]:
+    try:
+        with open(path, "r", encoding="utf-8-sig", newline="") as f:
+            reader = csv.DictReader(f)
+            rows: dict[str, dict[str, str]] = {}
+            for row in reader:
+                case_id = str(row.get("case_id") or "").strip()
+                if case_id:
+                    rows[case_id] = row
+            return rows
+    except Exception:
+        return {}
+
+
+def _load_sequence_proxy() -> tuple[dict[str, dict[str, str]], int, float]:
+    assignments = _export_csv_map("exports/sequence_cluster_assignments.csv")
+    summary = _export_json("exports/sequence_clustering_summary.json")
+    comparison = _export_json("exports/cluster_method_comparison.json")
+    threshold = int(summary.get("threshold_snp_distance") or 25)
+    agreement = comparison.get("agreement") or {}
+    precision = float(agreement.get("pairwise_precision_outbreaker_vs_sequence") or 1.0)
+    return assignments, threshold, precision
+
+
+def _sequence_proxy_distance(
+    source_id: str,
+    target_id: str,
+    assignments: dict[str, dict[str, str]],
+    threshold: int,
+) -> tuple[int | None, str, bool | None]:
+    source_row = assignments.get(source_id)
+    target_row = assignments.get(target_id)
+    if not source_row or not target_row:
+        return None, "sequence_cluster_assignment_unavailable", None
+
+    source_cluster = str(source_row.get("cluster_id") or "")
+    target_cluster = str(target_row.get("cluster_id") or "")
+    if not source_cluster or not target_cluster:
+        return None, "sequence_cluster_assignment_unavailable", None
+
+    same_cluster = source_cluster == target_cluster
+    return (0 if same_cluster else threshold + 1), "sequence_cluster_proxy", same_cluster
 
 
 def _is_resistant(value: Any) -> bool:
@@ -99,6 +136,17 @@ def _bool_temporal_support(source_date, target_date, window_days: int) -> bool:
     return abs((target_date - source_date).days) <= window_days
 
 
+def _validation_notice() -> dict[str, str]:
+    return {
+        "validation_status": "heuristic_non_validated",
+        "warning": (
+            "This synthesis output is heuristic and non-validated. Sequence support is derived from "
+            "precomputed sequence-cluster assignments rather than a raw SNP pipeline, epidemiological "
+            "support is proxy-based, and scores require calibration before real-world use."
+        ),
+    }
+
+
 def build_transmission_synthesis(
     db: Session,
     *,
@@ -110,6 +158,7 @@ def build_transmission_synthesis(
         cluster_id = _normalise_cluster_id(cluster_id)
 
     case_rows = _case_rows(db, cluster_id=cluster_id)
+    sequence_assignments, sequence_threshold, sequence_precision = _load_sequence_proxy()
     case_index: dict[str, dict[str, Any]] = {}
     for row in case_rows:
         cid = str(row["case_id"])
@@ -124,6 +173,7 @@ def build_transmission_synthesis(
             "sequence": str(row["sequence"] or ""),
             "qc_status": str(row["qc_status"] or "not_reported"),
             "contamination_flag": bool(row["contamination_flag"]),
+            "sequence_cluster_id": str((sequence_assignments.get(cid) or {}).get("cluster_id") or ""),
         }
 
     if not case_index:
@@ -134,6 +184,11 @@ def build_transmission_synthesis(
             "clusters": [],
             "pairs": [],
             "parameters": serialise_parameters(cfg.__dict__),
+            "calibration": {
+                "sequence_cluster_threshold_snp_distance": sequence_threshold,
+                "outbreaker_vs_sequence_pairwise_precision": sequence_precision,
+            },
+            **_validation_notice(),
         }
 
     net = _export_json("exports/transmission_network.json")
@@ -169,7 +224,12 @@ def build_transmission_synthesis(
 
         source_has_seq = bool(src["sequence"])
         target_has_seq = bool(tgt["sequence"])
-        snp = _snp_distance(src["sequence"], tgt["sequence"]) if source_has_seq and target_has_seq else None
+        snp, snp_source, sequence_cluster_match = _sequence_proxy_distance(
+            source,
+            target,
+            sequence_assignments,
+            sequence_threshold,
+        )
 
         temporal_support = _bool_temporal_support(src["specimen_date"], tgt["specimen_date"], cfg.temporal_window_days)
         geographic_support = src["region"] == tgt["region"]
@@ -219,6 +279,8 @@ def build_transmission_synthesis(
                 "temporal_support": temporal_support,
                 "geographic_support": geographic_support,
                 "epi_support": "unknown",
+                "sequence_cluster_match": sequence_cluster_match,
+                "snp_distance_source": snp_source,
                 "confidence": category_display(category),
                 "confidence_code": category,
                 "priority_score": priority,
@@ -226,6 +288,7 @@ def build_transmission_synthesis(
                 "interpretation": interpretation,
                 "flags": p_flags,
                 "recommended_review_actions": actions,
+                "validation_status": "heuristic_non_validated",
             }
         )
 
@@ -271,6 +334,7 @@ def build_transmission_synthesis(
             pair_count=c_pair_count,
             strong_or_contradictory_pairs=c_strong_or_contradictory,
             cluster_flags=c_flags,
+            evidence_scale=sequence_precision,
         )
 
         cluster_pairs = [p for p in pairs if p["cluster_id"] == cluster_key]
@@ -311,6 +375,7 @@ def build_transmission_synthesis(
                     "into investigation-ready confidence categories and review priorities."
                 ),
                 "pairwise_transmission_evidence": cluster_pairs,
+                "validation_status": "heuristic_non_validated",
             }
         )
 
@@ -329,6 +394,11 @@ def build_transmission_synthesis(
         "clusters": by_cluster,
         "pairs": pairs,
         "parameters": serialise_parameters(cfg.__dict__),
+        "calibration": {
+            "sequence_cluster_threshold_snp_distance": sequence_threshold,
+            "outbreaker_vs_sequence_pairwise_precision": sequence_precision,
+        },
+        **_validation_notice(),
     }
 
 
@@ -356,4 +426,9 @@ def build_cluster_risk_summary(db: Session, *, config: SynthesisConfig | None = 
         "summary": payload.get("summary", {}),
         "clusters": items,
         "parameters": payload.get("parameters", {}),
+        "validation_status": payload.get("validation_status", "heuristic_non_validated"),
+        "warning": payload.get(
+            "warning",
+            "This synthesis output is heuristic and non-validated. Scores require calibration before use.",
+        ),
     }

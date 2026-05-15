@@ -71,12 +71,15 @@ def cluster_priority_score(
     pair_count: int,
     strong_or_contradictory_pairs: int,
     cluster_flags: list[str],
+    evidence_scale: float = 1.0,
 ) -> int:
     """Compute a cluster-level investigation priority score."""
     score = 0
     score += min(35, member_count * 2)
-    score += min(20, pair_count)
-    score += min(25, strong_or_contradictory_pairs * 3)
+    scaled_pairs = int(round(max(0.0, evidence_scale) * pair_count))
+    scaled_strong_pairs = int(round(max(0.0, evidence_scale) * strong_or_contradictory_pairs))
+    score += min(20, scaled_pairs)
+    score += min(25, scaled_strong_pairs * 3)
     score += min(20, len(cluster_flags) * 4)
     return max(0, min(100, score))
 

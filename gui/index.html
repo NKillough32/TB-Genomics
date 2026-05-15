@@ -104,6 +104,11 @@
     </details>
     <div class="progress-container"><div id="progressBar" class="progress-bar">0%</div></div>
     <div id="pipelineStepLabel" class="hint"></div>
+    <div class="workflow-status-header">
+      <h3>Workflow confidence</h3>
+      <button type="button" class="mini-btn" onclick="loadWorkflowStatus()">Refresh status</button>
+    </div>
+    <div id="workflowStatusPanel" class="workflow-status-panel">Loading workflow confidence status...</div>
     <pre id="jobStatus" class="log-box">Idle</pre>
   </section>
   <section class="card">

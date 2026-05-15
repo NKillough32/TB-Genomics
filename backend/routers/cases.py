@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from backend.database import SessionLocal
 from backend.models import Case
 from backend.data_safety import enforce_operational_dataset, get_data_safety_status
+from backend.quality_gates import build_workflow_status
 
 router = APIRouter(prefix="/cases", tags=["cases"])
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -1104,6 +1105,56 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
         )
 
     analysis_quality_warnings_html = _build_analysis_quality_warnings()
+    workflow_quality_status = build_workflow_status(db)
+
+    def _status_badge(status: str) -> str:
+        status_text = str(status or "unknown")
+        cls = {
+            "pass": "badge-green",
+            "ready": "badge-green",
+            "available": "badge-green",
+            "complete": "badge-green",
+            "warn": "badge-amber",
+            "warning": "badge-amber",
+            "review": "badge-orange",
+            "usable_with_warnings": "badge-amber",
+            "incomplete": "badge-grey",
+            "pending": "badge-grey",
+            "missing": "badge-grey",
+            "fail": "badge-red",
+        }.get(status_text, "badge-grey")
+        return f'<span class="badge {cls}">{_safe_html(status_text.replace("_", " ").title())}</span>'
+
+    def _build_confidence_gate_table() -> str:
+        gates = workflow_quality_status.get("gates") or []
+        if not gates:
+            return ""
+        rows = []
+        for gate in gates:
+            flags = []
+            if gate.get("process_blocking"):
+                flags.append("blocks process")
+            if gate.get("interpretation_blocking"):
+                flags.append("limits interpretation")
+            flag_text = ", ".join(flags) if flags else "non-blocking"
+            rows.append(
+                "<tr>"
+                f"<td>{_safe_html(gate.get('label', gate.get('key', 'Gate')))}</td>"
+                f"<td>{_status_badge(str(gate.get('status', 'unknown')))}</td>"
+                f"<td>{_safe_html(gate.get('message', ''))}</td>"
+                f"<td>{_safe_html(flag_text)}</td>"
+                "</tr>"
+            )
+        return (
+            '<details open class="quality-gates"><summary>Analysis confidence gates</summary><div>'
+            '<div class="section-note">Dependency gaps are warnings and do not stop the workflow. '
+            'Data-quality gates show whether results should be treated as operational, limited, or incomplete.</div>'
+            '<div class="tbl-wrap"><table><thead><tr><th>Gate</th><th>Status</th><th>Finding</th><th>Impact</th></tr></thead>'
+            f"<tbody>{''.join(rows)}</tbody></table></div>"
+            "</div></details>"
+        )
+
+    confidence_gate_table_html = _build_confidence_gate_table()
 
     try:
         kpi_data = surveillance_kpis(weeks=12, db=db)
@@ -2870,6 +2921,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
       <h2>Executive summary</h2>
       {dashboard_html}
       {analysis_quality_warnings_html}
+      {confidence_gate_table_html}
       {_qc_warning_html}{_snp_warning_html}{_dr_unlinked_warning_html}{_dr_skipped_warning_html}{'<div class="callout callout-alert"><strong>DRAFT REPORT:</strong> Missing reproducibility fields: ' + _safe_html(', '.join(missing_repro)) + '. External circulation is blocked until these are populated.</div>' if missing_repro else '<div class="callout"><strong>Artifact completeness gate passed.</strong> Reproducibility metadata and appendices are present. Operational use still requires MDT, QC, and information-governance review.</div>'}
     </section>
 

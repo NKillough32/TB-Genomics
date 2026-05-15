@@ -143,6 +143,13 @@ select:focus-visible {
 	outline-offset: 2px;
 }
 
+.mini-btn {
+	margin: 0;
+	padding: 0.34rem 0.55rem;
+	font-size: 0.75rem;
+	border-radius: 7px;
+}
+
 input[type="file"] {
 	margin-top: 0.25rem;
 }
@@ -338,6 +345,102 @@ input[type="file"] {
 	transition: width 280ms ease;
 }
 
+.workflow-status-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.75rem;
+	margin-top: 0.85rem;
+}
+
+.workflow-status-header h3 {
+	margin: 0;
+	font-size: 0.96rem;
+	color: #12324e;
+}
+
+.workflow-status-panel {
+	margin-top: 0.5rem;
+	background: #ffffff;
+	border: 1px solid #dbe4ed;
+	border-radius: 10px;
+	padding: 0.85rem;
+}
+
+.workflow-summary {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+	gap: 0.55rem;
+	margin-bottom: 0.75rem;
+}
+
+.workflow-summary > div {
+	display: flex;
+	flex-direction: column;
+	gap: 0.25rem;
+	background: var(--surface-soft);
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	padding: 0.65rem;
+	font-size: 0.82rem;
+}
+
+.status-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 0.82rem;
+	margin: 0.45rem 0 0.75rem;
+}
+
+.status-table td {
+	border-top: 1px solid var(--line);
+	padding: 0.45rem 0.35rem;
+	vertical-align: top;
+}
+
+.status-table td:first-child {
+	font-weight: 700;
+	color: #163a58;
+	width: 28%;
+}
+
+.status-pill {
+	display: inline-flex;
+	align-items: center;
+	border-radius: 999px;
+	border: 1px solid #cbd5e1;
+	padding: 0.12rem 0.48rem;
+	font-size: 0.72rem;
+	font-weight: 800;
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+	white-space: nowrap;
+}
+
+.status-pass {
+	background: #e8f7ee;
+	border-color: #9bd8b6;
+	color: #17613b;
+}
+
+.status-warn {
+	background: #fff7df;
+	border-color: #f2cf75;
+	color: #8a5600;
+}
+
+.status-fail {
+	background: #fdecec;
+	border-color: #f2a3a3;
+	color: #a32727;
+}
+
+.status-muted {
+	background: #f1f5f9;
+	border-color: #cbd5e1;
+	color: #475569;
+}
+
 .log-box {
 	margin-top: 0.6rem;
 	background: var(--surface-soft);
@@ -420,9 +523,6 @@ hr {
 
 .data-table .mini-btn {
 	margin: 0;
-	padding: 0.34rem 0.55rem;
-	font-size: 0.75rem;
-	border-radius: 7px;
 }
 
 .media-plot {

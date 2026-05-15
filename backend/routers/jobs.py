@@ -4,6 +4,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from backend.job_runner import run_job, run_pipeline, JOBS, PIPELINE_STEPS
 from backend.database import SessionLocal
 from backend.data_safety import enforce_operational_dataset, get_data_safety_status
+from backend.quality_gates import build_workflow_status
 from sqlalchemy.orm import Session
 import os
 import glob
@@ -82,6 +83,12 @@ def last_run_times():
         else:
             result[key] = None
     return result
+
+
+@router.get("/workflow-status")
+def workflow_status(db: Session = Depends(get_db)):
+    """Return non-blocking dependency health, workflow stages, and analysis confidence gates."""
+    return build_workflow_status(db)
 
 @router.get("/download-all-exports")
 def download_all_exports(db: Session = Depends(get_db)):

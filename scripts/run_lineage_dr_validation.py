@@ -1523,8 +1523,8 @@ def main() -> None:
     docker = _probe_docker()
     wsl = _probe_wsl()
     docker_image = os.getenv("TBPROFILER_DOCKER_IMAGE", "quay.io/jodyphelan/tbprofiler:latest")
-    docker_fallback_enabled = os.getenv("TBPROFILER_DOCKER_FALLBACK", "1") == "1"
-    wsl_fallback_enabled = os.getenv("TBPROFILER_WSL_FALLBACK", "1") == "1"
+    docker_fallback_enabled = os.getenv("TBPROFILER_DOCKER_FALLBACK", "0") == "1"
+    wsl_fallback_enabled = os.getenv("TBPROFILER_WSL_FALLBACK", "0") == "1"
     wsl_env_name = os.getenv("TBPROFILER_WSL_ENV", "tbtools")
     resistance_catalogue = os.getenv("TB_RESISTANCE_CATALOGUE", "WHO TB catalogue v2 (2023)")
 
@@ -1778,28 +1778,59 @@ def main() -> None:
         _log_concordance_to_audit(dr_concordance)
 
     ready_inputs = inputs["fastq_count"] > 0 or inputs["vcf_count"] > 0 or inputs["fasta_count"] > 0
+    process_blocking = False
+    interpretation_blocking = False
+    limitation_codes: list[str] = []
+    warnings: list[str] = []
     overall_status = "completed"
     if not ready_inputs:
-        overall_status = "ready_missing_inputs"
+        overall_status = "completed_missing_inputs"
+        interpretation_blocking = True
+        limitation_codes.append("missing_sequence_inputs")
+        warnings.append("No FASTQ/VCF/FASTA inputs were found for lineage/DR validation.")
     elif fasta_inputs and not fasta_ready_for_tools:
-        overall_status = "blocked_sample_id_mismatch"
+        overall_status = "completed_with_warnings"
+        interpretation_blocking = True
+        limitation_codes.append("sample_id_mismatch")
+        warnings.append(fasta_validation["message"])
     elif tbprofiler["status"] not in {"installed", "installed_but_unusable"} and mykrobe["status"] != "installed":
-        overall_status = "blocked_no_tools"
+        overall_status = "completed_with_warnings"
+        interpretation_blocking = True
+        limitation_codes.append("no_usable_lineage_dr_tools")
+        warnings.append("No usable TBProfiler/Mykrobe executable was detected. Workflow can continue, but lineage/DR validation is limited.")
     elif tbprofiler["status"] == "installed_but_unusable" and mykrobe["status"] != "installed":
-        overall_status = "blocked_tool_dependencies"
+        overall_status = "completed_with_warnings"
+        interpretation_blocking = True
+        limitation_codes.append("tool_dependency_warning")
+        warnings.append("TBProfiler was detected but is not usable, and Mykrobe is unavailable.")
     elif tbprofiler_run["status"] == "failed":
-        overall_status = "failed_tbprofiler_runtime"
+        overall_status = "completed_with_warnings"
+        interpretation_blocking = True
+        limitation_codes.append("tbprofiler_runtime_failed")
+        warnings.append("TBProfiler runtime failed. Workflow can continue, but lineage/DR validation is limited.")
 
     if tbprofiler_run["status"] == "completed":
         overall_status = "completed"
+        interpretation_blocking = False
 
     if mykrobe_run["status"] == "completed" and overall_status != "completed":
         overall_status = "completed"
+        interpretation_blocking = False
+
+    if not dr_concordance:
+        interpretation_blocking = True
+        limitation_codes.append("no_dr_concordance_samples")
+        warnings.append("No samples were compared across DR engines; cross-engine DR concordance is unavailable.")
 
     payload = {
         "generated_at": _iso_now(),
         "status": overall_status,
         "scaffold_version": "1.0",
+        "process_blocking": process_blocking,
+        "interpretation_blocking": interpretation_blocking,
+        "limitation_codes": sorted(set(limitation_codes)),
+        "warnings": warnings,
+        "confidence": "tool_validated" if not interpretation_blocking else "limited",
         "engines": {
             "tb_profiler": tbprofiler,
             "mykrobe": mykrobe,
@@ -1846,8 +1877,9 @@ def main() -> None:
             "details": dr_concordance,
         },
         "next_steps": [
-            "Install tb-profiler/mykrobe dependencies (WSL2 micromamba env is supported via TBPROFILER_WSL_FALLBACK=1).",
-            "If local dependencies fail, install Docker Desktop and rerun with TBPROFILER_DOCKER_FALLBACK=1.",
+            "Install tb-profiler/mykrobe dependencies for local tool execution.",
+            "For full external-tool validation, opt into WSL2 micromamba fallback with TBPROFILER_WSL_FALLBACK=1.",
+            "If local dependencies fail, install Docker Desktop and opt into Docker fallback with TBPROFILER_DOCKER_FALLBACK=1.",
             "Place FASTQ/VCF/FASTA inputs in uploads/ (or export pipeline outputs there).",
             "Optionally provide exports/lineage_resistance_calls.csv to hydrate tb_interpretation.",
         ],

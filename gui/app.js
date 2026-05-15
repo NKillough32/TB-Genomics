@@ -85,6 +85,60 @@ async function loadKPIBanner(){
 }
 
 // ── Full Pipeline ────────────────────────────────────────────────────────────
+function statusClass(status){
+	const value=String(status||'unknown');
+	if(['pass','ready','available','complete','completed'].includes(value)) return 'status-pass';
+	if(['warn','warning','review','usable_with_warnings','missing'].includes(value)) return 'status-warn';
+	if(['fail','failed'].includes(value)) return 'status-fail';
+	return 'status-muted';
+}
+
+function statusLabel(status){
+	return String(status||'unknown').replace(/_/g,' ');
+}
+
+function renderStatusPill(status){
+	return `<span class="status-pill ${statusClass(status)}">${escapeHtml(statusLabel(status))}</span>`;
+}
+
+async function loadWorkflowStatus(){
+	const panel=document.getElementById('workflowStatusPanel');
+	if(!panel) return;
+	panel.textContent='Loading workflow confidence status...';
+	try{
+		const r=await fetch(`${API}/jobs/workflow-status`);
+		const d=await r.json();
+		if(!r.ok){
+			panel.textContent=JSON.stringify(d,null,2);
+			return;
+		}
+		const summary=d.summary||{};
+		let html='<div class="workflow-summary">';
+		html+=`<div><strong>Overall</strong>${renderStatusPill(d.overall_status)}</div>`;
+		html+=`<div><strong>Dependency warnings</strong><span>${escapeHtml(summary.dependency_warnings??0)}</span></div>`;
+		html+=`<div><strong>Gate warnings</strong><span>${escapeHtml(summary.gate_warnings??0)}</span></div>`;
+		html+=`<div><strong>Interpretation limits</strong><span>${escapeHtml(summary.interpretation_blockers??0)}</span></div>`;
+		html+='</div>';
+
+		const deps=(d.dependencies||[]).map(dep=>(
+			`<tr><td>${escapeHtml(dep.label||dep.key)}</td><td>${renderStatusPill(dep.status)}</td><td>${escapeHtml(dep.message||'')}</td></tr>`
+		)).join('');
+		const gates=(d.gates||[]).map(gate=>(
+			`<tr><td>${escapeHtml(gate.label||gate.key)}</td><td>${renderStatusPill(gate.status)}</td><td>${escapeHtml(gate.message||'')}</td></tr>`
+		)).join('');
+		const stages=(d.stages||[]).map(stage=>(
+			`<tr><td>${escapeHtml(stage.label||stage.key)}</td><td>${renderStatusPill(stage.status)}</td><td>${escapeHtml(stage.message||'')}</td></tr>`
+		)).join('');
+
+		html+=`<details open><summary>Confidence gates</summary><table class="status-table"><tbody>${gates}</tbody></table></details>`;
+		html+=`<details><summary>Dependency health (non-blocking)</summary><table class="status-table"><tbody>${deps}</tbody></table></details>`;
+		html+=`<details><summary>Workflow stages</summary><table class="status-table"><tbody>${stages}</tbody></table></details>`;
+		panel.innerHTML=html;
+	}catch(e){
+		panel.textContent=`Workflow status failed: ${e}`;
+	}
+}
+
 async function runFullPipeline(){
 	const btn = document.getElementById('runPipelineBtn');
 	btn.disabled = true;
@@ -128,7 +182,10 @@ async function pollPipeline(steps){
 		const btn = document.getElementById('runPipelineBtn');
 		btn.disabled = false;
 		btn.textContent = '▶ Run full pipeline (all steps)';
-		if(d.status === 'completed') loadKPIBanner();
+		if(d.status === 'completed'){
+			loadKPIBanner();
+			loadWorkflowStatus();
+		}
 	}
 }
 
@@ -995,4 +1052,4 @@ async function loadRegions(){
 		// Backend unavailable — leave placeholder only
 	}
 }
-(async()=>{try{await fetch(`${API}/`);document.getElementById('status').innerHTML='<li>✅ Backend running</li>';}catch{document.getElementById('status').innerHTML='<li>❌ Backend unavailable</li>';}refreshDemoModeStatus();loadRegions();loadKPIBanner();loadDataSafety();loadAnalyticsClusters();loadTransmissionSynthesisOverview();})();
+(async()=>{try{await fetch(`${API}/`);document.getElementById('status').innerHTML='<li>✅ Backend running</li>';}catch{document.getElementById('status').innerHTML='<li>❌ Backend unavailable</li>';}refreshDemoModeStatus();loadRegions();loadKPIBanner();loadWorkflowStatus();loadDataSafety();loadAnalyticsClusters();loadTransmissionSynthesisOverview();})();

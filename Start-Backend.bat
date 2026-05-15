@@ -3,17 +3,6 @@ setlocal
 
 REM One-click backend launcher for Windows.
 cd /d "%~dp0"
-
-set "BACKEND_PORT=8000"
-set "BACKEND_PID="
-for /f %%P in ('powershell -NoProfile -Command "$listener = Get-NetTCPConnection -LocalPort %BACKEND_PORT% -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty OwningProcess; if ($listener) { $listener }"') do set "BACKEND_PID=%%P"
-if defined BACKEND_PID (
-  echo [INFO] Backend is already running on http://localhost:%BACKEND_PORT% (PID %BACKEND_PID%).
-  echo [INFO] Reuse that instance or stop it before starting a new one.
-  pause
-  exit /b 0
-)
-
 if not exist ".venv\Scripts\python.exe" (
   echo [ERROR] Python virtual environment not found at .venv\Scripts\python.exe
   echo.

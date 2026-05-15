@@ -18,8 +18,9 @@ In plain terms, it helps answer:
 3. It runs analysis jobs including outbreak-style analysis workflows.
 4. It calls lineage and drug resistance tools (TBProfiler and Mykrobe) in parallel; both results are compared and discordances are flagged for analyst review.
 5. It calculates programme metrics (coverage, QC, turnaround, etc.).
-6. It generates summaries, visuals, and a full HTML investigation report.
-7. It shows all of this in a web interface and API for operational use.
+6. It builds a synthesis layer that combines genomic evidence, timing, geography, resistance, and outbreaker outputs into a single investigation summary.
+7. It generates summaries, visuals, and a full HTML investigation report.
+8. It shows all of this in a web interface and API for operational use.
 
 ## The main parts
 
@@ -36,10 +37,51 @@ In plain terms, it helps answer:
 - Surveillance KPIs over a selected time window
 - Weekly trends for sequencing and QC performance
 - Priority lists (for clusters and likely transmission signals)
+- A synthesis view that explains which transmission links are strong, moderate, contradictory, or unsupported
+- Automatic flags for things that need attention, such as missing sequence data, cross-region clusters, or resistance signals inside a cluster
+- Recommended review actions written in plain language for public health teams
 - Lineage and drug resistance results from TBProfiler and Mykrobe with concordance checking
 - A generated outbreak investigation HTML report (short and full versions)
 - Job status and logs for pipeline runs
 - Data provenance and reproducibility fields (reference genome, pipeline version, resistance catalogue, random seed)
+
+## What the synthesis layer means in plain language
+
+The synthesis layer sits between the analytics pages and the investigation pages.
+
+It takes separate outputs, such as:
+
+- SNP or sequence clustering signals
+- Outbreaker transmission probabilities
+- specimen dates
+- geographic region
+- lineage and drug resistance information
+
+and turns them into one simple interpretation.
+
+For each possible transmission pair, it can say things like:
+
+- strong support
+- moderate support
+- genomic-only signal
+- model-only signal
+- contradictory
+- insufficient evidence
+
+It also adds flags such as:
+
+- high posterior but high SNP distance
+- low SNP but no known epidemiological or geographic link
+- same cluster but wide date spread
+- resistance signal inside a cluster
+- cross-region cluster
+- rapidly growing cluster
+- missing sequence or QC data
+- low-confidence Outbreaker edge
+
+This is useful because public health teams usually need a short, operational answer rather than several separate technical outputs.
+
+Important: these synthesis scores are heuristic and non-validated. They support triage and review, but they are not a final epidemiological truth.
 
 ## Why this is useful for a TB programme
 
@@ -47,6 +89,7 @@ In plain terms, it helps answer:
 - It supports faster and more consistent outbreak response.
 - It helps monitor sequencing service quality, not just case counts.
 - It creates a repeatable reporting process instead of manual collation.
+- It gives reviewers one place to see the evidence, the contradictions, and the next recommended action.
 
 ## How NI programme data fits in
 
@@ -71,6 +114,11 @@ This means you can automate data flow from sequencing infrastructure into report
 - It depends on data quality and completeness from upstream systems.
 - It is a surveillance and operational intelligence tool, not a full LIMS.
 - Drug resistance results from TBProfiler and Mykrobe are genomic predictions only — all must be confirmed by phenotypic DST before clinical use.
+- The current synthesis layer is not a validated transmission model.
+- SNP support is currently derived from precomputed sequence-cluster assignments, not a full validated SNP alignment pipeline.
+- Epidemiological support is still a proxy based on timing and geography, so structured contact/exposure fields would improve it.
+- Cluster-risk scores need calibration before real-world use.
+- There is no RBAC/authentication yet on synthesis outputs or sign-off actions.
 
 ## Demo data vs real operational data
 
@@ -97,6 +145,8 @@ Environment switches:
 ## Short summary in one sentence
 
 This project is a TB genomic surveillance platform that ingests sequencing-linked data, analyses cluster and transmission patterns, tracks programme performance, and produces actionable reports for public health teams.
+
+The new synthesis layer makes the platform feel more like an operational surveillance tool by turning several separate analyses into one plain-language review summary.
 
 ## Running it locally on Windows
 

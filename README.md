@@ -9,6 +9,7 @@ It supports day-to-day surveillance by:
 - tracking programme performance (coverage, QC, turnaround)
 - prioritizing where follow-up is most urgent
 - producing repeatable investigation reports for review
+- combining multiple analytic outputs into a single investigation summary for public-health review
 
 Current capabilities include:
 - FastAPI backend APIs for cases, ingest, KPIs, jobs, and reporting
@@ -16,16 +17,29 @@ Current capabilities include:
 - Web interface for operational use
 - PostgreSQL data model for surveillance and WGS reporting
 - Outbreaker2 integration for analyst-led outbreak analysis
+- A synthesis layer that sits between analytics and investigation and turns raw outputs into review-ready summaries
 - TBProfiler + Mykrobe integration (WSL / Docker fallback) for lineage and drug resistance calling
 - Parallel dual-tool DR concordance checking with discordance flagged in audit_log
 - NI data ingest pipeline: prepare_ni_data.py, validate_ingest_files.py, load_ingest_bundle.py
 - Governance/setup documentation for secure deployment and integration
+
+Plain-language note for public health users:
+- The synthesis layer does not make decisions for you.
+- It combines genomic, timing, geography, resistance, and model signals into a simple interpretation.
+- It marks contradictions and missing data so reviewers can decide what needs follow-up.
+- Its scores are heuristic and non-validated, so they should be used for triage and review support only.
 
 Plain-language project overview
 ------------------------------
 
 For a simple explanation of what this project does and how it supports TB programme operations,
 see: docs/PROJECT_EXPLAINED_SIMPLE.md
+
+For governance and how the platform should be used safely in public health settings, see:
+- docs/governance/README.md
+
+For ingest examples and data shape guidance, see:
+- examples/ingest_bundle/README.md
 
 External dependencies (not bundled):
 - PostgreSQL
@@ -254,6 +268,29 @@ Schema additions for WGS reporting:
 
 If your database was created before these additions, apply the updated db/schema.sql.
 The endpoint remains backward-compatible and returns a warning until QC tables exist.
+
+New synthesis and investigation endpoints
+----------------------------------------
+
+These endpoints provide the new review layer between analytics and investigation:
+
+- GET /analytics/transmission-synthesis
+- GET /analytics/transmission-synthesis/{cluster_id}
+- GET /analytics/cluster-risk-summary
+
+In plain language, these endpoints answer:
+
+- Which cluster should a reviewer look at first?
+- Which possible transmission pairs have strong, moderate, or contradictory support?
+- What flags suggest missing data, cross-region spread, resistance signals, or rapid growth?
+- What action should a public health reviewer take next?
+
+Important limitation:
+- The synthesis layer is heuristic and non-validated.
+- SNP support is currently based on precomputed sequence-cluster assignments, not a fully validated SNP alignment pipeline.
+- Epidemiological support is still proxy-based and needs structured exposure/contact fields for stronger interpretation.
+- Cluster-risk scores need calibration before real-world use.
+- No RBAC/authentication has been added yet for synthesis outputs or sign-off actions.
 
 Ingest example bundle (for user onboarding)
 -------------------------------------------

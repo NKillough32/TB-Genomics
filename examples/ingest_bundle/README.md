@@ -2,11 +2,14 @@
 
 This folder contains ingest-ready example files so users can see exactly how to shape and augment their own data before loading into the platform.
 
+For non-coders: this bundle shows the minimum file set the platform expects so TB programme data can be loaded, checked, and linked across case records, QC, sequences, and provenance.
+
 ## Why this exists
 
 - Show required columns and value formats.
 - Demonstrate key links across files.
 - Provide a safe synthetic example using public online incidence trends.
+- Help public health teams understand the data shape without needing to read the backend code.
 
 ## Files in this bundle
 
@@ -29,6 +32,8 @@ This folder contains ingest-ready example files so users can see exactly how to 
 2. `sample_qc_metrics.run_id` must exist in `sequencing_runs.run_id`.
 3. Dates should be ISO format where possible (for example `2026-05-01`).
 4. JSON columns should be valid JSON strings in CSV.
+
+If any of these links are broken, the platform cannot reliably join the case record to the sequence, QC, or provenance data.
 
 ## Generate a fresh example bundle
 
@@ -63,6 +68,8 @@ psql -f .\examples\ingest_bundle\load_example_data.sql
 
 `POST /ingest/file` uploads files to `uploads/` but does not automatically parse or insert them into the database.
 
+That means the upload button is for file delivery only. The actual data checks and loading still happen through the ingest pipeline.
+
 For NI live data, use the full ingest pipeline instead:
 
 1. **Prepare** — map NI export columns to bundle format:
@@ -87,3 +94,9 @@ For NI live data, use the full ingest pipeline instead:
 
 Edit `scripts/ni_column_map.json` to match actual NI export column names before running `prepare_ni_data.py`.
 Use `--reset --confirm-reset` with `load_ingest_bundle.py` to truncate all tables before a fresh load (requires both flags).
+
+## What this means for public health users
+
+- This bundle is a safe example of the file structure, not a final clinical dataset.
+- The platform uses it to test that case data, sequence data, QC, and provenance are all linked correctly.
+- The newer synthesis and investigation views depend on this data being linked well, because missing links lead to weaker review support.

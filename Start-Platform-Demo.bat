@@ -4,6 +4,10 @@ setlocal EnableExtensions
 REM Demo-only launcher for backend + GUI.
 cd /d "%~dp0"
 
+set "BACKEND_PORT=8000"
+set "BACKEND_PID="
+for /f %%P in ('powershell -NoProfile -Command "$listener = Get-NetTCPConnection -LocalPort %BACKEND_PORT% -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty OwningProcess; if ($listener) { $listener }"') do set "BACKEND_PID=%%P"
+
 echo ===============================================
 echo TB Platform - DEMO MODE
 echo ===============================================
@@ -38,7 +42,12 @@ set "TB_ALLOW_NON_OPERATIONAL_ACTIONS=1"
 
 echo Launching backend and GUI in DEMO MODE...
 
-start "TB Backend (DEMO)" cmd /k "cd /d %CD% && set DATABASE_URL=%DATABASE_URL% && set TB_ENABLE_SYNTHETIC_SEEDING=1 && set TB_ALLOW_NON_OPERATIONAL_ACTIONS=1 && .venv\Scripts\python.exe -m uvicorn backend.app:app --reload"
+if defined BACKEND_PID (
+  echo [INFO] Backend is already running on http://localhost:%BACKEND_PORT% (PID %BACKEND_PID%).
+  echo [INFO] Skipping a second backend launch.
+) else (
+  start "TB Backend (DEMO)" cmd /k "cd /d %CD% && set DATABASE_URL=%DATABASE_URL% && set TB_ENABLE_SYNTHETIC_SEEDING=1 && set TB_ALLOW_NON_OPERATIONAL_ACTIONS=1 && .venv\Scripts\python.exe -m uvicorn backend.app:app --reload"
+)
 start "TB GUI" cmd /k "cd /d %CD%\gui && python -m http.server 8081"
 
 timeout /t 2 /nobreak >nul

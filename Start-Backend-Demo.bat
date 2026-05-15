@@ -4,6 +4,10 @@ setlocal EnableExtensions
 REM Demo-only backend launcher with explicit confirmation.
 cd /d "%~dp0"
 
+set "BACKEND_PORT=8000"
+set "BACKEND_PID="
+for /f %%P in ('powershell -NoProfile -Command "$listener = Get-NetTCPConnection -LocalPort %BACKEND_PORT% -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty OwningProcess; if ($listener) { $listener }"') do set "BACKEND_PID=%%P"
+
 echo ===============================================
 echo TB Backend - DEMO MODE
 echo ===============================================
@@ -41,6 +45,13 @@ echo DATABASE_URL=%DATABASE_URL%
 echo TB_ENABLE_SYNTHETIC_SEEDING=%TB_ENABLE_SYNTHETIC_SEEDING%
 echo TB_ALLOW_NON_OPERATIONAL_ACTIONS=%TB_ALLOW_NON_OPERATIONAL_ACTIONS%
 echo.
+
+if defined BACKEND_PID (
+  echo [INFO] Backend is already running on http://localhost:%BACKEND_PORT% (PID %BACKEND_PID%).
+  echo [INFO] Reuse that instance or stop it before starting a new one.
+  pause
+  exit /b 0
+)
 
 ".venv\Scripts\python.exe" -m uvicorn backend.app:app --reload
 

@@ -84,7 +84,9 @@ def main() -> None:
         ]
 
         # Replace current cluster assignment with sequence-derived clusters.
-        db.execute(text("TRUNCATE TABLE case_clusters, clusters"))
+        # cluster_investigations holds a direct FK to clusters, and TRUNCATE
+        # requires all referenced tables to be cleared in the same statement.
+        db.execute(text("TRUNCATE TABLE case_clusters, cluster_investigations, clusters"))
 
         summary = {
             "status": "ok",

@@ -136,6 +136,16 @@ def _bool_temporal_support(source_date, target_date, window_days: int) -> bool:
     return abs((target_date - source_date).days) <= window_days
 
 
+def _epi_support_level(temporal_support: bool, geographic_support: bool) -> str:
+    if temporal_support and geographic_support:
+        return "temporal_and_geographic"
+    if temporal_support:
+        return "temporal_only"
+    if geographic_support:
+        return "geographic_only"
+    return "none"
+
+
 def _validation_notice() -> dict[str, str]:
     return {
         "validation_status": "heuristic_non_validated",
@@ -233,6 +243,7 @@ def build_transmission_synthesis(
 
         temporal_support = _bool_temporal_support(src["specimen_date"], tgt["specimen_date"], cfg.temporal_window_days)
         geographic_support = src["region"] == tgt["region"]
+        epi_support = _epi_support_level(temporal_support, geographic_support)
 
         src_qc_ok = src["qc_status"] in {"pass", "passed"} and not src["contamination_flag"]
         tgt_qc_ok = tgt["qc_status"] in {"pass", "passed"} and not tgt["contamination_flag"]
@@ -266,6 +277,7 @@ def build_transmission_synthesis(
             posterior_probability=posterior,
             snp_distance=snp,
             pair_flags=p_flags,
+            epi_support_level=epi_support,
         )
         actions = recommended_actions(category, p_flags)
 
@@ -278,7 +290,7 @@ def build_transmission_synthesis(
                 "posterior_probability": round(posterior, 4),
                 "temporal_support": temporal_support,
                 "geographic_support": geographic_support,
-                "epi_support": "unknown",
+                "epi_support": epi_support,
                 "sequence_cluster_match": sequence_cluster_match,
                 "snp_distance_source": snp_source,
                 "confidence": category_display(category),

@@ -8,6 +8,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from backend.database import SessionLocal
+from backend.snp_validation import validated_snp_distance
 from backend.synthesis.transmission_synthesis import (
     SynthesisConfig,
     build_cluster_risk_summary,
@@ -43,11 +44,7 @@ def _normalise_uuid(value: str) -> str:
 
 
 def _snp_distance(a: str, b: str) -> int:
-    left = (a or "").upper()
-    right = (b or "").upper()
-    common = min(len(left), len(right))
-    mismatches = sum(1 for i in range(common) if left[i] != right[i])
-    return mismatches + abs(len(left) - len(right))
+    return validated_snp_distance(a, b).distance
 
 
 def _case_rows(db: Session):

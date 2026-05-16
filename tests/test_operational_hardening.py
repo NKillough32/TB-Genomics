@@ -1,7 +1,9 @@
 import pytest
 from fastapi import HTTPException
+from fastapi.security import HTTPAuthorizationCredentials
 
 from backend import data_safety
+from backend.auth import AuthenticatedUser, configured_tokens, get_current_user, require_roles
 from backend.app import app
 from backend.routers.case_assets import get_outbreaker_image
 from backend.routers.ingest import _require_ingest_api_key
@@ -29,6 +31,55 @@ def test_ingest_api_key_accepts_configured_key(monkeypatch):
     monkeypatch.setenv("TB_INGEST_API_KEY", "expected-key")
 
     assert _require_ingest_api_key("expected-key") is None
+
+
+def test_auth_token_configuration_parses_roles(monkeypatch):
+    monkeypatch.setenv("TB_AUTH_TOKENS", "viewer-token=viewer;ops-token=operator,analyst")
+
+    assert configured_tokens() == {
+        "viewer-token": ("viewer",),
+        "ops-token": ("operator", "analyst"),
+    }
+
+
+def test_rbac_blocks_missing_token_when_enabled(monkeypatch):
+    monkeypatch.setenv("TB_AUTH_REQUIRED", "1")
+    monkeypatch.setenv("TB_AUTH_TOKENS", "viewer-token=viewer")
+
+    with pytest.raises(HTTPException) as blocked:
+        get_current_user(None)
+
+    assert blocked.value.status_code == 401
+
+
+def test_rbac_resolves_bearer_token_roles_when_enabled(monkeypatch):
+    monkeypatch.setenv("TB_AUTH_REQUIRED", "1")
+    monkeypatch.setenv("TB_AUTH_TOKENS", "viewer-token=viewer")
+
+    user = get_current_user(
+        HTTPAuthorizationCredentials(scheme="Bearer", credentials="viewer-token")
+    )
+
+    assert user.roles == ("viewer",)
+    assert user.auth_disabled is False
+
+
+def test_rbac_role_hierarchy_rejects_viewer_for_operator_action():
+    dependency = require_roles("operator")
+
+    with pytest.raises(HTTPException) as blocked:
+        dependency(AuthenticatedUser(subject="viewer", roles=("viewer",)))
+
+    assert blocked.value.status_code == 403
+    assert blocked.value.detail["error"] == "insufficient_role"
+
+
+def test_rbac_role_hierarchy_allows_admin_for_operator_action():
+    dependency = require_roles("operator")
+
+    user = dependency(AuthenticatedUser(subject="admin", roles=("admin",)))
+
+    assert user.roles == ("admin",)
 
 
 def test_non_operational_dataset_blocks_sensitive_actions(monkeypatch):

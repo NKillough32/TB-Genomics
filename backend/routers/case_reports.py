@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from backend.auth import AuthenticatedUser, require_roles
 from backend.data_safety import enforce_operational_dataset
 from backend.routers import cases
 
@@ -22,6 +23,7 @@ class ResistanceSignoffRequest(BaseModel):
 def resistance_validation_approve(
     payload: ResistanceSignoffRequest,
     db: Session = Depends(cases.get_db),
+    _user: AuthenticatedUser = Depends(require_roles("operator")),
 ):
     """Record a formal sign-off for the local resistance pipeline validation."""
     allowed = {"approved", "rejected", "under_review"}

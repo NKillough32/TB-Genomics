@@ -25,3 +25,6 @@ jobs:
 
       - name: Run tests
         run: python -m pytest
+
+      - name: Compile Python sources
+        run: python -m compileall backend scripts migrations

@@ -38,6 +38,7 @@ def pair_priority_score(
     posterior_probability: float | None,
     snp_distance: int | None,
     pair_flags: list[str],
+    epi_support_level: str | None = None,
 ) -> int:
     """Compute an operational priority score for a pair."""
     base_by_category = {
@@ -60,6 +61,11 @@ def pair_priority_score(
             score += 4
         elif snp_distance >= 20:
             score -= 8
+
+    if epi_support_level == "temporal_and_geographic":
+        score += 6
+    elif epi_support_level in {"temporal_only", "geographic_only"}:
+        score += 3
 
     score += min(15, len(pair_flags) * 4)
     return max(0, min(100, score))

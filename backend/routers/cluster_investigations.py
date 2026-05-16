@@ -20,6 +20,7 @@ from pydantic import BaseModel, StringConstraints
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from backend.auth import AuthenticatedUser, require_roles
 from backend.database import SessionLocal
 
 logger = logging.getLogger(__name__)
@@ -368,7 +369,12 @@ def get_investigation(cluster_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/{cluster_id}/assign")
-def assign_reviewer(cluster_id: str, body: AssignRequest, db: Session = Depends(get_db)):
+def assign_reviewer(
+    cluster_id: str,
+    body: AssignRequest,
+    db: Session = Depends(get_db),
+    _user: AuthenticatedUser = Depends(require_roles("operator")),
+):
     """Assign an investigation to a reviewer and move status to under_review."""
     cluster_id = _upsert_investigation(db, cluster_id)
     reviewer = body.assigned_to
@@ -394,7 +400,12 @@ def assign_reviewer(cluster_id: str, body: AssignRequest, db: Session = Depends(
 
 
 @router.put("/{cluster_id}/epi-notes")
-def update_epi_notes(cluster_id: str, body: EpiNotesRequest, db: Session = Depends(get_db)):
+def update_epi_notes(
+    cluster_id: str,
+    body: EpiNotesRequest,
+    db: Session = Depends(get_db),
+    _user: AuthenticatedUser = Depends(require_roles("operator")),
+):
     """Save epidemiology review notes for a cluster investigation."""
     cluster_id = _upsert_investigation(db, cluster_id)
 
@@ -409,7 +420,12 @@ def update_epi_notes(cluster_id: str, body: EpiNotesRequest, db: Session = Depen
 
 
 @router.post("/{cluster_id}/actions")
-def record_action(cluster_id: str, body: ActionRequest, db: Session = Depends(get_db)):
+def record_action(
+    cluster_id: str,
+    body: ActionRequest,
+    db: Session = Depends(get_db),
+    _user: AuthenticatedUser = Depends(require_roles("operator")),
+):
     """Append a public health action to the investigation log."""
     cluster_id = _upsert_investigation(db, cluster_id)
 
@@ -450,7 +466,12 @@ def record_action(cluster_id: str, body: ActionRequest, db: Session = Depends(ge
 
 
 @router.post("/{cluster_id}/sign-off")
-def sign_off(cluster_id: str, body: SignOffRequest, db: Session = Depends(get_db)):
+def sign_off(
+    cluster_id: str,
+    body: SignOffRequest,
+    db: Session = Depends(get_db),
+    _user: AuthenticatedUser = Depends(require_roles("operator")),
+):
     """Record a formal sign-off decision for a cluster investigation."""
     cluster_id = _upsert_investigation(db, cluster_id)
     notes = body.notes.strip() if body.notes else None

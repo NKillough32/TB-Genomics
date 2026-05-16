@@ -1,5 +1,6 @@
 from backend.synthesis.scoring import cluster_priority_score
 from backend.synthesis.transmission_synthesis import (
+    _epi_support_level,
     _sequence_proxy_distance,
     build_transmission_synthesis,
 )
@@ -59,6 +60,13 @@ def test_cluster_priority_score_is_scaled_by_evidence():
     )
 
     assert low_scale < high_scale
+
+
+def test_epi_support_level_combines_temporal_and_geographic_context():
+    assert _epi_support_level(True, True) == "temporal_and_geographic"
+    assert _epi_support_level(True, False) == "temporal_only"
+    assert _epi_support_level(False, True) == "geographic_only"
+    assert _epi_support_level(False, False) == "none"
 
 
 def test_transmission_synthesis_reports_validation_and_calibration(monkeypatch):
@@ -126,4 +134,5 @@ def test_transmission_synthesis_reports_validation_and_calibration(monkeypatch):
     assert payload["calibration"]["outbreaker_vs_sequence_pairwise_precision"] == 0.24736842105263157
     assert payload["pairs"][0]["snp_distance_source"] == "sequence_cluster_proxy"
     assert payload["pairs"][0]["sequence_cluster_match"] is True
+    assert payload["pairs"][0]["epi_support"] == "temporal_and_geographic"
     assert payload["warning"].startswith("This synthesis output is heuristic")

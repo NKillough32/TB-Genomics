@@ -1,0 +1,36 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: tb_surveillance
+      POSTGRES_USER: tb
+      POSTGRES_PASSWORD: tb
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tb -d tb_surveillance"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://tb:tb@db:5432/tb_surveillance
+      TB_AUTH_REQUIRED: "1"
+      TB_AUTH_TOKENS: "change-me-admin-token=admin"
+      TB_ENABLE_SYNTHETIC_SEEDING: "0"
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./exports:/app/exports
+      - ./logs:/app/logs
+      - ./uploads:/app/uploads
+
+volumes:
+  postgres_data:

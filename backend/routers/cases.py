@@ -11,15 +11,14 @@ from statistics import median
 from itertools import combinations
 
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
-from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from backend.database import SessionLocal
-from backend.models import Case
-from backend.data_safety import enforce_operational_dataset, get_data_safety_status
+from backend.data_safety import enforce_operational_dataset
 from backend.quality_gates import build_workflow_status
+from backend.routers.case_overview import surveillance_kpis
 
 router = APIRouter(prefix="/cases", tags=["cases"])
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -579,252 +578,6 @@ def _format_table_caption(caption_text: str, table_number: int) -> str:
     return f"Table {table_number}. {raw}" if raw else f"Table {table_number}."
 
 
-def _to_int(value: object) -> int:
-    return int(value or 0)
-
-
-def _to_optional_pct(numerator: int, denominator: int) -> float | None:
-    if not denominator:
-        return None
-    return round((numerator / denominator) * 100.0, 2)
-
-
-def _table_exists(db: Session, table_name: str) -> bool:
-    return bool(
-        db.execute(
-            text("SELECT to_regclass(:table_name) IS NOT NULL"),
-            {"table_name": f"public.{table_name}"},
-        ).scalar()
-    )
-
-
-def surveillance_kpis(weeks: int = 12, db: Session = Depends(get_db)) -> dict:
-    """Return programme surveillance KPIs for cases in the recent reporting window."""
-    weeks = max(1, min(int(weeks or 12), 104))
-    has_sequences = _table_exists(db, "consensus_sequences")
-    has_qc = _table_exists(db, "sample_qc_metrics")
-
-    sequence_join = (
-        "LEFT JOIN consensus_sequences cs ON cs.sample_id = c.pseudonymised_case_id"
-        if has_sequences
-        else ""
-    )
-    qc_join = (
-        "LEFT JOIN sample_qc_metrics sqm ON sqm.sample_id = c.pseudonymised_case_id"
-        if has_qc
-        else ""
-    )
-    sequenced_expr = "COUNT(DISTINCT cs.sample_id)::int" if has_sequences else "0::int"
-    qc_reported_expr = "COUNT(DISTINCT sqm.sample_id)::int" if has_qc else "0::int"
-    qc_pass_expr = (
-        "COUNT(DISTINCT sqm.sample_id) FILTER (WHERE LOWER(COALESCE(sqm.qc_status, '')) IN ('pass', 'passed'))::int"
-        if has_qc
-        else "0::int"
-    )
-    qc_fail_expr = (
-        "COUNT(DISTINCT sqm.sample_id) FILTER (WHERE sqm.qc_status IS NOT NULL AND LOWER(COALESCE(sqm.qc_status, '')) NOT IN ('pass', 'passed'))::int"
-        if has_qc
-        else "0::int"
-    )
-    contamination_expr = (
-        "COUNT(DISTINCT sqm.sample_id) FILTER (WHERE COALESCE(sqm.contamination_flag, false))::int"
-        if has_qc
-        else "0::int"
-    )
-    median_expr = (
-        "CAST(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (sqm.reported_at::timestamp - c.specimen_date::timestamp)) / 86400.0) "
-        "FILTER (WHERE sqm.reported_at IS NOT NULL AND c.specimen_date IS NOT NULL) AS float)"
-        if has_qc
-        else "NULL::float"
-    )
-
-    params = {"weeks": weeks}
-    kpi_rows = db.execute(
-        text(
-            f"""
-            SELECT
-                COUNT(DISTINCT c.pseudonymised_case_id)::int AS eligible_cases,
-                {sequenced_expr} AS sequenced_cases,
-                {qc_reported_expr} AS qc_reported_cases,
-                {qc_pass_expr} AS qc_pass_cases,
-                {qc_fail_expr} AS qc_fail_cases,
-                {contamination_expr} AS contamination_flag_cases,
-                {median_expr} AS median_days_specimen_to_qc
-            FROM cases c
-            {sequence_join}
-            {qc_join}
-            WHERE c.specimen_date >= CURRENT_DATE - (:weeks * INTERVAL '7 days')
-            """
-        ),
-        params,
-    ).mappings().first() or {}
-
-    region_rows = db.execute(
-        text(
-            f"""
-            SELECT
-                COALESCE(c.geographic_region, 'Unknown') AS region,
-                COUNT(DISTINCT c.pseudonymised_case_id)::int AS eligible_cases,
-                {sequenced_expr} AS sequenced_cases
-            FROM cases c
-            {sequence_join}
-            WHERE c.specimen_date >= CURRENT_DATE - (:weeks * INTERVAL '7 days')
-            GROUP BY COALESCE(c.geographic_region, 'Unknown')
-            ORDER BY eligible_cases DESC, region
-            """
-        ),
-        params,
-    ).mappings().all()
-
-    eligible_cases = _to_int(kpi_rows["eligible_cases"])
-    sequenced_cases = _to_int(kpi_rows["sequenced_cases"])
-    qc_reported_cases = _to_int(kpi_rows["qc_reported_cases"])
-    qc_pass_cases = _to_int(kpi_rows["qc_pass_cases"])
-    median_days = kpi_rows["median_days_specimen_to_qc"]
-    if median_days is not None:
-        median_days = round(float(median_days), 2)
-
-    return {
-        "window_weeks": weeks,
-        "eligible_cases": eligible_cases,
-        "sequenced_cases": sequenced_cases,
-        "sequenced_pct": _to_optional_pct(sequenced_cases, eligible_cases),
-        "qc_reported_cases": qc_reported_cases,
-        "qc_pass_cases": qc_pass_cases,
-        "qc_fail_cases": _to_int(kpi_rows["qc_fail_cases"]),
-        "qc_pass_pct": _to_optional_pct(qc_pass_cases, qc_reported_cases),
-        "contamination_flag_cases": _to_int(kpi_rows["contamination_flag_cases"]),
-        "median_days_specimen_to_qc": median_days,
-        "representativeness_by_region": [
-            {
-                "region": row["region"],
-                "eligible_cases": _to_int(row["eligible_cases"]),
-                "sequenced_cases": _to_int(row["sequenced_cases"]),
-                "sequenced_pct": _to_optional_pct(_to_int(row["sequenced_cases"]), _to_int(row["eligible_cases"])),
-            }
-            for row in region_rows
-        ],
-    }
-
-
-@router.get("/")
-def list_cases(
-    limit: int = Query(100, ge=1, le=1000),
-    offset: int = Query(0, ge=0),
-    db: Session = Depends(get_db),
-):
-    return db.query(Case).offset(offset).limit(limit).all()
-
-
-@router.get("/kpis")
-def case_kpis(weeks: int = Query(12, ge=1, le=104), db: Session = Depends(get_db)):
-    return surveillance_kpis(weeks=weeks, db=db)
-
-
-@router.get("/regions")
-def list_regions(db: Session = Depends(get_db)):
-    """Return distinct geographic regions present in the cases table."""
-    rows = db.execute(
-        text(
-            "SELECT DISTINCT geographic_region FROM cases "
-            "WHERE geographic_region IS NOT NULL "
-            "ORDER BY geographic_region"
-        )
-    ).scalars().all()
-    return {"regions": list(rows)}
-
-
-@router.get("/summary")
-def cases_summary(db: Session = Depends(get_db)):
-    """KPI summary used by the GUI banner."""
-    total = db.execute(text("SELECT COUNT(*) FROM cases")).scalar() or 0
-    clustered = db.execute(
-        text("SELECT COUNT(DISTINCT sample_id) FROM case_clusters")
-    ).scalar() or 0
-    open_clusters = db.execute(
-        text("SELECT COUNT(*) FROM clusters WHERE investigation_status = 'open'")
-    ).scalar() or 0
-    return {
-        "total_cases": total,
-        "clustered_cases": clustered,
-        "unclustered_cases": max(0, total - clustered),
-        "open_clusters": open_clusters,
-    }
-
-
-@router.get("/data-safety")
-def data_safety(db: Session = Depends(get_db)):
-    """Return whether the current dataset is operational or synthetic/demo."""
-    total = db.execute(text("SELECT COUNT(*) FROM cases")).scalar() or 0
-    # Detect synthetic seed events in the audit log
-    try:
-        seed_events = db.execute(
-            text("SELECT COUNT(*) FROM audit_log WHERE action = 'seed_synthetic_dataset'")
-        ).scalar() or 0
-    except Exception:
-        db.rollback()
-        seed_events = 0
-    # Heuristic: if any seed event exists, data is non-operational
-    operational_safe = seed_events == 0
-    return {
-        "operational_safe": operational_safe,
-        "total_cases": total,
-        "synthetic_case_count": total if not operational_safe else 0,
-        "synthetic_seed_events": seed_events,
-    }
-
-
-@router.get("/outbreaker-status")
-def outbreaker_status():
-    summary_path = _export_path("outbreaker_summary.json")
-    provenance = None
-    if os.path.exists(summary_path):
-        try:
-            with open(summary_path, "r", encoding="utf-8") as f:
-                summary = json.load(f)
-                provenance = (summary or {}).get("data_provenance")
-        except Exception:
-            provenance = None
-
-    return {
-        "cases_export": os.path.exists(_export_path("cases.csv")),
-        "dna_export": os.path.exists(_export_path("dna.fasta")),
-        "results_rds": os.path.exists(_export_path("outbreaker2_results.rds")),
-        "provenance": provenance,
-        "is_mock": provenance == "mock",
-    }
-
-
-@router.get("/audit-trail")
-def audit_trail(limit: int = 50, db: Session = Depends(get_db)):
-    """Return recent audit log entries for governance and compliance."""
-    rows = db.execute(
-        text(
-            """
-            SELECT audit_id, action, user_id, details, timestamp
-            FROM audit_log
-            ORDER BY timestamp DESC
-            LIMIT :limit
-            """
-        ),
-        {"limit": limit},
-    ).mappings().all()
-    
-    return {
-        "total_entries": len(rows),
-        "entries": [
-            {
-                "id": row["audit_id"],
-                "action": row["action"],
-                "user": row["user_id"],
-                "timestamp": str(row["timestamp"]),
-                "details": row["details"],
-            }
-            for row in rows
-        ],
-    }
-
-
 @router.get("/outbreaker-analysis")
 def outbreaker_analysis():
     """Return outbreaker2 analysis results including graphics and summary."""
@@ -838,7 +591,7 @@ def outbreaker_analysis():
         "provenance": None,
         "is_mock": None,
     }
-    
+
     # Check for analysis summary
     summary_path = _export_path("outbreaker_summary.json")
     if os.path.exists(summary_path):
@@ -878,24 +631,24 @@ def outbreaker_analysis():
     if result["provenance"] is None:
         result["provenance"] = "unknown"
         result["is_mock"] = None
-    
+
     # List available graphics
     graphics_dir = "exports"
     if os.path.exists(graphics_dir):
         # Collect all graphics and sort for consistent order
-        graphics_files = [f for f in os.listdir(graphics_dir) 
+        graphics_files = [f for f in os.listdir(graphics_dir)
                          if f.startswith("outbreaker_") and f.endswith(".png")]
         # Sort with preferred order: trace, hist, tree
         order = {"outbreaker_trace.png": 0, "outbreaker_hist.png": 1, "outbreaker_tree.png": 2}
         graphics_files.sort(key=lambda f: order.get(f, 999))
-        
+
         for file in graphics_files:
             result["graphics"].append({
                 "name": file,
                 "url": f"/cases/outbreaker-image/{file}",
                 "type": file.replace("outbreaker_", "").replace(".png", ""),
             })
-    
+
     return result
 
 
@@ -3284,84 +3037,6 @@ document.addEventListener('DOMContentLoaded', function(){{
 
 # ── Resistance pipeline validation sign-off endpoints ─────────────────────────
 
-class _ResistanceSignoffRequest(BaseModel):
-    decision: str          # 'approved' | 'rejected' | 'under_review'
-    reviewer: str
-    notes: str = ""
-    catalogue_version: str = ""
-
-
-@router.post("/resistance-validation/approve")
-def resistance_validation_approve(
-    payload: _ResistanceSignoffRequest,
-    db: Session = Depends(get_db),
-):
-    """
-    Record a formal sign-off for the local resistance pipeline validation.
-
-    ``decision`` must be one of ``approved``, ``rejected``, or ``under_review``.
-    Each call appends an immutable record; the latest row determines the status
-    shown in the HTML report.
-    """
-    allowed = {"approved", "rejected", "under_review"}
-    if payload.decision not in allowed:
-        raise HTTPException(
-            status_code=422,
-            detail=f"decision must be one of {sorted(allowed)}",
-        )
-    if not payload.reviewer.strip():
-        raise HTTPException(status_code=422, detail="reviewer must not be empty")
-
-    _ensure_signoff_table(db)
-    row = db.execute(
-        text("""
-            INSERT INTO pipeline_validation_signoffs
-                (pipeline, decision, reviewer, notes, catalogue_version)
-            VALUES ('resistance_validation', :decision, :reviewer, :notes, :cat_ver)
-            RETURNING id, pipeline, decision, reviewer, notes,
-                      catalogue_version, signed_off_at
-        """),
-        {
-            "decision": payload.decision.strip(),
-            "reviewer": payload.reviewer.strip(),
-            "notes": (payload.notes or "").strip(),
-            "cat_ver": (payload.catalogue_version or "").strip(),
-        },
-    ).mappings().first()
-    db.commit()
-    result = dict(row)
-    if result.get("signed_off_at"):
-        result["signed_off_at"] = str(result["signed_off_at"])
-    return result
-
-
-@router.get("/resistance-validation/status")
-def resistance_validation_status(db: Session = Depends(get_db)):
-    """Return the current pipeline validation status (latest sign-off record)."""
-    signoff = _get_latest_signoff(db)
-    if signoff is None:
-        return {"status": "under_review", "signoff": None}
-    so = dict(signoff)
-    if so.get("signed_off_at"):
-        so["signed_off_at"] = str(so["signed_off_at"])
-    return {"status": so["decision"], "signoff": so}
-
-
-@router.get("/outbreak-report.html", response_class=HTMLResponse)
-def outbreak_report_html(db: Session = Depends(get_db)):
-    """Generate and return the short publication-friendly static HTML outbreak report."""
-    enforce_operational_dataset(db, "cases/outbreak-report.html")
-    return HTMLResponse(content=_build_outbreak_report_html(db, full=False))
-
-
-@router.get("/outbreak-report.full.html", response_class=HTMLResponse)
-def outbreak_report_full_html(db: Session = Depends(get_db)):
-    """Generate and return the full static HTML outbreak report alongside the short version."""
-    enforce_operational_dataset(db, "cases/outbreak-report.full.html")
-    return HTMLResponse(content=_build_outbreak_report_html(db, full=True))
-
-
-@router.get("/outbreak-report")
 def outbreak_report(db: Session = Depends(get_db)):
     """Generate and return a PDF outbreak investigation report."""
     enforce_operational_dataset(db, "cases/outbreak-report")
@@ -6154,12 +5829,12 @@ def outbreak_report(db: Session = Depends(get_db)):
         ess_val = int(ess) if ess is not None else None
         acc_val = float(acc) if acc is not None else None
         chains_val = int(chains) if chains is not None else None
-        
+
         # Interpretation logic
         conv_interpretation = "Converged: reliable estimates" if conv_val is not None and conv_val <= 1.1 else ("Did not converge: treat inferences as exploratory" if conv_val is not None else "Not available")
         ess_interpretation = "Good (robust estimates)" if ess_val is not None and ess_val > 200 else ("Low (consider wider confidence intervals)" if ess_val is not None else "Not available")
         acc_interpretation = "Optimal mixing" if acc_val is not None and 0.2 <= acc_val <= 0.6 else ("Possible tuning issue: rerun with parameter adjustment" if acc_val is not None else "Not available")
-        
+
         reliability = "Operationally Reliable" if conv_val is not None and conv_val <= 1.1 else "Exploratory / Cautionary"
 
         diag_rows = [
@@ -6178,7 +5853,7 @@ def outbreak_report(db: Session = Depends(get_db)):
             "All reported posterior probabilities should be interpreted with awareness of these diagnostic results.",
             spacer_after=0.0,
         )
-        
+
         if conv_val is not None and conv_val > 1.1:
             story.append(Spacer(1, 0.08 * inch))
             story.append(Paragraph(
@@ -6711,191 +6386,6 @@ def outbreak_report(db: Session = Depends(get_db)):
         media_type="application/pdf",
         filename=os.path.basename(output_path),
     )
-
-
-@router.get("/outbreaker-image/{filename}")
-def get_outbreaker_image(filename: str):
-    """Serve outbreaker2 generated graphics."""
-    path = _export_path(filename)
-    
-    # Security: only serve expected outbreaker2 images
-    if not filename.startswith("outbreaker_") or not filename.endswith(".png"):
-        return {"error": "Invalid file"}
-    
-    if os.path.exists(path):
-        return FileResponse(path, media_type="image/png")
-    
-    return {"error": "Image not found"}
-
-
-@router.get("/search")
-def advanced_search(
-    region: str = None,
-    lineage: str = None,
-    date_from: str = None,
-    date_to: str = None,
-    resistance: str = None,
-    cluster_id: str = None,
-    db: Session = Depends(get_db)
-):
-    """
-    Advanced search with multiple filter options.
-    
-    Parameters:
-    - region: Filter by geographic region
-    - lineage: Filter by TB lineage (L1, L2, L3, L4)
-    - date_from: Filter specimens from this date (YYYY-MM-DD)
-    - date_to: Filter specimens until this date (YYYY-MM-DD)
-    - resistance: Filter by resistance pattern (R, I, S)
-    - cluster_id: Filter by cluster membership
-    """
-    
-    query_str = """
-        SELECT DISTINCT
-            c.pseudonymised_case_id as case_id,
-            c.specimen_date,
-            c.geographic_region,
-            c.case_status,
-            ti.lineage,
-            ti.sublineage,
-            ti.predicted_drug_resistance,
-            cc.cluster_id,
-            COUNT(*) OVER (PARTITION BY cc.cluster_id) as cluster_size
-        FROM cases c
-        LEFT JOIN tb_interpretation ti ON c.pseudonymised_case_id = ti.sample_id
-        LEFT JOIN case_clusters cc ON c.pseudonymised_case_id = cc.sample_id
-        WHERE 1=1
-    """
-    
-    params = {}
-    if region:
-        query_str += " AND c.geographic_region = :region"
-        params["region"] = region
-    if lineage:
-        query_str += " AND ti.lineage = :lineage"
-        params["lineage"] = lineage
-    if resistance:
-        query_str += (
-            " AND ti.predicted_drug_resistance IS NOT NULL"
-            " AND LOWER(CAST(ti.predicted_drug_resistance AS TEXT)) LIKE :resistance_pattern"
-        )
-        params["resistance_pattern"] = f"%{resistance.strip().lower()}%"
-    if date_from:
-        query_str += " AND c.specimen_date >= :date_from"
-        params["date_from"] = date_from
-    if date_to:
-        query_str += " AND c.specimen_date <= :date_to"
-        params["date_to"] = date_to
-    if cluster_id:
-        query_str += " AND cc.cluster_id = :cluster_id"
-        params["cluster_id"] = cluster_id
-    
-    query_str += " ORDER BY c.specimen_date DESC LIMIT 100"
-    
-    results = db.execute(text(query_str), params).mappings().all()
-    
-    return {
-        "filters_applied": {
-            "region": region,
-            "lineage": lineage,
-            "date_range": f"{date_from} to {date_to}" if date_from or date_to else None,
-            "resistance": resistance,
-            "cluster_id": cluster_id
-        },
-        "total_results": len(results),
-        "cases": [
-            {
-                "case_id": str(row["case_id"])[:8],
-                "specimen_date": str(row["specimen_date"]),
-                "region": row["geographic_region"],
-                "status": row["case_status"],
-                "lineage": row["lineage"],
-                "sublineage": row["sublineage"],
-                "resistance": row["predicted_drug_resistance"],
-                "cluster_id": str(row["cluster_id"])[:8] if row["cluster_id"] else None,
-                "cluster_size": row["cluster_size"] if row["cluster_id"] else 0
-            }
-            for row in results
-        ]
-    }
-
-
-@router.get("/case-history/{case_id}")
-def get_case_history(case_id: str, db: Session = Depends(get_db)):
-    """
-    Get case history - all related samples and follow-ups.
-    Groups samples by patient/location over time.
-    """
-    # Handle both full UUID and partial ID (first 8 chars)
-    case_id_pattern = f"{case_id}%" if len(case_id) < 36 else case_id
-    
-    # Find the actual case
-    case_result = db.execute(text("""
-        SELECT pseudonymised_case_id, geographic_region FROM cases 
-        WHERE CAST(pseudonymised_case_id AS TEXT) LIKE :case_id_pattern
-        LIMIT 1
-    """), {"case_id_pattern": case_id_pattern}).mappings().first()
-    
-    if not case_result:
-        return {"error": "Case not found", "case_id": case_id}
-    
-    full_case_id = case_result["pseudonymised_case_id"]
-    region = case_result["geographic_region"]
-    
-    # Find all samples from same region or same case
-    results = db.execute(text("""
-        SELECT 
-            c.pseudonymised_case_id,
-            c.local_lab_sample_id,
-            c.specimen_date,
-            c.geographic_region,
-            c.case_status,
-            ti.lineage,
-            ti.predicted_drug_resistance,
-            cc.cluster_id
-        FROM cases c
-        LEFT JOIN tb_interpretation ti ON c.pseudonymised_case_id = ti.sample_id
-        LEFT JOIN case_clusters cc ON c.pseudonymised_case_id = cc.sample_id
-        WHERE c.pseudonymised_case_id = :case_id
-           OR c.geographic_region = :region
-        ORDER BY c.specimen_date
-    """), {"case_id": full_case_id, "region": region}).mappings().all()
-    
-    if not results:
-        return {"error": "Case not found", "case_id": case_id}
-    
-    case_history = []
-    for row in results:
-        case_history.append({
-            "case_id": str(row["pseudonymised_case_id"])[:8],
-            "specimen_date": str(row["specimen_date"]),
-            "region": row["geographic_region"],
-            "status": row["case_status"],
-            "lineage": row["lineage"],
-            "resistance": row["predicted_drug_resistance"],
-            "cluster_id": str(row["cluster_id"])[:8] if row["cluster_id"] else None,
-            "is_index_case": str(row["pseudonymised_case_id"]) == str(full_case_id)
-        })
-    
-    # Calculate days between first and last
-    span_days = 0
-    if len(case_history) > 1:
-        try:
-            dates_str = [h["specimen_date"] for h in case_history]
-            dates = sorted(dates_str)
-            if dates[0] and dates[-1] and dates[0] != dates[-1]:
-                d1 = datetime.strptime(dates[0][:10], "%Y-%m-%d")
-                d2 = datetime.strptime(dates[-1][:10], "%Y-%m-%d")
-                span_days = abs((d2 - d1).days)
-        except Exception:
-            span_days = 0
-    
-    return {
-        "case_id": case_id,
-        "related_cases": len(case_history),
-        "observation_span_days": span_days,
-        "history": case_history
-    }
 
 
 # ── Case-specific comprehensive HTML report ──────────────────────────────────

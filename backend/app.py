@@ -3,7 +3,17 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.database import init_db
-from backend.routers import cases, ingest, jobs, cluster_investigations, analytics
+from backend.routers import (
+    analytics,
+    case_assets,
+    case_lookup,
+    case_overview,
+    case_reports,
+    cases,
+    cluster_investigations,
+    ingest,
+    jobs,
+)
 
 
 @asynccontextmanager
@@ -25,7 +35,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(case_overview.router)
 app.include_router(cases.router)
+app.include_router(case_assets.router)
+app.include_router(case_reports.router)
+app.include_router(case_lookup.router)
 app.include_router(ingest.router)
 app.include_router(jobs.router)
 app.include_router(cluster_investigations.router)

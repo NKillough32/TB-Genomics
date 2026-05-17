@@ -2,8 +2,14 @@ import pytest
 from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 
-from backend import data_safety
-from backend.auth import AuthenticatedUser, configured_tokens, get_current_user, require_roles
+from backend import data_safety, database
+from backend.auth import (
+    AuthenticatedUser,
+    configured_token_identities,
+    configured_tokens,
+    get_current_user,
+    require_roles,
+)
 from backend.app import app
 from backend.routers.case_assets import get_outbreaker_image
 from backend.routers.ingest import _require_ingest_api_key
@@ -40,6 +46,44 @@ def test_auth_token_configuration_parses_roles(monkeypatch):
         "viewer-token": ("viewer",),
         "ops-token": ("operator", "analyst"),
     }
+
+
+def test_auth_token_configuration_can_include_audit_subject(monkeypatch):
+    monkeypatch.setenv("TB_AUTH_TOKENS", "ops-token=lab-api|operator,analyst")
+
+    identities = configured_token_identities()
+
+    assert identities["ops-token"].subject == "lab-api"
+    assert identities["ops-token"].roles == ("operator", "analyst")
+    assert configured_tokens()["ops-token"] == ("operator", "analyst")
+
+
+def test_rbac_resolves_token_subject_for_audit(monkeypatch):
+    monkeypatch.setenv("TB_AUTH_REQUIRED", "1")
+    monkeypatch.setenv("TB_AUTH_TOKENS", "ops-token=lab-api|operator")
+
+    user = get_current_user(
+        HTTPAuthorizationCredentials(scheme="Bearer", credentials="ops-token")
+    )
+
+    assert user.subject == "lab-api"
+    assert user.roles == ("operator",)
+
+
+def test_init_db_runs_alembic_instead_of_create_all(monkeypatch):
+    calls = []
+
+    monkeypatch.setenv("TB_AUTO_MIGRATE", "1")
+    monkeypatch.setattr(database.command, "upgrade", lambda config, target: calls.append(target))
+    monkeypatch.setattr(
+        database.Base.metadata,
+        "create_all",
+        lambda *args, **kwargs: pytest.fail("create_all should not run at startup"),
+    )
+
+    database.init_db()
+
+    assert calls == ["head"]
 
 
 def test_rbac_blocks_missing_token_when_enabled(monkeypatch):

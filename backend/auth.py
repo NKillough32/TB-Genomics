@@ -42,6 +42,15 @@ def _normalise_roles(raw_roles: str) -> tuple[str, ...]:
     return tuple(roles) or ("viewer",)
 
 
+def _parse_identity(raw_identity: str) -> tuple[str, tuple[str, ...]]:
+    """Parse either role-only or subject|role,role token metadata."""
+    if "|" not in raw_identity:
+        return "token-user", _normalise_roles(raw_identity)
+    subject, roles = raw_identity.split("|", 1)
+    subject = subject.strip() or "token-user"
+    return subject, _normalise_roles(roles)
+
+
 def configured_tokens() -> dict[str, tuple[str, ...]]:
     """Parse TB_AUTH_TOKENS as token=role,role;other-token=viewer."""
     tokens: dict[str, tuple[str, ...]] = {}
@@ -55,8 +64,32 @@ def configured_tokens() -> dict[str, tuple[str, ...]]:
         token, roles = entry.split(separator, 1)
         token = token.strip()
         if token:
-            tokens[token] = _normalise_roles(roles)
+            tokens[token] = _parse_identity(roles)[1]
     return tokens
+
+
+def configured_token_identities() -> dict[str, AuthenticatedUser]:
+    """Parse TB_AUTH_TOKENS into stable audit subjects and roles.
+
+    Supported forms:
+      token=admin
+      token=operator,analyst
+      token=lab-api|operator,analyst
+    """
+    identities: dict[str, AuthenticatedUser] = {}
+    for entry in os.getenv("TB_AUTH_TOKENS", "").split(";"):
+        entry = entry.strip()
+        if not entry:
+            continue
+        separator = "=" if "=" in entry else ":"
+        if separator not in entry:
+            continue
+        token, raw_identity = entry.split(separator, 1)
+        token = token.strip()
+        if token:
+            subject, roles = _parse_identity(raw_identity)
+            identities[token] = AuthenticatedUser(subject=subject, roles=roles)
+    return identities
 
 
 def get_current_user(
@@ -74,9 +107,9 @@ def get_current_user(
         )
 
     presented_token = credentials.credentials
-    for configured_token, roles in configured_tokens().items():
+    for configured_token, identity in configured_token_identities().items():
         if secrets.compare_digest(presented_token, configured_token):
-            return AuthenticatedUser(subject="token-user", roles=roles)
+            return identity
 
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,

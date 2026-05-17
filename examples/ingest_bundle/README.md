@@ -66,9 +66,10 @@ psql -f .\examples\ingest_bundle\load_example_data.sql
 
 ## Note about API ingest endpoint
 
-`POST /ingest/file` uploads files to `uploads/` but does not automatically parse or insert them into the database.
-
-That means the upload button is for file delivery only. The actual data checks and loading still happen through the ingest pipeline.
+`POST /ingest/file` stores single uploaded files under `uploads/`. If the upload is a ZIP
+bundle containing `cases.csv`, the backend safely extracts it, validates the bundle, and
+loads it through the same loader used by the command-line ingest pipeline. Set
+`load_to_database=false` to validate only, or `dry_run=true` to parse without writing rows.
 
 For NI live data, use the full ingest pipeline instead:
 

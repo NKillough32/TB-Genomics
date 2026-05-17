@@ -88,6 +88,13 @@ _fail_count = 0
 _warn_count = 0
 
 
+def reset_findings() -> None:
+    global _fail_count, _warn_count
+    _findings.clear()
+    _fail_count = 0
+    _warn_count = 0
+
+
 def report(level: str, check: str, message: str) -> None:
     global _fail_count, _warn_count
     _findings.append((level, check, message))
@@ -503,6 +510,25 @@ def validate_fasta(path: Path, case_ids: set[str], strict: bool = False) -> None
             )
 
 
+def validate_bundle(input_dir: Path, strict_analysis: bool = False) -> dict:
+    """Validate a prepared ingest bundle and return structured findings."""
+    reset_findings()
+    case_ids = validate_cases(input_dir / "cases.csv")
+    run_ids = validate_sequencing_runs(input_dir / "sequencing_runs.csv", strict_analysis)
+    validate_interpretation(input_dir / "tb_interpretation.csv", case_ids, strict_analysis)
+    validate_qc(input_dir / "sample_qc_metrics.csv", case_ids, run_ids, strict_analysis)
+    validate_provenance(input_dir / "analysis_provenance.csv", case_ids, strict_analysis)
+    validate_fasta(input_dir / "dna.fasta", case_ids, strict_analysis)
+    return {
+        "summary": {
+            "pass": sum(1 for f in _findings if f[0] == PASS),
+            "warn": _warn_count,
+            "fail": _fail_count,
+        },
+        "findings": [{"level": l, "check": c, "message": m} for l, c, m in _findings],
+    }
+
+
 # ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
@@ -530,22 +556,9 @@ def main() -> None:
         print(f"ERROR: directory not found: {input_dir}", file=sys.stderr)
         sys.exit(2)
 
-    case_ids = validate_cases(input_dir / "cases.csv")
-    run_ids = validate_sequencing_runs(input_dir / "sequencing_runs.csv", args.strict_analysis)
-    validate_interpretation(input_dir / "tb_interpretation.csv", case_ids, args.strict_analysis)
-    validate_qc(input_dir / "sample_qc_metrics.csv", case_ids, run_ids, args.strict_analysis)
-    validate_provenance(input_dir / "analysis_provenance.csv", case_ids, args.strict_analysis)
-    validate_fasta(input_dir / "dna.fasta", case_ids, args.strict_analysis)
+    output = validate_bundle(input_dir, strict_analysis=args.strict_analysis)
 
     if args.json:
-        output = {
-            "summary": {
-                "pass": sum(1 for f in _findings if f[0] == PASS),
-                "warn": _warn_count,
-                "fail": _fail_count,
-            },
-            "findings": [{"level": l, "check": c, "message": m} for l, c, m in _findings],
-        }
         print(json.dumps(output, indent=2))
     else:
         col_widths = (6, 45, 0)

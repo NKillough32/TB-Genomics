@@ -373,7 +373,7 @@ def assign_reviewer(
     cluster_id: str,
     body: AssignRequest,
     db: Session = Depends(get_db),
-    _user: AuthenticatedUser = Depends(require_roles("operator")),
+    user: AuthenticatedUser = Depends(require_roles("operator")),
 ):
     """Assign an investigation to a reviewer and move status to under_review."""
     cluster_id = _upsert_investigation(db, cluster_id)
@@ -391,9 +391,9 @@ def assign_reviewer(
     # Audit
     db.execute(text("""
         INSERT INTO audit_log (action, user_id, details, timestamp)
-        VALUES ('cluster_investigation_assigned', :reviewer,
+        VALUES ('cluster_investigation_assigned', :actor,
                 jsonb_build_object('cluster_id', :cid, 'assigned_to', :reviewer), NOW())
-    """), {"reviewer": reviewer, "cid": cluster_id})
+    """), {"actor": user.subject, "reviewer": reviewer, "cid": cluster_id})
     db.commit()
 
     return {"ok": True, "assigned_to": reviewer, **_validation_notice()}
@@ -404,7 +404,7 @@ def update_epi_notes(
     cluster_id: str,
     body: EpiNotesRequest,
     db: Session = Depends(get_db),
-    _user: AuthenticatedUser = Depends(require_roles("operator")),
+    user: AuthenticatedUser = Depends(require_roles("operator")),
 ):
     """Save epidemiology review notes for a cluster investigation."""
     cluster_id = _upsert_investigation(db, cluster_id)
@@ -416,6 +416,12 @@ def update_epi_notes(
         WHERE cluster_id = CAST(:cid AS UUID)
     """), {"notes": body.epi_notes, "cid": cluster_id})
     db.commit()
+    db.execute(text("""
+        INSERT INTO audit_log (action, user_id, details, timestamp)
+        VALUES ('cluster_investigation_epi_notes_updated', :actor,
+                jsonb_build_object('cluster_id', :cid), NOW())
+    """), {"actor": user.subject, "cid": cluster_id})
+    db.commit()
     return {"ok": True, **_validation_notice()}
 
 
@@ -424,7 +430,7 @@ def record_action(
     cluster_id: str,
     body: ActionRequest,
     db: Session = Depends(get_db),
-    _user: AuthenticatedUser = Depends(require_roles("operator")),
+    user: AuthenticatedUser = Depends(require_roles("operator")),
 ):
     """Append a public health action to the investigation log."""
     cluster_id = _upsert_investigation(db, cluster_id)
@@ -450,15 +456,17 @@ def record_action(
     # Audit
     db.execute(text("""
         INSERT INTO audit_log (action, user_id, details, timestamp)
-        VALUES ('cluster_investigation_action', :user,
+        VALUES ('cluster_investigation_action', :actor,
                 jsonb_build_object('cluster_id', :cid,
                                    'action_type', :atype,
-                                   'description', :desc), NOW())
+                                   'description', :desc,
+                                   'performed_by', :performed_by), NOW())
     """), {
-        "user": body.performed_by,
+        "actor": user.subject,
         "cid": cluster_id,
         "atype": body.action_type,
         "desc": body.description,
+        "performed_by": body.performed_by,
     })
     db.commit()
 
@@ -470,7 +478,7 @@ def sign_off(
     cluster_id: str,
     body: SignOffRequest,
     db: Session = Depends(get_db),
-    _user: AuthenticatedUser = Depends(require_roles("operator")),
+    user: AuthenticatedUser = Depends(require_roles("operator")),
 ):
     """Record a formal sign-off decision for a cluster investigation."""
     cluster_id = _upsert_investigation(db, cluster_id)
@@ -500,9 +508,11 @@ def sign_off(
     # Audit
     db.execute(text("""
         INSERT INTO audit_log (action, user_id, details, timestamp)
-        VALUES ('cluster_investigation_signed_off', :by,
-                jsonb_build_object('cluster_id', :cid, 'decision', :decision), NOW())
-    """), {"by": body.decision_by, "cid": cluster_id, "decision": body.decision})
+        VALUES ('cluster_investigation_signed_off', :actor,
+                jsonb_build_object('cluster_id', :cid,
+                                   'decision', :decision,
+                                   'decision_by', :by), NOW())
+    """), {"actor": user.subject, "by": body.decision_by, "cid": cluster_id, "decision": body.decision})
     db.commit()
 
     return {"ok": True, "decision": body.decision, "decision_by": body.decision_by, **_validation_notice()}

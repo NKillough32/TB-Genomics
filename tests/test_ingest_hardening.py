@@ -1,11 +1,17 @@
+from io import BytesIO
+import zipfile
+from types import SimpleNamespace
+
+import pytest
+from fastapi import UploadFile
+
+from backend.routers import ingest
 import scripts.validate_ingest_files as validate
 from scripts.prepare_ni_data import _rewrite_fasta_headers, _stable_uuid
 
 
 def _reset_validate_findings():
-    validate._findings.clear()
-    validate._fail_count = 0
-    validate._warn_count = 0
+    validate.reset_findings()
 
 
 def test_rewrite_fasta_headers_maps_lab_ids_to_case_uuids(tmp_path):
@@ -47,3 +53,86 @@ def test_strict_validation_fails_fasta_case_mismatch(tmp_path):
     checks = {check for level, check, _ in validate._findings if level == validate.FAIL}
     assert "dna.fasta:coverage" in checks
     assert "dna.fasta:orphan_seqs" in checks
+
+
+def test_ingest_file_validates_and_loads_zip_bundle(monkeypatch):
+    payload = BytesIO()
+    with zipfile.ZipFile(payload, "w") as archive:
+        archive.writestr("cases.csv", "pseudonymised_case_id\n")
+    payload.seek(0)
+
+    monkeypatch.setattr(
+        ingest,
+        "validate_bundle",
+        lambda bundle_dir, strict_analysis: {
+            "summary": {"pass": 1, "warn": 0, "fail": 0},
+            "findings": [],
+        },
+    )
+    monkeypatch.setattr(
+        ingest,
+        "load_bundle",
+        lambda bundle_dir, dry_run: [SimpleNamespace(table="cases", inserted=1, errors=[])],
+    )
+
+    response = ingest.ingest_file(
+        UploadFile(file=payload, filename="bundle.zip"),
+        load_to_database=True,
+        dry_run=False,
+        strict_analysis=True,
+        _auth=None,
+    )
+
+    assert response["status"] == "loaded"
+    assert response["database_loaded"] is True
+    assert response["load"]["cases"]["rows_processed"] == 1
+
+
+def test_ingest_file_blocks_zip_with_validation_failures(monkeypatch):
+    payload = BytesIO()
+    with zipfile.ZipFile(payload, "w") as archive:
+        archive.writestr("cases.csv", "pseudonymised_case_id\n")
+    payload.seek(0)
+
+    monkeypatch.setattr(
+        ingest,
+        "validate_bundle",
+        lambda bundle_dir, strict_analysis: {
+            "summary": {"pass": 0, "warn": 0, "fail": 1},
+            "findings": [{"level": "FAIL", "check": "cases.csv:columns", "message": "bad"}],
+        },
+    )
+    monkeypatch.setattr(
+        ingest,
+        "load_bundle",
+        lambda bundle_dir, dry_run: (_ for _ in ()).throw(AssertionError("must not load")),
+    )
+
+    response = ingest.ingest_file(
+        UploadFile(file=payload, filename="bundle.zip"),
+        load_to_database=True,
+        dry_run=False,
+        strict_analysis=True,
+        _auth=None,
+    )
+
+    assert response["status"] == "validation_failed"
+    assert response["database_loaded"] is False
+
+
+def test_ingest_file_rejects_unsafe_zip_paths():
+    payload = BytesIO()
+    with zipfile.ZipFile(payload, "w") as archive:
+        archive.writestr("../outside.txt", "bad")
+    payload.seek(0)
+
+    with pytest.raises(Exception) as exc:
+        ingest.ingest_file(
+            UploadFile(file=payload, filename="bundle.zip"),
+            load_to_database=True,
+            dry_run=False,
+            strict_analysis=True,
+            _auth=None,
+        )
+
+    assert getattr(exc.value, "status_code", None) == 400

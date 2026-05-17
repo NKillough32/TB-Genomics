@@ -178,6 +178,11 @@ The connector supports scheduled uploads and only sends new/changed files.
 To enforce ingest authentication, set TB_INGEST_API_KEY on the backend host and configure
 TB_API_KEY with the same value in the VM connector environment.
 
+`POST /ingest/file` still stores single uploaded files under `uploads/`. When the uploaded
+file is a ZIP ingest bundle containing `cases.csv`, the endpoint now extracts it safely,
+validates it with `scripts/validate_ingest_files.py`, and loads it through
+`scripts/load_ingest_bundle.py` unless `load_to_database=false` or `dry_run=true` is set.
+
 
 Lineage and drug resistance calling
 ------------------------------------

@@ -101,3 +101,5 @@ Use `--reset --confirm-reset` with `load_ingest_bundle.py` to truncate all table
 - This bundle is a safe example of the file structure, not a final clinical dataset.
 - The platform uses it to test that case data, sequence data, QC, and provenance are all linked correctly.
 - The newer synthesis and investigation views depend on this data being linked well, because missing links lead to weaker review support.
+- In the GUI, case-specific epidemiology evidence is recorded in Step 6, the Cluster Investigation Centre.
+- Step 11 is only a reusable reference library for exposure types, contacts, and locations; it does not assign those records to cases.

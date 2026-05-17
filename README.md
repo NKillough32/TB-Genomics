@@ -13,11 +13,13 @@ It supports day-to-day surveillance by:
 
 Current capabilities include:
 - FastAPI backend APIs for cases, ingest, KPIs, jobs, and reporting
-- Button-driven workflow for running and tracking analysis jobs
+- Button-driven GUI workflow grouped into Prepare, Analyse, Investigate, and Report/Govern phases
 - Web interface for operational use
 - PostgreSQL data model for surveillance and WGS reporting
 - Outbreaker2 integration for analyst-led outbreak analysis
 - A synthesis layer that sits between analytics and investigation and turns raw outputs into review-ready summaries
+- Cluster Investigation Centre for assigning reviewers, recording epidemiology evidence, logging actions, and signing off investigations
+- Optional epidemiology reference library for reusable exposure, contact, and location records
 - TBProfiler + Mykrobe integration (WSL / Docker fallback) for lineage and drug resistance calling
 - Parallel dual-tool DR concordance checking with discordance flagged in audit_log
 - NI data ingest pipeline: prepare_ni_data.py, validate_ingest_files.py, load_ingest_bundle.py
@@ -82,6 +84,21 @@ Notes:
 - If `DATABASE_URL` is not set, the scripts default to:
 	`postgresql://tb:tb@localhost/tb_surveillance`
 - Demo launchers set `TB_ENABLE_SYNTHETIC_SEEDING=1` and `TB_ALLOW_NON_OPERATIONAL_ACTIONS=1` for that session only.
+
+GUI workflow overview
+---------------------
+
+The web interface is organised around the operational workflow:
+
+1. **Prepare** — check system status, data safety, data readiness, uploads, and demo/synthetic data controls.
+2. **Analyse** — run the full pipeline or individual analysis jobs, then review raw results, exports, case search, and case reports.
+3. **Investigate** — review transmission synthesis, open the Cluster Investigation Centre, record case evidence, actions, and sign-off decisions, and inspect visual analytics.
+4. **Report and govern** — generate the final actionable report, inspect runtime/KPI status, record resistance-validation sign-off, manage reusable epidemiology reference records, and view the audit trail.
+
+Important Step 6 / Step 11 distinction:
+
+- **Step 6 - Cluster Investigation Centre** is where investigators attach evidence to cases. Load clusters, open a cluster, choose the **Epi notes** tab, select a case, then record a location event or contact link.
+- **Step 11 - Epidemiology Reference Records** is only a reusable reference library for exposure types, contacts, and locations. It does not assign records to cases or clusters.
 
 Windows notes:
 - If `CREATE USER tb` reports `role "tb" already exists`, that means the user is already present and you can continue.
@@ -263,9 +280,9 @@ Use the short HTML report for online publication workflows after local informati
 TB surveillance KPI reporting
 -----------------------------
 
-New endpoint:
+Endpoint:
 
-- GET /cases/surveillance-kpis?weeks=12
+- GET /cases/kpis?weeks=12
 
 This returns programme-level metrics including sequencing coverage and QC indicators.
 

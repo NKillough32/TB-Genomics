@@ -371,6 +371,15 @@ def test_epidemiology_routes_remain_registered():
     }.issubset(registered_paths)
 
 
+def test_actionable_report_routes_remain_registered():
+    registered_paths = {route.path for route in app.routes}
+
+    assert {
+        "/reports/actionable-surveillance",
+        "/reports/actionable-surveillance.html",
+    }.issubset(registered_paths)
+
+
 def test_epidemiology_sqlalchemy_models_match_table_names():
     assert Exposure.__tablename__ == "exposures"
     assert Contact.__tablename__ == "contacts"

@@ -7,7 +7,7 @@ from fastapi import UploadFile
 
 from backend.routers import ingest
 import scripts.validate_ingest_files as validate
-from scripts.prepare_ni_data import _rewrite_fasta_headers, _stable_uuid
+from scripts.prepare_ni_data import _apply_mapping, _rewrite_fasta_headers, _stable_uuid
 
 
 def _reset_validate_findings():
@@ -25,6 +25,24 @@ def test_rewrite_fasta_headers_maps_lab_ids_to_case_uuids(tmp_path):
     assert (out_dir / "dna.fasta").read_text(encoding="utf-8") == (
         f">{case_uuid} description\nACGT\n"
     )
+
+
+def test_column_mapping_handles_case_insensitive_columns_and_status_values():
+    source = {"Lab Sample": "NIBT-2026-0001", "Status": "Confirmed"}
+    field_map = {
+        "pseudonymised_case_id": {"type": "uuid_from_column", "source_column": "lab sample"},
+        "case_status": {
+            "type": "map_values",
+            "source_column": "status",
+            "value_map": {"Confirmed": "confirmed"},
+            "fallback": "under_review",
+        },
+    }
+
+    assert _apply_mapping(source, field_map, "pseudonymised_case_id") == _stable_uuid(
+        "NIBT-2026-0001"
+    )
+    assert _apply_mapping(source, field_map, "case_status") == "confirmed"
 
 
 def test_strict_validation_fails_missing_analysis_files(tmp_path):

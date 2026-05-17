@@ -26,6 +26,11 @@ def main() -> int:
         "analysis_provenance",
         "clusters",
         "case_clusters",
+        "exposures",
+        "contacts",
+        "locations",
+        "case_location_events",
+        "case_contact_links",
         "audit_log",
     ]
 

@@ -140,10 +140,14 @@ Operational mode (real programme use):
 - Keep synthetic seeding disabled (`TB_ENABLE_SYNTHETIC_SEEDING` unset or `0`).
 - Confirm dataset safety before running actions:
 	GET /cases/data-safety
+- Confirm data readiness before analysis/reporting:
+	GET /cases/data-readiness
 
 Expected status values:
 - `operational_safe: true` means actions are allowed.
 - `operational_safe: false` means synthetic/demo signals were detected and sensitive actions are blocked.
+- `data-readiness.status: ready` means all required completeness checks are populated.
+- `data-readiness.status: needs_review` means at least one readiness check has missing values.
 
 Recommended startup profiles
 ----------------------------

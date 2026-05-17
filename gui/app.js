@@ -215,6 +215,44 @@ async function loadDataSafety(){
 	}
 }
 
+async function loadDataReadiness(){
+	const panel=document.getElementById('dataReadinessPanel');
+	if(!panel) return;
+	panel.textContent='Loading data readiness...';
+	try{
+		const r=await fetch(`${API}/cases/data-readiness`);
+		const d=await r.json();
+		if(!r.ok){
+			panel.textContent=JSON.stringify(d,null,2);
+			return;
+		}
+		const pct=value=>value===null||value===undefined?'n/a':`${Number(value).toFixed(1)}%`;
+		const rows=(d.checks||[]).map(check=>{
+			const status=check.missing>0?'needs_review':'ready';
+			return `<tr>
+				<td>${escapeHtml(check.label)}</td>
+				<td>${escapeHtml(check.complete)}</td>
+				<td>${escapeHtml(check.missing)}</td>
+				<td>${escapeHtml(pct(check.percent))}</td>
+				<td>${renderStatusPill(status)}</td>
+			</tr>`;
+		}).join('');
+		panel.innerHTML=`
+			<div class="readiness-summary">
+				<div><strong>Total cases</strong><span>${escapeHtml(d.total_cases)}</span></div>
+				<div><strong>Sequencing coverage</strong><span>${escapeHtml(pct(d.sequencing_coverage?.percent))}</span></div>
+				<div><strong>QC completeness</strong><span>${escapeHtml(pct(d.qc_completeness?.percent))}</span></div>
+				<div><strong>Status</strong>${renderStatusPill(d.status)}</div>
+			</div>
+			<table class="data-table readiness-table">
+				<thead><tr><th>Readiness check</th><th>Complete</th><th>Missing</th><th>Percent</th><th>Status</th></tr></thead>
+				<tbody>${rows||'<tr><td colspan="5">No readiness checks available</td></tr>'}</tbody>
+			</table>`;
+	}catch(e){
+		panel.textContent=`Data readiness failed: ${e}`;
+	}
+}
+
 async function uploadFile(){const f=document.getElementById('fileInput').files[0];if(!f)return;const fd=new FormData();fd.append('file',f);const r=await fetch(`${API}/ingest/file`,{method:'POST',body:fd});document.getElementById('uploadResult').textContent=JSON.stringify(await r.json());}
 async function seedSyntheticData(){
 	if(!demoModeActive){
@@ -1052,4 +1090,5 @@ async function loadRegions(){
 		// Backend unavailable — leave placeholder only
 	}
 }
-(async()=>{try{await fetch(`${API}/`);document.getElementById('status').innerHTML='<li>✅ Backend running</li>';}catch{document.getElementById('status').innerHTML='<li>❌ Backend unavailable</li>';}refreshDemoModeStatus();loadRegions();loadKPIBanner();loadWorkflowStatus();loadDataSafety();loadAnalyticsClusters();loadTransmissionSynthesisOverview();})();
+(async()=>{try{await fetch(`${API}/`);document.getElementById('status').innerHTML='<li>✅ Backend running</li>';}catch{document.getElementById('status').innerHTML='<li>❌ Backend unavailable</li>';}refreshDemoModeStatus();loadRegions();loadKPIBanner();loadWorkflowStatus();loadDataSafety();loadDataReadiness();loadAnalyticsClusters();loadTransmissionSynthesisOverview();})();
+

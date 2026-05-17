@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
@@ -12,6 +14,7 @@ from backend.auth import (
 )
 from backend.app import app
 from backend.routers.case_assets import get_outbreaker_image
+from backend.routers.case_overview import data_readiness
 from backend.routers.ingest import _require_ingest_api_key
 
 
@@ -181,6 +184,7 @@ def test_extracted_case_overview_routes_remain_registered():
         "/cases/kpis",
         "/cases/regions",
         "/cases/summary",
+        "/cases/data-readiness",
         "/cases/data-safety",
         "/cases/outbreaker-status",
         "/cases/audit-trail",
@@ -208,3 +212,66 @@ def test_extracted_case_lookup_routes_remain_registered_once():
         "/cases/case-history/{case_id}",
     }:
         assert registered_paths.count(path) == 1
+
+
+class _ScalarResult:
+    def __init__(self, value):
+        self.value = value
+
+    def scalar(self):
+        return self.value
+
+
+class _MappingResult:
+    def __init__(self, row):
+        self.row = row
+
+    def mappings(self):
+        return self
+
+    def first(self):
+        return self.row
+
+
+class _ReadinessDb:
+    def execute(self, statement, params=None):
+        sql = str(statement)
+        if "to_regclass" in sql:
+            return _ScalarResult(True)
+        return _MappingResult(
+            {
+                "total_cases": 10,
+                "sequenced_cases": 8,
+                "qc_complete_cases": 7,
+                "missing_geography": 2,
+                "missing_dates": 1,
+                "lineage_called_cases": 6,
+                "resistance_called_cases": 5,
+            }
+        )
+
+
+def test_data_readiness_reports_missingness_and_coverage():
+    result = data_readiness(_ReadinessDb())
+
+    assert result["total_cases"] == 10
+    assert result["sequencing_coverage"]["percent"] == 80.0
+    assert result["qc_completeness"]["percent"] == 70.0
+    assert result["missing_geography"] == 2
+    assert result["missing_dates"] == 1
+    assert result["missing_lineage_calls"] == 4
+    assert result["missing_resistance_calls"] == 5
+    assert result["status"] == "needs_review"
+
+
+def test_schema_declares_structured_epidemiology_tables():
+    schema = (Path(__file__).resolve().parents[1] / "db" / "schema.sql").read_text(encoding="utf-8")
+
+    for table_name in {
+        "exposures",
+        "contacts",
+        "locations",
+        "case_location_events",
+        "case_contact_links",
+    }:
+        assert f"CREATE TABLE IF NOT EXISTS {table_name}" in schema

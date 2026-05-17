@@ -202,6 +202,143 @@ def cases_summary(db: Session = Depends(get_db)):
     }
 
 
+@router.get("/data-readiness")
+def data_readiness(db: Session = Depends(get_db)):
+    """Return completeness metrics needed before analysis and reporting."""
+    has_sequences = _table_exists(db, "consensus_sequences")
+    has_qc = _table_exists(db, "sample_qc_metrics")
+    has_interpretation = _table_exists(db, "tb_interpretation")
+
+    sequence_join = (
+        "LEFT JOIN consensus_sequences cs ON cs.sample_id = c.pseudonymised_case_id"
+        if has_sequences
+        else ""
+    )
+    qc_join = (
+        "LEFT JOIN sample_qc_metrics sqm ON sqm.sample_id = c.pseudonymised_case_id"
+        if has_qc
+        else ""
+    )
+    interpretation_join = (
+        "LEFT JOIN tb_interpretation ti ON ti.sample_id = c.pseudonymised_case_id"
+        if has_interpretation
+        else ""
+    )
+
+    sequenced_expr = "COUNT(DISTINCT cs.sample_id)::int" if has_sequences else "0::int"
+    qc_expr = "COUNT(DISTINCT sqm.sample_id)::int" if has_qc else "0::int"
+    lineage_expr = (
+        "COUNT(DISTINCT c.pseudonymised_case_id) FILTER (WHERE NULLIF(TRIM(ti.lineage), '') IS NOT NULL)::int"
+        if has_interpretation
+        else "0::int"
+    )
+    resistance_expr = (
+        """
+        COUNT(DISTINCT c.pseudonymised_case_id) FILTER (
+            WHERE ti.predicted_drug_resistance IS NOT NULL
+              AND ti.predicted_drug_resistance::text NOT IN ('null', '{}', '[]')
+        )::int
+        """
+        if has_interpretation
+        else "0::int"
+    )
+
+    row = db.execute(
+        text(
+            f"""
+            SELECT
+                COUNT(DISTINCT c.pseudonymised_case_id)::int AS total_cases,
+                {sequenced_expr} AS sequenced_cases,
+                {qc_expr} AS qc_complete_cases,
+                COUNT(DISTINCT c.pseudonymised_case_id) FILTER (
+                    WHERE NULLIF(TRIM(COALESCE(c.geographic_region, '')), '') IS NULL
+                )::int AS missing_geography,
+                COUNT(DISTINCT c.pseudonymised_case_id) FILTER (
+                    WHERE c.specimen_date IS NULL
+                )::int AS missing_dates,
+                {lineage_expr} AS lineage_called_cases,
+                {resistance_expr} AS resistance_called_cases
+            FROM cases c
+            {sequence_join}
+            {qc_join}
+            {interpretation_join}
+            """
+        )
+    ).mappings().first() or {}
+
+    total_cases = _to_int(row.get("total_cases"))
+    sequenced_cases = _to_int(row.get("sequenced_cases"))
+    qc_complete_cases = _to_int(row.get("qc_complete_cases"))
+    lineage_called_cases = _to_int(row.get("lineage_called_cases"))
+    resistance_called_cases = _to_int(row.get("resistance_called_cases"))
+    missing_geography = _to_int(row.get("missing_geography"))
+    missing_dates = _to_int(row.get("missing_dates"))
+
+    checks = [
+        {
+            "key": "sequencing_coverage",
+            "label": "Sequencing coverage",
+            "complete": sequenced_cases,
+            "missing": max(0, total_cases - sequenced_cases),
+            "percent": _to_optional_pct(sequenced_cases, total_cases),
+        },
+        {
+            "key": "qc_completeness",
+            "label": "QC completeness",
+            "complete": qc_complete_cases,
+            "missing": max(0, total_cases - qc_complete_cases),
+            "percent": _to_optional_pct(qc_complete_cases, total_cases),
+        },
+        {
+            "key": "geography",
+            "label": "Geography present",
+            "complete": max(0, total_cases - missing_geography),
+            "missing": missing_geography,
+            "percent": _to_optional_pct(max(0, total_cases - missing_geography), total_cases),
+        },
+        {
+            "key": "specimen_dates",
+            "label": "Specimen dates present",
+            "complete": max(0, total_cases - missing_dates),
+            "missing": missing_dates,
+            "percent": _to_optional_pct(max(0, total_cases - missing_dates), total_cases),
+        },
+        {
+            "key": "lineage_calls",
+            "label": "Lineage calls",
+            "complete": lineage_called_cases,
+            "missing": max(0, total_cases - lineage_called_cases),
+            "percent": _to_optional_pct(lineage_called_cases, total_cases),
+        },
+        {
+            "key": "resistance_calls",
+            "label": "Resistance calls",
+            "complete": resistance_called_cases,
+            "missing": max(0, total_cases - resistance_called_cases),
+            "percent": _to_optional_pct(resistance_called_cases, total_cases),
+        },
+    ]
+
+    blockers = [check for check in checks if check["missing"] > 0]
+    return {
+        "total_cases": total_cases,
+        "sequencing_coverage": {
+            "sequenced_cases": sequenced_cases,
+            "percent": _to_optional_pct(sequenced_cases, total_cases),
+        },
+        "qc_completeness": {
+            "qc_complete_cases": qc_complete_cases,
+            "percent": _to_optional_pct(qc_complete_cases, total_cases),
+        },
+        "missing_geography": missing_geography,
+        "missing_dates": missing_dates,
+        "missing_lineage_calls": max(0, total_cases - lineage_called_cases),
+        "missing_resistance_calls": max(0, total_cases - resistance_called_cases),
+        "checks": checks,
+        "status": "ready" if total_cases > 0 and not blockers else "needs_review",
+    }
+
+
 @router.get("/data-safety")
 def data_safety(db: Session = Depends(get_db)):
     """Return whether the current dataset is operational or synthetic/demo."""

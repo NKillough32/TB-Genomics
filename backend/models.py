@@ -1,6 +1,6 @@
 
-from sqlalchemy import Column, Date, ForeignKey, String, TIMESTAMP
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Boolean, Column, Date, ForeignKey, Integer, Numeric, String, TIMESTAMP
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from backend.database import Base
 import uuid
 
@@ -12,6 +12,123 @@ class Case(Base):
     geographic_region = Column(String)
     case_status = Column(String)
     created_at = Column(TIMESTAMP)
+
+
+class TbInterpretation(Base):
+    __tablename__ = "tb_interpretation"
+
+    sample_id = Column(UUID(as_uuid=True), ForeignKey("cases.pseudonymised_case_id"), primary_key=True)
+    species_confirmation = Column(String)
+    lineage = Column(String)
+    sublineage = Column(String)
+    resistance_mutations = Column(JSONB)
+    predicted_drug_resistance = Column(JSONB)
+    confidence_score = Column(Numeric)
+    interpretation_summary = Column(String)
+
+
+class ConsensusSequence(Base):
+    __tablename__ = "consensus_sequences"
+
+    sample_id = Column(UUID(as_uuid=True), ForeignKey("cases.pseudonymised_case_id"), primary_key=True)
+    sequence = Column(String)
+    length = Column(Integer)
+
+
+class SequencingRun(Base):
+    __tablename__ = "sequencing_runs"
+
+    run_id = Column(String, primary_key=True)
+    platform = Column(String)
+    instrument_name = Column(String)
+    pipeline_version = Column(String)
+    reference_genome = Column(String)
+    started_at = Column(TIMESTAMP)
+    completed_at = Column(TIMESTAMP)
+    created_at = Column(TIMESTAMP)
+
+
+class SampleQcMetric(Base):
+    __tablename__ = "sample_qc_metrics"
+
+    sample_id = Column(UUID(as_uuid=True), ForeignKey("cases.pseudonymised_case_id"), primary_key=True)
+    run_id = Column(String, ForeignKey("sequencing_runs.run_id"))
+    mean_depth = Column(Numeric)
+    coverage_breadth = Column(Numeric)
+    ambiguous_base_percent = Column(Numeric)
+    contamination_flag = Column(Boolean)
+    qc_status = Column(String)
+    qc_failure_reason = Column(String)
+    reported_at = Column(TIMESTAMP)
+
+
+class AnalysisProvenance(Base):
+    __tablename__ = "analysis_provenance"
+
+    provenance_id = Column(Integer, primary_key=True)
+    sample_id = Column(UUID(as_uuid=True), ForeignKey("cases.pseudonymised_case_id"))
+    pipeline_name = Column(String)
+    pipeline_version = Column(String)
+    reference_genome = Column(String)
+    software_versions = Column(JSONB)
+    parameters = Column(JSONB)
+    generated_at = Column(TIMESTAMP)
+
+
+class Cluster(Base):
+    __tablename__ = "clusters"
+
+    cluster_id = Column(UUID(as_uuid=True), primary_key=True)
+    snp_distance = Column(Integer)
+    investigation_status = Column(String)
+    alert_flag = Column(Boolean)
+
+
+class CaseCluster(Base):
+    __tablename__ = "case_clusters"
+
+    sample_id = Column(UUID(as_uuid=True), ForeignKey("cases.pseudonymised_case_id"), primary_key=True)
+    cluster_id = Column(UUID(as_uuid=True), ForeignKey("clusters.cluster_id"), primary_key=True)
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_log"
+
+    audit_id = Column(Integer, primary_key=True)
+    action = Column(String)
+    user_id = Column(String)
+    details = Column(JSONB)
+    timestamp = Column(TIMESTAMP)
+
+
+class PipelineValidationSignoff(Base):
+    __tablename__ = "pipeline_validation_signoffs"
+
+    id = Column(Integer, primary_key=True)
+    pipeline = Column(String, nullable=False)
+    decision = Column(String, nullable=False)
+    reviewer = Column(String, nullable=False)
+    notes = Column(String)
+    catalogue_version = Column(String)
+    signed_off_at = Column(TIMESTAMP)
+
+
+class ClusterInvestigation(Base):
+    __tablename__ = "cluster_investigations"
+
+    investigation_id = Column(UUID(as_uuid=True), primary_key=True)
+    cluster_id = Column(UUID(as_uuid=True), ForeignKey("clusters.cluster_id"), nullable=False)
+    risk_score = Column(Numeric, nullable=False)
+    risk_band = Column(String, nullable=False)
+    assigned_to = Column(String)
+    status = Column(String, nullable=False)
+    epi_notes = Column(String)
+    actions = Column(JSONB, nullable=False)
+    decision = Column(String)
+    decision_by = Column(String)
+    decision_at = Column(TIMESTAMP)
+    created_at = Column(TIMESTAMP)
+    updated_at = Column(TIMESTAMP)
 
 
 class Contact(Base):

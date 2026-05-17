@@ -13,7 +13,8 @@ from backend.auth import (
     get_current_user,
     require_roles,
 )
-from backend.app import app
+from backend.app import _cors_origins, app
+from backend.database import Base
 from backend.models import (
     CaseContactLink,
     CaseLocationEvent,
@@ -232,6 +233,18 @@ def test_extracted_case_lookup_routes_remain_registered_once():
         assert registered_paths.count(path) == 1
 
 
+def test_cors_origins_are_configurable(monkeypatch):
+    monkeypatch.setenv("TB_CORS_ORIGINS", "https://tb.example.nhs.uk, http://localhost:8081 ")
+
+    assert _cors_origins() == ["https://tb.example.nhs.uk", "http://localhost:8081"]
+
+
+def test_cors_origins_keep_local_defaults(monkeypatch):
+    monkeypatch.delenv("TB_CORS_ORIGINS", raising=False)
+
+    assert _cors_origins() == ["http://localhost:8081", "http://127.0.0.1:8081"]
+
+
 class _ScalarResult:
     def __init__(self, value):
         self.value = value
@@ -293,6 +306,52 @@ def test_schema_declares_structured_epidemiology_tables():
         "case_contact_links",
     }:
         assert f"CREATE TABLE IF NOT EXISTS {table_name}" in schema
+
+
+def test_orm_metadata_covers_schema_tables_for_alembic_autogenerate():
+    expected_tables = {
+        "cases",
+        "tb_interpretation",
+        "consensus_sequences",
+        "sequencing_runs",
+        "sample_qc_metrics",
+        "analysis_provenance",
+        "clusters",
+        "case_clusters",
+        "audit_log",
+        "pipeline_validation_signoffs",
+        "cluster_investigations",
+        "contacts",
+        "locations",
+        "exposures",
+        "case_location_events",
+        "case_contact_links",
+    }
+
+    assert expected_tables.issubset(set(Base.metadata.tables))
+
+
+def test_ni_exports_is_gitignored():
+    gitignore = (Path(__file__).resolve().parents[1] / ".gitignore").read_text(encoding="utf-8")
+
+    assert "ni_exports/" in gitignore
+
+
+def test_env_example_documents_deployment_runtime_knobs():
+    env_example = (Path(__file__).resolve().parents[1] / ".env.example").read_text(
+        encoding="utf-8"
+    )
+
+    for name in {
+        "TB_AUTO_MIGRATE",
+        "TB_CORS_ORIGINS",
+        "TB_ALLOW_MOCK_OUTBREAKER",
+        "TB_OUTBREAKER_TIMEOUT_SEC",
+        "TBPROFILER_WSL_FALLBACK",
+        "LINEAGE_DR_FASTA",
+        "TB_LINEAGE_DR_FASTA",
+    }:
+        assert f"{name}=" in env_example
 
 
 def test_epidemiology_routes_remain_registered():

@@ -18,3 +18,6 @@ Plain-language use note:
 - Use the synthesis layer to help reviewers decide what to look at first.
 - Do not treat the scores as confirmed transmission truth.
 - If important epidemiology fields are missing, expect the synthesis layer to rely on weaker proxy signals.
+
+Pilot milestone:
+- See `docs/governance/PILOT_READY_INTERNAL_DEMONSTRATOR.md` for the short-term internal demonstrator target, operating rules, and remaining production gaps.

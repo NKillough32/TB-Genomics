@@ -323,3 +323,12 @@ python scripts/generate_ingest_example_bundle.py --cases 40 --output-dir example
 
 The bundle includes CSV files for core tables, FASTA sequence examples, a manifest, and a SQL
 loader template so users can validate formatting before loading real programme data.
+
+Pilot-ready internal demonstrator milestone
+-------------------------------------------
+
+The near-term implementation target is documented in
+`docs/governance/PILOT_READY_INTERNAL_DEMONSTRATOR.md`. It covers authenticated
+token-based RBAC deployment, validated ingest, operational readiness checks,
+structured epidemiology linkage, reproducible reports, tests, CI, and governance
+caveats for an internal pilot.

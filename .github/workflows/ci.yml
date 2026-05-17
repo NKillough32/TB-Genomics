@@ -26,5 +26,22 @@ jobs:
       - name: Run tests
         run: python -m pytest
 
+      - name: Check Alembic migrations
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          versions = Path("migrations/versions")
+          required = ["0001_baseline.py", "0002_epidemiology_tables.py"]
+          missing = [name for name in required if not (versions / name).exists()]
+          if missing:
+              raise SystemExit(f"Missing migration files: {missing}")
+          text = (versions / "0002_epidemiology_tables.py").read_text()
+          if 'down_revision: Union[str, Sequence[str], None] = "0001_baseline"' not in text:
+              raise SystemExit("0002_epidemiology_tables.py is not linked to 0001_baseline")
+          for table in ["contacts", "locations", "exposures", "case_location_events", "case_contact_links"]:
+              if f"CREATE TABLE IF NOT EXISTS {table}" not in text:
+                  raise SystemExit(f"0002_epidemiology_tables.py does not create {table}")
+          PY
+
       - name: Compile Python sources
         run: python -m compileall backend scripts migrations

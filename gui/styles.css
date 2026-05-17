@@ -946,6 +946,45 @@ footer {
 
 .cic-form-grid label { display: flex; flex-direction: column; gap: .25rem; font-size: .85rem; font-weight: 600; }
 
+.cic-case-selector {
+  display: flex;
+  flex-direction: column;
+  gap: .25rem;
+  max-width: 22rem;
+  font-size: .85rem;
+  font-weight: 700;
+  margin-bottom: .75rem;
+}
+
+.cic-evidence-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .85rem;
+  margin: .75rem 0 1rem;
+}
+
+.cic-evidence-panel {
+  background: #fff;
+  border: 1px solid #dbe4ed;
+  border-radius: 8px;
+  padding: .85rem;
+}
+
+.cic-evidence-panel h4,
+.cic-evidence-results h4 {
+  margin: 0 0 .55rem;
+  font-size: .88rem;
+  color: #12324e;
+}
+
+.cic-evidence-panel .cic-form-grid {
+  grid-template-columns: 1fr;
+}
+
+.cic-evidence-panel button {
+  width: auto;
+}
+
 .cic-msg {
   font-size: .82rem;
   color: #15803d;
@@ -955,6 +994,7 @@ footer {
 
 @media (max-width: 600px) {
   .cic-form-grid { grid-template-columns: 1fr; }
+  .cic-evidence-grid { grid-template-columns: 1fr; }
   .cic-tabs { flex-wrap: wrap; }
 }
 

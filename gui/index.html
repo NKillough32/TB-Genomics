@@ -243,6 +243,59 @@
         <textarea id="cicEpiNotes" class="cic-textarea" rows="8" placeholder="Enter epidemiology notes…"></textarea>
         <button onclick="cicSaveEpiNotes()">Save notes</button>
         <div id="cicEpiStatus" class="cic-msg"></div>
+
+        <h3 class="cic-section-title">Structured epidemiology evidence</h3>
+        <label class="cic-case-selector">Case
+          <select id="cicEpiCaseSelect" class="cic-input" onchange="cicLoadStructuredEvidence()"></select>
+        </label>
+
+        <div class="cic-evidence-grid">
+          <section class="cic-evidence-panel">
+            <h4>Location event</h4>
+            <div class="cic-form-grid">
+              <label>Location name<input id="cicLocationName" class="cic-input" type="text" /></label>
+              <label>Location type<input id="cicLocationType" class="cic-input" type="text" placeholder="household, workplace, venue" /></label>
+              <label>Event type<input id="cicLocationEventType" class="cic-input" type="text" value="exposure" /></label>
+              <label>Confidence
+                <select id="cicLocationConfidence" class="cic-input">
+                  <option value="">Not recorded</option>
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                </select>
+              </label>
+              <label>Arrived<input id="cicLocationArrived" class="cic-input" type="datetime-local" /></label>
+              <label>Departed<input id="cicLocationDeparted" class="cic-input" type="datetime-local" /></label>
+            </div>
+            <textarea id="cicLocationNotes" class="cic-textarea" rows="2" placeholder="Location evidence notes"></textarea>
+            <button onclick="cicRecordLocationEvent()">Record location event</button>
+            <div id="cicLocationStatus" class="cic-msg"></div>
+          </section>
+
+          <section class="cic-evidence-panel">
+            <h4>Contact link</h4>
+            <div class="cic-form-grid">
+              <label>Contact label<input id="cicContactLabel" class="cic-input" type="text" /></label>
+              <label>Relationship<input id="cicContactRelationship" class="cic-input" type="text" placeholder="household, social, workplace" /></label>
+              <label>Link type<input id="cicContactLinkType" class="cic-input" type="text" value="reported_contact" /></label>
+              <label>Confidence
+                <select id="cicContactConfidence" class="cic-input">
+                  <option value="">Not recorded</option>
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                </select>
+              </label>
+              <label>Exposure start<input id="cicContactStart" class="cic-input" type="date" /></label>
+              <label>Exposure end<input id="cicContactEnd" class="cic-input" type="date" /></label>
+            </div>
+            <textarea id="cicContactNotes" class="cic-textarea" rows="2" placeholder="Contact evidence notes"></textarea>
+            <button onclick="cicRecordContactLink()">Record contact link</button>
+            <div id="cicContactStatus" class="cic-msg"></div>
+          </section>
+        </div>
+        <h3 class="cic-section-title">Structured evidence for selected case</h3>
+        <div id="cicStructuredEvidence"></div>
       </div>
 
       <!-- Tab: Actions -->

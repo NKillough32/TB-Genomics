@@ -1,4 +1,5 @@
 from pathlib import Path
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi import HTTPException
@@ -22,6 +23,16 @@ from backend.models import (
 )
 from backend.routers.case_assets import get_outbreaker_image
 from backend.routers.case_overview import data_readiness
+from backend.routers.epidemiology import (
+    CaseContactLinkCreate,
+    CaseContactLinkUpdate,
+    CaseLocationEventCreate,
+    CaseLocationEventUpdate,
+    create_case_contact_link,
+    create_case_location_event,
+    update_case_contact_link,
+    update_case_location_event,
+)
 from backend.routers.ingest import _require_ingest_api_key
 
 
@@ -295,7 +306,9 @@ def test_epidemiology_routes_remain_registered():
         "/epidemiology/locations",
         "/epidemiology/locations/{location_id}",
         "/epidemiology/case-location-events",
+        "/epidemiology/case-location-events/{event_id}",
         "/epidemiology/case-contact-links",
+        "/epidemiology/case-contact-links/{link_id}",
     }.issubset(registered_paths)
 
 
@@ -323,3 +336,121 @@ def test_alembic_revision_files_are_present_and_linked():
         "case_contact_links",
     }:
         assert f"CREATE TABLE IF NOT EXISTS {table_name}" in epidemiology
+
+
+class _EpiCreateDb:
+    def __init__(self):
+        self.objects = []
+
+    def add(self, obj):
+        self.objects.append(obj)
+
+    def flush(self):
+        for obj in self.objects:
+            for attr in ("location_id", "contact_id", "exposure_id", "event_id", "link_id"):
+                if hasattr(obj, attr) and getattr(obj, attr) is None:
+                    setattr(obj, attr, uuid4())
+
+    def commit(self):
+        self.flush()
+
+    def refresh(self, obj):
+        self.flush()
+
+    def get(self, model, primary_key):
+        return None
+
+
+class _EpiUpdateDb(_EpiCreateDb):
+    def __init__(self, item):
+        super().__init__()
+        self.item = item
+
+    def get(self, model, primary_key):
+        return self.item
+
+
+def test_create_case_location_event_creates_inline_location():
+    db = _EpiCreateDb()
+    case_id = UUID("11111111-1111-4111-8111-111111111111")
+
+    event = create_case_location_event(
+        CaseLocationEventCreate(
+            case_id=case_id,
+            location_name="Clinic A",
+            event_type="exposure",
+            confidence="medium",
+            notes="Interview reported overlap",
+        ),
+        db,
+        AuthenticatedUser(subject="ops", roles=("operator",)),
+    )
+
+    assert event.case_id == case_id
+    assert event.location_id is not None
+    assert any(isinstance(obj, Location) and obj.location_name == "Clinic A" for obj in db.objects)
+    assert any(isinstance(obj, CaseLocationEvent) for obj in db.objects)
+
+
+def test_create_case_contact_link_creates_inline_contact():
+    db = _EpiCreateDb()
+    case_id = UUID("11111111-1111-4111-8111-111111111111")
+
+    link = create_case_contact_link(
+        CaseContactLinkCreate(
+            case_id=case_id,
+            contact_label="household contact 1",
+            relationship_type="household",
+            link_type="reported_contact",
+            confidence="high",
+        ),
+        db,
+        AuthenticatedUser(subject="ops", roles=("operator",)),
+    )
+
+    assert link.case_id == case_id
+    assert link.contact_id is not None
+    assert any(isinstance(obj, Contact) and obj.contact_label == "household contact 1" for obj in db.objects)
+    assert any(isinstance(obj, CaseContactLink) for obj in db.objects)
+
+
+def test_update_case_location_event_updates_editable_fields():
+    event = CaseLocationEvent(
+        event_id=uuid4(),
+        case_id=uuid4(),
+        location_id=uuid4(),
+        event_type="exposure",
+        confidence="low",
+    )
+    db = _EpiUpdateDb(event)
+
+    updated = update_case_location_event(
+        event.event_id,
+        CaseLocationEventUpdate(event_type="venue_overlap", confidence="high"),
+        db,
+        AuthenticatedUser(subject="ops", roles=("operator",)),
+    )
+
+    assert updated.event_type == "venue_overlap"
+    assert updated.confidence == "high"
+
+
+def test_update_case_contact_link_updates_editable_fields():
+    link = CaseContactLink(
+        link_id=uuid4(),
+        case_id=uuid4(),
+        contact_id=uuid4(),
+        link_type="reported_contact",
+        confidence="low",
+    )
+    db = _EpiUpdateDb(link)
+
+    updated = update_case_contact_link(
+        link.link_id,
+        CaseContactLinkUpdate(link_type="household_contact", confidence="medium"),
+        db,
+        AuthenticatedUser(subject="ops", roles=("operator",)),
+    )
+
+    assert updated.link_type == "household_contact"
+    assert updated.confidence == "medium"

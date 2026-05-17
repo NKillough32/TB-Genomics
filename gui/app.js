@@ -492,6 +492,7 @@ function generateCaseReport(caseIdOverride){
 }
 // ── Cluster Investigation Centre ─────────────────────────────────────────────
 let _cicCurrentCluster = null;
+let _cicCurrentMembers = [];
 
 const _CIC_BAND_COLOUR = {
 	critical: '#b91c1c',
@@ -567,6 +568,8 @@ async function _cicRefreshDetail(){
 		_cicRenderRiskStrip(d);
 		_cicRenderMembers(d);
 		_cicRenderActions(d);
+		_cicRenderEpiCaseOptions(d.members || []);
+		await cicLoadStructuredEvidence();
 		if(d.epi_notes) document.getElementById('cicEpiNotes').value = d.epi_notes;
 		if(d.assigned_to) document.getElementById('cicAssignee').value = d.assigned_to;
 	}catch(e){
@@ -592,6 +595,7 @@ function _cicRenderRiskStrip(d){
 
 function _cicRenderMembers(d){
 	const members = d.members || [];
+	_cicCurrentMembers = members;
 	let html = `<p class="hint">${members.length} case(s) in this cluster.</p>`;
 	if(members.length > 0){
 		html += '<table class="data-table"><thead><tr><th>Case ID</th><th>Date</th><th>Region</th><th>Lineage</th><th>Resistance</th></tr></thead><tbody>';
@@ -610,6 +614,69 @@ function _cicRenderMembers(d){
 	document.getElementById('cicMembersTable').innerHTML = html;
 }
 
+function _cicRenderEpiCaseOptions(members){
+	const select=document.getElementById('cicEpiCaseSelect');
+	if(!select) return;
+	const current=select.value;
+	select.innerHTML='';
+	for(const member of members){
+		const opt=document.createElement('option');
+		opt.value=member.case_id||'';
+		opt.textContent=`${(member.case_id||'').slice(0,8)} — ${member.region||'unknown region'}`;
+		select.appendChild(opt);
+	}
+	if(current && members.some(m=>m.case_id===current)) select.value=current;
+}
+
+function _cicSelectedCaseId(){
+	const select=document.getElementById('cicEpiCaseSelect');
+	return (select?.value || _cicCurrentMembers[0]?.case_id || '').trim();
+}
+
+async function cicLoadStructuredEvidence(){
+	const box=document.getElementById('cicStructuredEvidence');
+	if(!box) return;
+	const caseId=_cicSelectedCaseId();
+	if(!caseId){
+		box.innerHTML='<p class="hint">No case selected.</p>';
+		return;
+	}
+	box.innerHTML='<p class="hint">Loading structured evidence...</p>';
+	try{
+		const [locationResp, contactResp]=await Promise.all([
+			fetch(`${API}/epidemiology/case-location-events?case_id=${encodeURIComponent(caseId)}`),
+			fetch(`${API}/epidemiology/case-contact-links?case_id=${encodeURIComponent(caseId)}`),
+		]);
+		const locations=locationResp.ok ? await locationResp.json() : [];
+		const contacts=contactResp.ok ? await contactResp.json() : [];
+		let html='<div class="cic-evidence-results">';
+		html+='<h4>Location events</h4>';
+		if(locations.length){
+			html+='<table class="data-table"><thead><tr><th>Type</th><th>Location</th><th>Confidence</th><th>Notes</th></tr></thead><tbody>';
+			for(const event of locations){
+				html+=`<tr><td>${escapeHtml(event.event_type||'')}</td><td><code>${escapeHtml((event.location_id||'').slice(0,8))}</code></td><td>${escapeHtml(event.confidence||'')}</td><td>${escapeHtml(event.notes||'')}</td></tr>`;
+			}
+			html+='</tbody></table>';
+		}else{
+			html+='<p class="hint">No location events recorded.</p>';
+		}
+		html+='<h4>Contact links</h4>';
+		if(contacts.length){
+			html+='<table class="data-table"><thead><tr><th>Type</th><th>Contact</th><th>Confidence</th><th>Notes</th></tr></thead><tbody>';
+			for(const link of contacts){
+				html+=`<tr><td>${escapeHtml(link.link_type||'')}</td><td><code>${escapeHtml((link.contact_id||'').slice(0,8))}</code></td><td>${escapeHtml(link.confidence||'')}</td><td>${escapeHtml(link.notes||'')}</td></tr>`;
+			}
+			html+='</tbody></table>';
+		}else{
+			html+='<p class="hint">No contact links recorded.</p>';
+		}
+		html+='</div>';
+		box.innerHTML=html;
+	}catch(e){
+		box.textContent='Structured evidence load failed: '+e;
+	}
+}
+
 function _cicRenderActions(d){
 	const actions = d.actions || [];
 	let html = '';
@@ -626,6 +693,84 @@ function _cicRenderActions(d){
 		html += '</tbody></table>';
 	}
 	document.getElementById('cicActionsTable').innerHTML = html;
+}
+
+async function cicRecordLocationEvent(){
+	const msg=document.getElementById('cicLocationStatus');
+	const caseId=_cicSelectedCaseId();
+	const locationName=document.getElementById('cicLocationName').value.trim();
+	const eventType=document.getElementById('cicLocationEventType').value.trim();
+	if(!caseId || !locationName || !eventType){
+		msg.textContent='Select a case and enter location name and event type.';
+		return;
+	}
+	const payload={
+		case_id: caseId,
+		location_name: locationName,
+		location_type: document.getElementById('cicLocationType').value.trim() || null,
+		event_type: eventType,
+		arrived_at: document.getElementById('cicLocationArrived').value || null,
+		departed_at: document.getElementById('cicLocationDeparted').value || null,
+		confidence: document.getElementById('cicLocationConfidence').value || null,
+		source: 'cluster_investigation_centre',
+		notes: document.getElementById('cicLocationNotes').value.trim() || null,
+	};
+	try{
+		const r=await fetch(`${API}/epidemiology/case-location-events`,{
+			method:'POST',
+			headers:{'Content-Type':'application/json'},
+			body:JSON.stringify(payload),
+		});
+		if(r.ok){
+			msg.textContent='✓ Location event recorded.';
+			document.getElementById('cicLocationName').value='';
+			document.getElementById('cicLocationType').value='';
+			document.getElementById('cicLocationNotes').value='';
+			await cicLoadStructuredEvidence();
+		}else{
+			const e=await r.json();
+			msg.textContent='Error: '+(e.detail||r.status);
+		}
+	}catch(e){ msg.textContent='Error: '+e; }
+}
+
+async function cicRecordContactLink(){
+	const msg=document.getElementById('cicContactStatus');
+	const caseId=_cicSelectedCaseId();
+	const contactLabel=document.getElementById('cicContactLabel').value.trim();
+	const linkType=document.getElementById('cicContactLinkType').value.trim();
+	if(!caseId || !contactLabel){
+		msg.textContent='Select a case and enter a contact label.';
+		return;
+	}
+	const payload={
+		case_id: caseId,
+		contact_label: contactLabel,
+		relationship_type: document.getElementById('cicContactRelationship').value.trim() || null,
+		link_type: linkType || null,
+		exposure_start_date: document.getElementById('cicContactStart').value || null,
+		exposure_end_date: document.getElementById('cicContactEnd').value || null,
+		confidence: document.getElementById('cicContactConfidence').value || null,
+		source: 'cluster_investigation_centre',
+		notes: document.getElementById('cicContactNotes').value.trim() || null,
+	};
+	try{
+		const r=await fetch(`${API}/epidemiology/case-contact-links`,{
+			method:'POST',
+			headers:{'Content-Type':'application/json'},
+			body:JSON.stringify(payload),
+		});
+		if(r.ok){
+			msg.textContent='✓ Contact link recorded.';
+			document.getElementById('cicContactLabel').value='';
+			document.getElementById('cicContactRelationship').value='';
+			document.getElementById('cicContactNotes').value='';
+			await cicLoadStructuredEvidence();
+		}else{
+			const e=await r.json();
+			msg.textContent='Error: '+(e.detail||r.status);
+		}
+	}catch(e){ msg.textContent='Error: '+e; }
 }
 
 function cicTab(btn, tabId){

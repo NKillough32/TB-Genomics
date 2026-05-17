@@ -12,6 +12,7 @@ from backend.routers import (
     case_reports,
     cases,
     cluster_investigations,
+    epidemiology,
     ingest,
     jobs,
 )
@@ -45,6 +46,7 @@ app.include_router(ingest.router, dependencies=[Depends(require_roles("operator"
 app.include_router(jobs.router, dependencies=[Depends(require_roles("operator"))])
 app.include_router(cluster_investigations.router, dependencies=[Depends(require_roles("analyst"))])
 app.include_router(analytics.router, dependencies=[Depends(require_roles("viewer"))])
+app.include_router(epidemiology.router, dependencies=[Depends(require_roles("analyst"))])
 
 
 @app.get("/")

@@ -101,7 +101,9 @@ This means you can automate data flow from sequencing infrastructure into report
 - Sequence support is based on precomputed sequence-cluster assignments, not a full validated SNP alignment pipeline.
 - Epidemiological support still uses timing and geography as a proxy, so contact and exposure fields would improve it.
 - Cluster-risk scores need calibration before real-world use.
-- There is no RBAC/authentication yet on summary outputs or sign-off actions.
+- Token-based RBAC is available on API routes, including summary outputs and
+  sign-off actions when authentication is enabled. This remains token/env-var
+  based rather than full user login or NHS identity-governance integration.
 
 ## Demo data vs real operational data
 

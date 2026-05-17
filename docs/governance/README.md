@@ -8,7 +8,9 @@ Governance summary:
 - Ingest authentication supported via TB_INGEST_API_KEY (X-API-Key header)
 - NI live data transition requires full DB reset before loading (no synthetic seed events in audit_log)
 - New synthesis layer outputs are heuristic and non-validated; they are for review support, not final public-health decisions
-- Synthesis and investigation sign-off currently do not have RBAC/authentication in the application layer
+- Synthesis and investigation sign-off routes use token-based RBAC when `TB_AUTH_REQUIRED`
+  or `TB_AUTH_TOKENS` is configured. This is not a full user-login or NHS identity
+  governance layer.
 - The synthesis layer combines genomic, timing, geography, resistance, and model outputs into a plain-language operational summary
 - Cluster-risk scores need calibration before real-world use
 

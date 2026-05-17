@@ -299,7 +299,11 @@ Important limitation:
 - SNP support is currently based on precomputed sequence-cluster assignments, not a fully validated SNP alignment pipeline.
 - Epidemiological support is still proxy-based and needs structured exposure/contact fields for stronger interpretation.
 - Cluster-risk scores need calibration before real-world use.
-- No RBAC/authentication has been added yet for synthesis outputs or sign-off actions.
+- Token-based RBAC is available for API routes. Set `TB_AUTH_REQUIRED=1` and
+  configure `TB_AUTH_TOKENS` as `token=role` or `token=subject|role,role`.
+  This is not a full NHS identity/access-governance system, but synthesis,
+  investigation, ingest, job, and sign-off routes are protected by viewer,
+  analyst, operator, and admin role checks.
 
 Ingest example bundle (for user onboarding)
 -------------------------------------------

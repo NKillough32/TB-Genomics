@@ -13,6 +13,13 @@ from backend.auth import (
     require_roles,
 )
 from backend.app import app
+from backend.models import (
+    CaseContactLink,
+    CaseLocationEvent,
+    Contact,
+    Exposure,
+    Location,
+)
 from backend.routers.case_assets import get_outbreaker_image
 from backend.routers.case_overview import data_readiness
 from backend.routers.ingest import _require_ingest_api_key
@@ -275,3 +282,44 @@ def test_schema_declares_structured_epidemiology_tables():
         "case_contact_links",
     }:
         assert f"CREATE TABLE IF NOT EXISTS {table_name}" in schema
+
+
+def test_epidemiology_routes_remain_registered():
+    registered_paths = {route.path for route in app.routes}
+
+    assert {
+        "/epidemiology/exposures",
+        "/epidemiology/exposures/{exposure_id}",
+        "/epidemiology/contacts",
+        "/epidemiology/contacts/{contact_id}",
+        "/epidemiology/locations",
+        "/epidemiology/locations/{location_id}",
+        "/epidemiology/case-location-events",
+        "/epidemiology/case-contact-links",
+    }.issubset(registered_paths)
+
+
+def test_epidemiology_sqlalchemy_models_match_table_names():
+    assert Exposure.__tablename__ == "exposures"
+    assert Contact.__tablename__ == "contacts"
+    assert Location.__tablename__ == "locations"
+    assert CaseLocationEvent.__tablename__ == "case_location_events"
+    assert CaseContactLink.__tablename__ == "case_contact_links"
+
+
+def test_alembic_revision_files_are_present_and_linked():
+    versions = Path(__file__).resolve().parents[1] / "migrations" / "versions"
+    baseline = (versions / "0001_baseline.py").read_text(encoding="utf-8")
+    epidemiology = (versions / "0002_epidemiology_tables.py").read_text(encoding="utf-8")
+
+    assert 'revision: str = "0001_baseline"' in baseline
+    assert 'revision: str = "0002_epidemiology_tables"' in epidemiology
+    assert 'down_revision: Union[str, Sequence[str], None] = "0001_baseline"' in epidemiology
+    for table_name in {
+        "contacts",
+        "locations",
+        "exposures",
+        "case_location_events",
+        "case_contact_links",
+    }:
+        assert f"CREATE TABLE IF NOT EXISTS {table_name}" in epidemiology

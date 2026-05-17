@@ -33,6 +33,40 @@ function escapeAttr(value){
 	return escapeHtml(value).replace(/`/g,'&#96;');
 }
 
+function formatApiError(response, payload){
+	const detail=payload && typeof payload==='object' && 'detail' in payload ? payload.detail : payload;
+	const message=typeof detail==='string' ? detail : JSON.stringify(detail ?? payload ?? '', null, 2);
+	return `HTTP ${response.status} ${response.statusText}${message ? `: ${message}` : ''}`;
+}
+
+async function apiJson(url, options){
+	const response=await fetch(url, options);
+	const text=await response.text();
+	let payload=null;
+	if(text){
+		try{
+			payload=JSON.parse(text);
+		}catch{
+			payload=text;
+		}
+	}
+	if(!response.ok){
+		throw new Error(formatApiError(response, payload));
+	}
+	return payload;
+}
+
+async function apiText(url, options){
+	const response=await fetch(url, options);
+	const text=await response.text();
+	if(!response.ok){
+		let payload=text;
+		try{ payload=JSON.parse(text); }catch{}
+		throw new Error(formatApiError(response, payload));
+	}
+	return text;
+}
+
 function closeDemoModeDialog(){
 	const modal=document.getElementById('demoModeModal');
 	if(!modal) return;
@@ -409,9 +443,8 @@ async function loadAuditTrail(){
 	const box=document.getElementById('auditTrail');
 	box.textContent='Loading audit trail...';
 	try{
-		const r=await fetch(`${API}/cases/audit-trail?limit=20`);
-		const data=await r.json();
-		const formatted=data.entries.map(e=>({
+		const data=await apiJson(`${API}/cases/audit-trail?limit=20`);
+		const formatted=(data.entries||[]).map(e=>({
 			timestamp:e.timestamp,
 			action:e.action,
 			user:e.user,
@@ -1238,7 +1271,7 @@ async function loadActionableReportSummary(){
 	box.textContent='Loading final report summary...';
 	try{
 		const p=_reportParams();
-		const d=await fetch(`${API}/reports/actionable-surveillance?weeks=${encodeURIComponent(p.weeks)}&top_clusters=${encodeURIComponent(p.topClusters)}`).then(r=>r.json());
+		const d=await apiJson(`${API}/reports/actionable-surveillance?weeks=${encodeURIComponent(p.weeks)}&top_clusters=${encodeURIComponent(p.topClusters)}`);
 		const s=d.executive_summary||{};
 		const actions=(s.immediate_actions||[]).map(a=>`<li>${escapeHtml(a)}</li>`).join('');
 		const clusters=(d.priority_clusters||[]).slice(0,8).map(c=>`<tr><td><code>${escapeHtml(c.cluster_short||String(c.cluster_id||'').slice(0,8))}</code></td><td>${escapeHtml(c.member_count??0)}</td><td>${escapeHtml(c.priority_score??0)}</td><td>${escapeHtml(c.priority_band||'')}</td><td>${escapeHtml((c.flags||[]).join(', ')||'none')}</td></tr>`).join('');
@@ -1254,7 +1287,7 @@ async function loadFullKpis(){
 	box.textContent='Loading full surveillance KPIs...';
 	try{
 		const p=_reportParams();
-		const d=await fetch(`${API}/cases/kpis?weeks=${encodeURIComponent(p.weeks)}`).then(r=>r.json());
+		const d=await apiJson(`${API}/cases/kpis?weeks=${encodeURIComponent(p.weeks)}`);
 		const pct=v=>v===null||v===undefined?'n/a':`${Number(v).toFixed(1)}%`;
 		const rows=(d.representativeness_by_region||[]).map(r=>`<tr><td>${escapeHtml(r.region||'Unknown')}</td><td>${escapeHtml(r.eligible_cases??0)}</td><td>${escapeHtml(r.sequenced_cases??0)}</td><td>${escapeHtml(pct(r.sequenced_pct))}</td></tr>`).join('');
 		box.innerHTML=`<div class="kpi-strip">Window: ${escapeHtml(d.window_weeks)} weeks | Eligible: ${escapeHtml(d.eligible_cases)} | Sequenced: ${escapeHtml(d.sequenced_cases)} (${escapeHtml(pct(d.sequenced_pct))}) | QC pass: ${escapeHtml(d.qc_pass_cases)} (${escapeHtml(pct(d.qc_pass_pct))}) | Median specimen to QC: ${escapeHtml(d.median_days_specimen_to_qc??'n/a')} days</div><table class="data-table"><thead><tr><th>Region</th><th>Eligible</th><th>Sequenced</th><th>Coverage</th></tr></thead><tbody>${rows||'<tr><td colspan="4">No regional KPI rows available.</td></tr>'}</tbody></table>`;
@@ -1268,7 +1301,7 @@ async function loadOutbreakerStatus(){
 	if(!box) return;
 	box.textContent='Loading outbreaker status...';
 	try{
-		const d=await fetch(`${API}/cases/outbreaker-status`).then(r=>r.json());
+		const d=await apiJson(`${API}/cases/outbreaker-status`);
 		box.innerHTML=`<div class="kpi-strip">Cases export: ${d.cases_export?'available':'missing'} | DNA export: ${d.dna_export?'available':'missing'} | Results RDS: ${d.results_rds?'available':'missing'} | Provenance: ${escapeHtml(d.provenance||'unknown')} | Mock: ${escapeHtml(d.is_mock)}</div>`;
 	}catch(e){
 		box.textContent='Failed to load outbreaker status: '+e;
@@ -1284,8 +1317,7 @@ async function loadCurrentJobLog(){
 	}
 	box.textContent='Loading job log...';
 	try{
-		const r=await fetch(`${API}/jobs/logs/${encodeURIComponent(activeJob)}`);
-		box.textContent=await r.text();
+		box.textContent=await apiText(`${API}/jobs/logs/${encodeURIComponent(activeJob)}`);
 	}catch(e){
 		box.textContent='Failed to load job log: '+e;
 	}
@@ -1296,7 +1328,7 @@ async function loadResistanceValidationStatus(){
 	if(!box) return;
 	box.textContent='Loading resistance validation status...';
 	try{
-		const d=await fetch(`${API}/cases/resistance-validation/status`).then(r=>r.json());
+		const d=await apiJson(`${API}/cases/resistance-validation/status`);
 		const so=d.signoff||{};
 		box.innerHTML=`<div class="kpi-strip">Status: ${escapeHtml(d.status||'under_review')} | Reviewer: ${escapeHtml(so.reviewer||'n/a')} | Catalogue: ${escapeHtml(so.catalogue_version||'n/a')} | Signed: ${escapeHtml(so.signed_off_at||'n/a')}</div>${so.notes?`<p class="hint">${escapeHtml(so.notes)}</p>`:''}`;
 	}catch(e){
@@ -1314,9 +1346,7 @@ async function approveResistanceValidation(){
 	};
 	if(!payload.reviewer){ if(box) box.textContent='Reviewer is required.'; return; }
 	try{
-		const r=await fetch(`${API}/cases/resistance-validation/approve`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-		const d=await r.json();
-		if(!r.ok){ if(box) box.textContent=JSON.stringify(d,null,2); return; }
+		await apiJson(`${API}/cases/resistance-validation/approve`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
 		if(box) box.textContent='Sign-off saved.';
 		await loadResistanceValidationStatus();
 	}catch(e){
@@ -1336,7 +1366,7 @@ async function loadExposureRecords(){
 	if(!box) return;
 	box.innerHTML='<p class="hint">Loading exposures...</p>';
 	try{
-		const d=await fetch(`${API}/epidemiology/exposures?limit=25`).then(r=>r.json());
+		const d=await apiJson(`${API}/epidemiology/exposures?limit=25`);
 		box.innerHTML=_recordTable(d,[['ID','exposure_id'],['Type','exposure_type'],['Context','exposure_context'],['Confidence','confidence']], 'No exposures recorded.');
 	}catch(e){ box.textContent='Failed to load exposures: '+e; }
 }
@@ -1346,10 +1376,10 @@ async function createExposureRecord(){
 	const payload={exposure_type:document.getElementById('exposureType').value.trim(),exposure_context:document.getElementById('exposureContext').value.trim()||null,confidence:document.getElementById('exposureConfidence').value||null,source:'gui_reference_records'};
 	if(!payload.exposure_type){ if(box) box.textContent='Exposure type is required.'; return; }
 	try{
-		const r=await fetch(`${API}/epidemiology/exposures`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-		if(!r.ok){ if(box) box.textContent=JSON.stringify(await r.json(),null,2); return; }
+		await apiJson(`${API}/epidemiology/exposures`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
 		document.getElementById('exposureType').value='';
 		document.getElementById('exposureContext').value='';
+		document.getElementById('exposureConfidence').value='';
 		await loadExposureRecords();
 	}catch(e){ if(box) box.textContent='Failed to create exposure: '+e; }
 }
@@ -1359,7 +1389,7 @@ async function loadContactRecords(){
 	if(!box) return;
 	box.innerHTML='<p class="hint">Loading contacts...</p>';
 	try{
-		const d=await fetch(`${API}/epidemiology/contacts?limit=25`).then(r=>r.json());
+		const d=await apiJson(`${API}/epidemiology/contacts?limit=25`);
 		box.innerHTML=_recordTable(d,[['ID','contact_id'],['Label','contact_label'],['Type','contact_type'],['Relationship','relationship_type']], 'No contacts recorded.');
 	}catch(e){ box.textContent='Failed to load contacts: '+e; }
 }
@@ -1369,8 +1399,7 @@ async function createContactRecord(){
 	const payload={contact_label:document.getElementById('contactLabel').value.trim(),contact_type:document.getElementById('contactType').value.trim()||null,relationship_type:document.getElementById('contactRelationship').value.trim()||null};
 	if(!payload.contact_label){ if(box) box.textContent='Contact label is required.'; return; }
 	try{
-		const r=await fetch(`${API}/epidemiology/contacts`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-		if(!r.ok){ if(box) box.textContent=JSON.stringify(await r.json(),null,2); return; }
+		await apiJson(`${API}/epidemiology/contacts`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
 		document.getElementById('contactLabel').value='';
 		document.getElementById('contactType').value='';
 		document.getElementById('contactRelationship').value='';
@@ -1383,7 +1412,7 @@ async function loadLocationRecords(){
 	if(!box) return;
 	box.innerHTML='<p class="hint">Loading locations...</p>';
 	try{
-		const d=await fetch(`${API}/epidemiology/locations?limit=25`).then(r=>r.json());
+		const d=await apiJson(`${API}/epidemiology/locations?limit=25`);
 		box.innerHTML=_recordTable(d,[['ID','location_id'],['Name','location_name'],['Type','location_type'],['Region','geographic_region'],['Postcode','postcode_prefix']], 'No locations recorded.');
 	}catch(e){ box.textContent='Failed to load locations: '+e; }
 }
@@ -1393,8 +1422,7 @@ async function createLocationRecord(){
 	const payload={location_name:document.getElementById('locationName').value.trim(),location_type:document.getElementById('locationType').value.trim()||null,geographic_region:document.getElementById('locationRegion').value.trim()||null,postcode_prefix:document.getElementById('locationPostcode').value.trim()||null};
 	if(!payload.location_name){ if(box) box.textContent='Location name is required.'; return; }
 	try{
-		const r=await fetch(`${API}/epidemiology/locations`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-		if(!r.ok){ if(box) box.textContent=JSON.stringify(await r.json(),null,2); return; }
+		await apiJson(`${API}/epidemiology/locations`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
 		document.getElementById('locationName').value='';
 		document.getElementById('locationType').value='';
 		document.getElementById('locationRegion').value='';

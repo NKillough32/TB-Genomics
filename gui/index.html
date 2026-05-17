@@ -418,8 +418,8 @@
   </section>
 
   <section class="card">
-    <h2>Step 9 - Programme KPIs and Runtime Status</h2>
-    <p class="hint">Full surveillance KPI payload, outbreaker readiness, and current or recent job logs.</p>
+    <h2>Step 9 - Runtime and Supporting Status</h2>
+    <p class="hint">Operational detail behind the final report: full KPI payload, outbreaker readiness, and current or recent job logs.</p>
     <div class="utility-actions">
       <button onclick="loadFullKpis()">Load full KPIs</button>
       <button onclick="loadOutbreakerStatus()">Load outbreaker status</button>
@@ -458,7 +458,7 @@
 
   <section class="card">
     <h2>Step 11 - Epidemiology Reference Records</h2>
-    <p class="hint">Standalone exposure, contact, and location records that can be linked to cases during investigation.</p>
+    <p class="hint">Reusable exposure, contact, and location records. Case-specific links are recorded in the cluster investigation centre.</p>
     <div class="epi-reference-grid">
       <section class="epi-reference-panel">
         <h3>Exposures</h3>
@@ -471,7 +471,7 @@
           <option value="high">High</option>
         </select>
         <button onclick="createExposureRecord()">Create exposure</button>
-        <button onclick="loadExposureRecords()">Refresh</button>
+        <button onclick="loadExposureRecords()">Refresh exposures</button>
         <div id="exposureRecords"></div>
       </section>
       <section class="epi-reference-panel">
@@ -480,7 +480,7 @@
         <input id="contactType" type="text" placeholder="Contact type" />
         <input id="contactRelationship" type="text" placeholder="Relationship" />
         <button onclick="createContactRecord()">Create contact</button>
-        <button onclick="loadContactRecords()">Refresh</button>
+        <button onclick="loadContactRecords()">Refresh contacts</button>
         <div id="contactRecords"></div>
       </section>
       <section class="epi-reference-panel">
@@ -490,7 +490,7 @@
         <input id="locationRegion" type="text" placeholder="Region" />
         <input id="locationPostcode" type="text" placeholder="Postcode prefix" />
         <button onclick="createLocationRecord()">Create location</button>
-        <button onclick="loadLocationRecords()">Refresh</button>
+        <button onclick="loadLocationRecords()">Refresh locations</button>
         <div id="locationRecords"></div>
       </section>
     </div>

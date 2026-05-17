@@ -45,6 +45,20 @@ In plain terms, it helps answer:
 - Job status and logs for pipeline runs
 - Data provenance and reproducibility fields (reference genome, pipeline version, resistance catalogue, random seed)
 
+## How the web interface is organized
+
+The web interface follows the same practical flow a TB programme would use during routine surveillance and investigation:
+
+1. **Prepare**: check system status, confirm the data is safe to use, review data readiness, upload files, and manage demo or synthetic data controls.
+2. **Analyse**: run the full pipeline or individual jobs, then review raw outputs, exports, case search, and case reports.
+3. **Investigate**: review the transmission summary, open the Cluster Investigation Centre, add case evidence, record actions, sign off decisions, and inspect visual analytics.
+4. **Report and govern**: generate the final actionable report, review runtime and KPI status, sign off resistance validation, manage reusable epidemiology reference records, and review the audit trail.
+
+Two parts of the interface sound similar but do different jobs:
+
+- **Step 6 - Cluster Investigation Centre** is where investigators attach evidence to cases. This is the place to load clusters, open a cluster, choose the **Epi notes** tab, select a case, and record a location event or contact link.
+- **Step 11 - Epidemiology Reference Records** is only a reusable library of exposure types, contacts, and locations. It does not assign records to cases or clusters by itself.
+
 ## What the summary layer means in plain language
 
 The summary layer sits between the analysis pages and the investigation pages.

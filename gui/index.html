@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Source+Serif+4:opsz,wght@8..60,600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=4" />
+  <link rel="stylesheet" href="styles.css?v=5" />
 </head>
 <body>
 <div class="page-glow" aria-hidden="true"></div>
@@ -29,6 +29,32 @@
       <div class="kpi-tile" id="kpiOpenClusters"><span class="kpi-num">—</span><span class="kpi-label">Open clusters</span></div>
     </div>
     <div id="kpiLastRun" class="kpi-lastrun"></div>
+  </section>
+  <section class="workflow-map" aria-label="Workflow map">
+    <div class="workflow-map-item">
+      <span class="workflow-map-kicker">Prepare</span>
+      <strong>Check status, readiness, and inputs</strong>
+      <p>Steps 1-2</p>
+    </div>
+    <div class="workflow-map-item">
+      <span class="workflow-map-kicker">Analyse</span>
+      <strong>Run pipeline and inspect outputs</strong>
+      <p>Steps 3-4A</p>
+    </div>
+    <div class="workflow-map-item">
+      <span class="workflow-map-kicker">Investigate</span>
+      <strong>Prioritise clusters and record evidence</strong>
+      <p>Steps 5-7</p>
+    </div>
+    <div class="workflow-map-item">
+      <span class="workflow-map-kicker">Report</span>
+      <strong>Sign off, export, and audit</strong>
+      <p>Steps 8-12</p>
+    </div>
+  </section>
+  <section class="phase-divider" aria-label="Prepare phase">
+    <span>Prepare</span>
+    <p>Confirm the system is reachable, data are ready, and inputs are available before running analysis.</p>
   </section>
   <section class="card">
     <h2>Step 1 - System status</h2>
@@ -94,9 +120,13 @@
       </section>
     </div>
   </section>
+  <section class="phase-divider" aria-label="Analyse phase">
+    <span>Analyse</span>
+    <p>Run the genomic workflow, then review raw outputs, exports, and case-level reports.</p>
+  </section>
   <section class="card">
     <h2>Step 3 - Run analysis</h2>
-    <p class="hint">Recommended comparison order: derive sequence clusters, generate outbreaker2 inputs, run outbreaker2, then compare methods.</p>
+    <p class="hint">Primary action for routine use. The full pipeline runs lineage/DR validation, sequence clustering, outbreaker2 export and inference, and method comparison in order.</p>
     <button id="runPipelineBtn" class="btn-primary" onclick="runFullPipeline()">&#9654; Run full pipeline (all steps)</button>
     <details class="individual-steps">
       <summary class="hint">Or run individual steps…</summary>
@@ -119,7 +149,7 @@
     <pre id="jobStatus" class="log-box">Idle</pre>
   </section>
   <section class="card">
-    <h2>Step 4 - Results</h2>
+    <h2>Step 4 - Results and exports</h2>
     <button onclick="loadCases()">View cases</button>
     <button onclick="loadOutbreakerResults()">View outbreaker2 summary</button>
     <button onclick="loadLineageDrValidation()">View lineage/DR validation</button>
@@ -132,8 +162,8 @@
     <pre id="outbreakerResults" class="log-box"></pre>
   </section>
   <section class="card">
-    <h2>Step 4A - Advanced Search and Case History</h2>
-    <p class="hint">Search cases by region, lineage, date range, and resistance profile.</p>
+    <h2>Step 4A - Case search and case reports</h2>
+    <p class="hint">Find individual cases after analysis, inspect case history, and generate case-specific reports.</p>
     <div class="search-controls">
       <label>Region:
         <select id="searchRegion">
@@ -159,6 +189,11 @@
     <button onclick="loadCaseHistory()">View history</button>
     <button onclick="generateCaseReport()" class="btn-export-zip">&#x1F5CE; Generate Report</button>
     <pre id="caseHistory" class="log-box"></pre>
+  </section>
+
+  <section class="phase-divider" aria-label="Investigate phase">
+    <span>Investigate</span>
+    <p>Turn analysis outputs into review priorities, case evidence, investigation actions, and visual checks.</p>
   </section>
 
   <section class="card" id="synthesisCard">
@@ -401,6 +436,11 @@
     <div id="analyticsPrimaryView" class="analytics-view"></div>
   </section>
 
+  <section class="phase-divider" aria-label="Report and govern phase">
+    <span>Report and govern</span>
+    <p>Produce reviewer-facing outputs, record validation decisions, manage reusable reference records, and audit actions.</p>
+  </section>
+
   <section class="card">
     <h2>Step 8 - Final Actionable Report</h2>
     <p class="hint">Reviewer-facing report combining safety, readiness, KPIs, priority clusters, investigation activity, lineage/DR, and provenance.</p>
@@ -458,40 +498,71 @@
 
   <section class="card">
     <h2>Step 11 - Epidemiology Reference Records</h2>
-    <p class="hint">Reusable exposure, contact, and location records. Case-specific links are recorded in the cluster investigation centre.</p>
+    <p class="hint">Optional reference library for shared epidemiology entities. Use this when the same exposure type, contact, or location may be reused across investigations. To attach evidence to a case, use Step 6.</p>
+    <div class="epi-reference-guide">
+      <div>
+        <strong>What this does</strong>
+        <span>Creates reusable records that can support structured epidemiology evidence.</span>
+      </div>
+      <div>
+        <strong>What it does not do</strong>
+        <span>It does not link records to a case or cluster; those links are recorded in the Cluster Investigation Centre.</span>
+      </div>
+    </div>
     <div class="epi-reference-grid">
       <section class="epi-reference-panel">
-        <h3>Exposures</h3>
-        <input id="exposureType" type="text" placeholder="Exposure type" />
-        <input id="exposureContext" type="text" placeholder="Context" />
-        <select id="exposureConfidence">
-          <option value="">Confidence</option>
-          <option value="low">Low</option>
-          <option value="medium">Medium</option>
-          <option value="high">High</option>
-        </select>
-        <button onclick="createExposureRecord()">Create exposure</button>
-        <button onclick="loadExposureRecords()">Refresh exposures</button>
-        <div id="exposureRecords"></div>
+        <div class="epi-reference-panel-header">
+          <div>
+            <h3>Exposure types</h3>
+            <p>Shared setting or exposure categories.</p>
+          </div>
+          <button class="mini-btn" onclick="loadExposureRecords()">Refresh</button>
+        </div>
+        <div class="epi-reference-form">
+          <input id="exposureType" type="text" placeholder="Type, e.g. household" />
+          <input id="exposureContext" type="text" placeholder="Context, e.g. shared address" />
+          <select id="exposureConfidence">
+            <option value="">Confidence</option>
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+          </select>
+          <button onclick="createExposureRecord()">Create exposure</button>
+        </div>
+        <div id="exposureRecords" class="epi-reference-results"></div>
       </section>
       <section class="epi-reference-panel">
-        <h3>Contacts</h3>
-        <input id="contactLabel" type="text" placeholder="Contact label" />
-        <input id="contactType" type="text" placeholder="Contact type" />
-        <input id="contactRelationship" type="text" placeholder="Relationship" />
-        <button onclick="createContactRecord()">Create contact</button>
-        <button onclick="loadContactRecords()">Refresh contacts</button>
-        <div id="contactRecords"></div>
+        <div class="epi-reference-panel-header">
+          <div>
+            <h3>Contacts</h3>
+            <p>Named or pseudonymised people used in interviews.</p>
+          </div>
+          <button class="mini-btn" onclick="loadContactRecords()">Refresh</button>
+        </div>
+        <div class="epi-reference-form">
+          <input id="contactLabel" type="text" placeholder="Label, e.g. Husband" />
+          <input id="contactType" type="text" placeholder="Type, e.g. Household" />
+          <input id="contactRelationship" type="text" placeholder="Relationship" />
+          <button onclick="createContactRecord()">Create contact</button>
+        </div>
+        <div id="contactRecords" class="epi-reference-results"></div>
       </section>
       <section class="epi-reference-panel">
-        <h3>Locations</h3>
-        <input id="locationName" type="text" placeholder="Location name" />
-        <input id="locationType" type="text" placeholder="Location type" />
-        <input id="locationRegion" type="text" placeholder="Region" />
-        <input id="locationPostcode" type="text" placeholder="Postcode prefix" />
-        <button onclick="createLocationRecord()">Create location</button>
-        <button onclick="loadLocationRecords()">Refresh locations</button>
-        <div id="locationRecords"></div>
+        <div class="epi-reference-panel-header">
+          <div>
+            <h3>Locations</h3>
+            <p>Venues, households, workplaces, clinics, or regions.</p>
+          </div>
+          <button class="mini-btn" onclick="loadLocationRecords()">Refresh</button>
+        </div>
+        <div class="epi-reference-form">
+          <input id="locationName" type="text" placeholder="Name, e.g. Clinic A" />
+          <input id="locationType" type="text" placeholder="Type, e.g. clinic" />
+          <input id="locationRegion" type="text" placeholder="Region" />
+          <input id="locationPostcode" type="text" placeholder="Postcode prefix" />
+          <button onclick="createLocationRecord()">Create location</button>
+        </div>
+        <div id="locationRecords" class="epi-reference-results"></div>
       </section>
     </div>
   </section>
@@ -521,6 +592,6 @@
 <footer>
   <p>Decision-support tool only. No automated decisions are made.</p>
 </footer>
-<script src="app.js?v=2"></script>
+<script src="app.js?v=3"></script>
 </body>
 </html>

@@ -1354,11 +1354,15 @@ async function approveResistanceValidation(){
 	}
 }
 
+function _shortId(value){
+	return value ? String(value).slice(0,8) : '';
+}
+
 function _recordTable(rows, columns, empty){
-	if(!Array.isArray(rows)||!rows.length) return `<p class="hint">${escapeHtml(empty)}</p>`;
+	if(!Array.isArray(rows)||!rows.length) return `<p class="hint empty-records">${escapeHtml(empty)}</p>`;
 	const header=columns.map(([label])=>`<th>${escapeHtml(label)}</th>`).join('');
-	const body=rows.slice(0,25).map(row=>`<tr>${columns.map(([,key])=>`<td>${escapeHtml(row[key]??'')}</td>`).join('')}</tr>`).join('');
-	return `<table class="data-table"><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table>`;
+	const body=rows.slice(0,10).map(row=>`<tr>${columns.map(([,key,formatter])=>`<td>${escapeHtml(formatter ? formatter(row[key], row) : row[key]??'')}</td>`).join('')}</tr>`).join('');
+	return `<div class="epi-reference-table-wrap"><table class="data-table compact-record-table"><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
 
 async function loadExposureRecords(){
@@ -1367,7 +1371,7 @@ async function loadExposureRecords(){
 	box.innerHTML='<p class="hint">Loading exposures...</p>';
 	try{
 		const d=await apiJson(`${API}/epidemiology/exposures?limit=25`);
-		box.innerHTML=_recordTable(d,[['ID','exposure_id'],['Type','exposure_type'],['Context','exposure_context'],['Confidence','confidence']], 'No exposures recorded.');
+		box.innerHTML=_recordTable(d,[['ID','exposure_id',_shortId],['Type','exposure_type'],['Context','exposure_context'],['Confidence','confidence']], 'No exposures recorded.');
 	}catch(e){ box.textContent='Failed to load exposures: '+e; }
 }
 
@@ -1390,7 +1394,7 @@ async function loadContactRecords(){
 	box.innerHTML='<p class="hint">Loading contacts...</p>';
 	try{
 		const d=await apiJson(`${API}/epidemiology/contacts?limit=25`);
-		box.innerHTML=_recordTable(d,[['ID','contact_id'],['Label','contact_label'],['Type','contact_type'],['Relationship','relationship_type']], 'No contacts recorded.');
+		box.innerHTML=_recordTable(d,[['ID','contact_id',_shortId],['Label','contact_label'],['Type','contact_type'],['Relationship','relationship_type']], 'No contacts recorded.');
 	}catch(e){ box.textContent='Failed to load contacts: '+e; }
 }
 
@@ -1413,7 +1417,7 @@ async function loadLocationRecords(){
 	box.innerHTML='<p class="hint">Loading locations...</p>';
 	try{
 		const d=await apiJson(`${API}/epidemiology/locations?limit=25`);
-		box.innerHTML=_recordTable(d,[['ID','location_id'],['Name','location_name'],['Type','location_type'],['Region','geographic_region'],['Postcode','postcode_prefix']], 'No locations recorded.');
+		box.innerHTML=_recordTable(d,[['ID','location_id',_shortId],['Name','location_name'],['Type','location_type'],['Region','geographic_region'],['Postcode','postcode_prefix']], 'No locations recorded.');
 	}catch(e){ box.textContent='Failed to load locations: '+e; }
 }
 

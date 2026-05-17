@@ -1251,6 +1251,16 @@ function exportClusterDossier(format){
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+function goToCaseEvidenceWorkflow(){
+	const card=document.getElementById('cicCard');
+	if(!card) return;
+	card.scrollIntoView({behavior:'smooth', block:'start'});
+	const list=document.getElementById('cicList');
+	if(list && !list.textContent.trim()){
+		loadClusterInvestigations();
+	}
+}
+
 function _reportParams(){
 	const weeks=Number(document.getElementById('reportWeeks')?.value||12);
 	const topClusters=Number(document.getElementById('reportTopClusters')?.value||8);

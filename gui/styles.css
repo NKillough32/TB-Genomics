@@ -1340,6 +1340,37 @@ footer {
 	line-height: 1.35;
 }
 
+.epi-reference-assignment {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 1rem;
+	margin: .7rem 0 .85rem;
+	padding: .8rem .85rem;
+	border: 1px solid #b8d4e8;
+	border-radius: 8px;
+	background: #eef7fc;
+}
+
+.epi-reference-assignment strong {
+	display: block;
+	margin-bottom: .2rem;
+	color: #0c3556;
+	font-size: .88rem;
+}
+
+.epi-reference-assignment span {
+	display: block;
+	color: #375a74;
+	font-size: .83rem;
+	line-height: 1.35;
+}
+
+.epi-reference-assignment button {
+	flex: 0 0 auto;
+	margin: 0;
+}
+
 .epi-reference-grid {
 	display: grid;
 	grid-template-columns: 1fr;
@@ -1434,6 +1465,11 @@ footer {
 	.epi-reference-guide,
 	.epi-reference-form {
 		grid-template-columns: 1fr;
+	}
+
+	.epi-reference-assignment {
+		align-items: stretch;
+		flex-direction: column;
 	}
 
 	.report-controls,

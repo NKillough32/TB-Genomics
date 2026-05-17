@@ -402,7 +402,102 @@
   </section>
 
   <section class="card">
-    <h2>Step 8 - Governance and Compliance</h2>
+    <h2>Step 8 - Final Actionable Report</h2>
+    <p class="hint">Reviewer-facing report combining safety, readiness, KPIs, priority clusters, investigation activity, lineage/DR, and provenance.</p>
+    <div class="report-controls">
+      <button class="btn-primary" onclick="openActionableReport()">Open final report (HTML)</button>
+      <button onclick="loadActionableReportSummary()">Load report summary</button>
+      <label>Window weeks
+        <input id="reportWeeks" type="number" min="1" max="104" value="12" />
+      </label>
+      <label>Top clusters
+        <input id="reportTopClusters" type="number" min="1" max="20" value="8" />
+      </label>
+    </div>
+    <div id="actionableReportSummary" class="analytics-summary"></div>
+  </section>
+
+  <section class="card">
+    <h2>Step 9 - Programme KPIs and Runtime Status</h2>
+    <p class="hint">Full surveillance KPI payload, outbreaker readiness, and current or recent job logs.</p>
+    <div class="utility-actions">
+      <button onclick="loadFullKpis()">Load full KPIs</button>
+      <button onclick="loadOutbreakerStatus()">Load outbreaker status</button>
+      <button onclick="loadCurrentJobLog()">Load current job log</button>
+    </div>
+    <div id="fullKpisView" class="analytics-summary"></div>
+    <div id="outbreakerStatusView" class="analytics-summary"></div>
+    <pre id="jobLogsView" class="log-box"></pre>
+  </section>
+
+  <section class="card">
+    <h2>Step 10 - Resistance Validation Sign-off</h2>
+    <p class="hint">Review and record local sign-off for the lineage and drug-resistance validation pipeline.</p>
+    <div class="validation-grid">
+      <label>Decision
+        <select id="rvDecision">
+          <option value="under_review">Under review</option>
+          <option value="approved">Approved</option>
+          <option value="rejected">Rejected</option>
+        </select>
+      </label>
+      <label>Reviewer
+        <input id="rvReviewer" type="text" placeholder="Name and role" />
+      </label>
+      <label>Catalogue version
+        <input id="rvCatalogueVersion" type="text" placeholder="e.g. WHO catalogue version" />
+      </label>
+    </div>
+    <label class="full-width-label">Notes
+      <textarea id="rvNotes" rows="3" placeholder="Validation evidence, caveats, or review notes"></textarea>
+    </label>
+    <button onclick="loadResistanceValidationStatus()">Load sign-off status</button>
+    <button class="btn-primary" onclick="approveResistanceValidation()">Save sign-off</button>
+    <div id="resistanceValidationView" class="analytics-summary"></div>
+  </section>
+
+  <section class="card">
+    <h2>Step 11 - Epidemiology Reference Records</h2>
+    <p class="hint">Standalone exposure, contact, and location records that can be linked to cases during investigation.</p>
+    <div class="epi-reference-grid">
+      <section class="epi-reference-panel">
+        <h3>Exposures</h3>
+        <input id="exposureType" type="text" placeholder="Exposure type" />
+        <input id="exposureContext" type="text" placeholder="Context" />
+        <select id="exposureConfidence">
+          <option value="">Confidence</option>
+          <option value="low">Low</option>
+          <option value="medium">Medium</option>
+          <option value="high">High</option>
+        </select>
+        <button onclick="createExposureRecord()">Create exposure</button>
+        <button onclick="loadExposureRecords()">Refresh</button>
+        <div id="exposureRecords"></div>
+      </section>
+      <section class="epi-reference-panel">
+        <h3>Contacts</h3>
+        <input id="contactLabel" type="text" placeholder="Contact label" />
+        <input id="contactType" type="text" placeholder="Contact type" />
+        <input id="contactRelationship" type="text" placeholder="Relationship" />
+        <button onclick="createContactRecord()">Create contact</button>
+        <button onclick="loadContactRecords()">Refresh</button>
+        <div id="contactRecords"></div>
+      </section>
+      <section class="epi-reference-panel">
+        <h3>Locations</h3>
+        <input id="locationName" type="text" placeholder="Location name" />
+        <input id="locationType" type="text" placeholder="Location type" />
+        <input id="locationRegion" type="text" placeholder="Region" />
+        <input id="locationPostcode" type="text" placeholder="Postcode prefix" />
+        <button onclick="createLocationRecord()">Create location</button>
+        <button onclick="loadLocationRecords()">Refresh</button>
+        <div id="locationRecords"></div>
+      </section>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Step 12 - Governance and Compliance</h2>
     <p class="hint">Audit trail showing all system actions for accountability.</p>
     <button onclick="loadAuditTrail()">View audit trail</button>
     <pre id="auditTrail" class="log-box"></pre>

@@ -1218,6 +1218,191 @@ function exportClusterDossier(format){
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+function _reportParams(){
+	const weeks=Number(document.getElementById('reportWeeks')?.value||12);
+	const topClusters=Number(document.getElementById('reportTopClusters')?.value||8);
+	return {
+		weeks: Number.isFinite(weeks)?Math.max(1,Math.min(104,weeks)):12,
+		topClusters: Number.isFinite(topClusters)?Math.max(1,Math.min(20,topClusters)):8,
+	};
+}
+
+function openActionableReport(){
+	const p=_reportParams();
+	window.open(`${API}/reports/actionable-surveillance.html?weeks=${encodeURIComponent(p.weeks)}&top_clusters=${encodeURIComponent(p.topClusters)}`,'_blank');
+}
+
+async function loadActionableReportSummary(){
+	const box=document.getElementById('actionableReportSummary');
+	if(!box) return;
+	box.textContent='Loading final report summary...';
+	try{
+		const p=_reportParams();
+		const d=await fetch(`${API}/reports/actionable-surveillance?weeks=${encodeURIComponent(p.weeks)}&top_clusters=${encodeURIComponent(p.topClusters)}`).then(r=>r.json());
+		const s=d.executive_summary||{};
+		const actions=(s.immediate_actions||[]).map(a=>`<li>${escapeHtml(a)}</li>`).join('');
+		const clusters=(d.priority_clusters||[]).slice(0,8).map(c=>`<tr><td><code>${escapeHtml(c.cluster_short||String(c.cluster_id||'').slice(0,8))}</code></td><td>${escapeHtml(c.member_count??0)}</td><td>${escapeHtml(c.priority_score??0)}</td><td>${escapeHtml(c.priority_band||'')}</td><td>${escapeHtml((c.flags||[]).join(', ')||'none')}</td></tr>`).join('');
+		box.innerHTML=`<div class="kpi-strip">Status: ${escapeHtml(d.status||'unknown')} | Cases: ${escapeHtml(s.total_cases??0)} | Clusters: ${escapeHtml(s.cluster_count??0)} | Urgent clusters: ${escapeHtml(s.urgent_cluster_count??0)} | Contradictory pairs: ${escapeHtml(s.contradictory_pairs??0)}</div><ul class="compact-list">${actions}</ul><table class="data-table"><thead><tr><th>Cluster</th><th>Cases</th><th>Score</th><th>Band</th><th>Flags</th></tr></thead><tbody>${clusters||'<tr><td colspan="5">No priority clusters available.</td></tr>'}</tbody></table>`;
+	}catch(e){
+		box.textContent='Failed to load final report summary: '+e;
+	}
+}
+
+async function loadFullKpis(){
+	const box=document.getElementById('fullKpisView');
+	if(!box) return;
+	box.textContent='Loading full surveillance KPIs...';
+	try{
+		const p=_reportParams();
+		const d=await fetch(`${API}/cases/kpis?weeks=${encodeURIComponent(p.weeks)}`).then(r=>r.json());
+		const pct=v=>v===null||v===undefined?'n/a':`${Number(v).toFixed(1)}%`;
+		const rows=(d.representativeness_by_region||[]).map(r=>`<tr><td>${escapeHtml(r.region||'Unknown')}</td><td>${escapeHtml(r.eligible_cases??0)}</td><td>${escapeHtml(r.sequenced_cases??0)}</td><td>${escapeHtml(pct(r.sequenced_pct))}</td></tr>`).join('');
+		box.innerHTML=`<div class="kpi-strip">Window: ${escapeHtml(d.window_weeks)} weeks | Eligible: ${escapeHtml(d.eligible_cases)} | Sequenced: ${escapeHtml(d.sequenced_cases)} (${escapeHtml(pct(d.sequenced_pct))}) | QC pass: ${escapeHtml(d.qc_pass_cases)} (${escapeHtml(pct(d.qc_pass_pct))}) | Median specimen to QC: ${escapeHtml(d.median_days_specimen_to_qc??'n/a')} days</div><table class="data-table"><thead><tr><th>Region</th><th>Eligible</th><th>Sequenced</th><th>Coverage</th></tr></thead><tbody>${rows||'<tr><td colspan="4">No regional KPI rows available.</td></tr>'}</tbody></table>`;
+	}catch(e){
+		box.textContent='Failed to load KPIs: '+e;
+	}
+}
+
+async function loadOutbreakerStatus(){
+	const box=document.getElementById('outbreakerStatusView');
+	if(!box) return;
+	box.textContent='Loading outbreaker status...';
+	try{
+		const d=await fetch(`${API}/cases/outbreaker-status`).then(r=>r.json());
+		box.innerHTML=`<div class="kpi-strip">Cases export: ${d.cases_export?'available':'missing'} | DNA export: ${d.dna_export?'available':'missing'} | Results RDS: ${d.results_rds?'available':'missing'} | Provenance: ${escapeHtml(d.provenance||'unknown')} | Mock: ${escapeHtml(d.is_mock)}</div>`;
+	}catch(e){
+		box.textContent='Failed to load outbreaker status: '+e;
+	}
+}
+
+async function loadCurrentJobLog(){
+	const box=document.getElementById('jobLogsView');
+	if(!box) return;
+	if(!activeJob){
+		box.textContent='No active job in this browser session. Start a pipeline or individual job, then load logs.';
+		return;
+	}
+	box.textContent='Loading job log...';
+	try{
+		const r=await fetch(`${API}/jobs/logs/${encodeURIComponent(activeJob)}`);
+		box.textContent=await r.text();
+	}catch(e){
+		box.textContent='Failed to load job log: '+e;
+	}
+}
+
+async function loadResistanceValidationStatus(){
+	const box=document.getElementById('resistanceValidationView');
+	if(!box) return;
+	box.textContent='Loading resistance validation status...';
+	try{
+		const d=await fetch(`${API}/cases/resistance-validation/status`).then(r=>r.json());
+		const so=d.signoff||{};
+		box.innerHTML=`<div class="kpi-strip">Status: ${escapeHtml(d.status||'under_review')} | Reviewer: ${escapeHtml(so.reviewer||'n/a')} | Catalogue: ${escapeHtml(so.catalogue_version||'n/a')} | Signed: ${escapeHtml(so.signed_off_at||'n/a')}</div>${so.notes?`<p class="hint">${escapeHtml(so.notes)}</p>`:''}`;
+	}catch(e){
+		box.textContent='Failed to load validation status: '+e;
+	}
+}
+
+async function approveResistanceValidation(){
+	const box=document.getElementById('resistanceValidationView');
+	const payload={
+		decision: document.getElementById('rvDecision').value,
+		reviewer: document.getElementById('rvReviewer').value.trim(),
+		notes: document.getElementById('rvNotes').value.trim(),
+		catalogue_version: document.getElementById('rvCatalogueVersion').value.trim(),
+	};
+	if(!payload.reviewer){ if(box) box.textContent='Reviewer is required.'; return; }
+	try{
+		const r=await fetch(`${API}/cases/resistance-validation/approve`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+		const d=await r.json();
+		if(!r.ok){ if(box) box.textContent=JSON.stringify(d,null,2); return; }
+		if(box) box.textContent='Sign-off saved.';
+		await loadResistanceValidationStatus();
+	}catch(e){
+		if(box) box.textContent='Failed to save sign-off: '+e;
+	}
+}
+
+function _recordTable(rows, columns, empty){
+	if(!Array.isArray(rows)||!rows.length) return `<p class="hint">${escapeHtml(empty)}</p>`;
+	const header=columns.map(([label])=>`<th>${escapeHtml(label)}</th>`).join('');
+	const body=rows.slice(0,25).map(row=>`<tr>${columns.map(([,key])=>`<td>${escapeHtml(row[key]??'')}</td>`).join('')}</tr>`).join('');
+	return `<table class="data-table"><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+async function loadExposureRecords(){
+	const box=document.getElementById('exposureRecords');
+	if(!box) return;
+	box.innerHTML='<p class="hint">Loading exposures...</p>';
+	try{
+		const d=await fetch(`${API}/epidemiology/exposures?limit=25`).then(r=>r.json());
+		box.innerHTML=_recordTable(d,[['ID','exposure_id'],['Type','exposure_type'],['Context','exposure_context'],['Confidence','confidence']], 'No exposures recorded.');
+	}catch(e){ box.textContent='Failed to load exposures: '+e; }
+}
+
+async function createExposureRecord(){
+	const box=document.getElementById('exposureRecords');
+	const payload={exposure_type:document.getElementById('exposureType').value.trim(),exposure_context:document.getElementById('exposureContext').value.trim()||null,confidence:document.getElementById('exposureConfidence').value||null,source:'gui_reference_records'};
+	if(!payload.exposure_type){ if(box) box.textContent='Exposure type is required.'; return; }
+	try{
+		const r=await fetch(`${API}/epidemiology/exposures`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+		if(!r.ok){ if(box) box.textContent=JSON.stringify(await r.json(),null,2); return; }
+		document.getElementById('exposureType').value='';
+		document.getElementById('exposureContext').value='';
+		await loadExposureRecords();
+	}catch(e){ if(box) box.textContent='Failed to create exposure: '+e; }
+}
+
+async function loadContactRecords(){
+	const box=document.getElementById('contactRecords');
+	if(!box) return;
+	box.innerHTML='<p class="hint">Loading contacts...</p>';
+	try{
+		const d=await fetch(`${API}/epidemiology/contacts?limit=25`).then(r=>r.json());
+		box.innerHTML=_recordTable(d,[['ID','contact_id'],['Label','contact_label'],['Type','contact_type'],['Relationship','relationship_type']], 'No contacts recorded.');
+	}catch(e){ box.textContent='Failed to load contacts: '+e; }
+}
+
+async function createContactRecord(){
+	const box=document.getElementById('contactRecords');
+	const payload={contact_label:document.getElementById('contactLabel').value.trim(),contact_type:document.getElementById('contactType').value.trim()||null,relationship_type:document.getElementById('contactRelationship').value.trim()||null};
+	if(!payload.contact_label){ if(box) box.textContent='Contact label is required.'; return; }
+	try{
+		const r=await fetch(`${API}/epidemiology/contacts`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+		if(!r.ok){ if(box) box.textContent=JSON.stringify(await r.json(),null,2); return; }
+		document.getElementById('contactLabel').value='';
+		document.getElementById('contactType').value='';
+		document.getElementById('contactRelationship').value='';
+		await loadContactRecords();
+	}catch(e){ if(box) box.textContent='Failed to create contact: '+e; }
+}
+
+async function loadLocationRecords(){
+	const box=document.getElementById('locationRecords');
+	if(!box) return;
+	box.innerHTML='<p class="hint">Loading locations...</p>';
+	try{
+		const d=await fetch(`${API}/epidemiology/locations?limit=25`).then(r=>r.json());
+		box.innerHTML=_recordTable(d,[['ID','location_id'],['Name','location_name'],['Type','location_type'],['Region','geographic_region'],['Postcode','postcode_prefix']], 'No locations recorded.');
+	}catch(e){ box.textContent='Failed to load locations: '+e; }
+}
+
+async function createLocationRecord(){
+	const box=document.getElementById('locationRecords');
+	const payload={location_name:document.getElementById('locationName').value.trim(),location_type:document.getElementById('locationType').value.trim()||null,geographic_region:document.getElementById('locationRegion').value.trim()||null,postcode_prefix:document.getElementById('locationPostcode').value.trim()||null};
+	if(!payload.location_name){ if(box) box.textContent='Location name is required.'; return; }
+	try{
+		const r=await fetch(`${API}/epidemiology/locations`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+		if(!r.ok){ if(box) box.textContent=JSON.stringify(await r.json(),null,2); return; }
+		document.getElementById('locationName').value='';
+		document.getElementById('locationType').value='';
+		document.getElementById('locationRegion').value='';
+		document.getElementById('locationPostcode').value='';
+		await loadLocationRecords();
+	}catch(e){ if(box) box.textContent='Failed to create location: '+e; }
+}
+
 async function loadRegions(){
 	const sel=document.getElementById('searchRegion');
 	try{
@@ -1235,5 +1420,5 @@ async function loadRegions(){
 		// Backend unavailable — leave placeholder only
 	}
 }
-(async()=>{try{await fetch(`${API}/`);document.getElementById('status').innerHTML='<li>✅ Backend running</li>';}catch{document.getElementById('status').innerHTML='<li>❌ Backend unavailable</li>';}refreshDemoModeStatus();loadRegions();loadKPIBanner();loadWorkflowStatus();loadDataSafety();loadDataReadiness();loadAnalyticsClusters();loadTransmissionSynthesisOverview();})();
+(async()=>{try{await fetch(`${API}/`);document.getElementById('status').innerHTML='<li>✅ Backend running</li>';}catch{document.getElementById('status').innerHTML='<li>❌ Backend unavailable</li>';}refreshDemoModeStatus();loadRegions();loadKPIBanner();loadWorkflowStatus();loadDataSafety();loadDataReadiness();loadAnalyticsClusters();loadTransmissionSynthesisOverview();loadActionableReportSummary();loadFullKpis();loadOutbreakerStatus();loadResistanceValidationStatus();})();
 

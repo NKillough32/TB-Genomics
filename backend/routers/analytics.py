@@ -38,6 +38,64 @@ ReviewClassification = Annotated[
 ]
 
 
+SCORING_PROFILES = {
+    "default_v1": {
+        "version": "default_v1",
+        "score_weights": {
+            "strong epi support": 3,
+            "moderate epi support": 2,
+            "weak epi support": 1,
+            "contradictory": -3,
+            "unknown": 0,
+        },
+        "confidence_thresholds": {
+            "strong": 5,
+            "moderate": 3,
+            "weak": 1,
+        },
+        "missing_data_penalty_max": 2,
+    }
+}
+
+
+def _resolve_scoring_profile(name: str | None) -> dict:
+    key = str(name or "default_v1").strip().lower()
+    profile = SCORING_PROFILES.get(key)
+    if not profile:
+        raise HTTPException(status_code=422, detail=f"Unknown scoring_profile '{name}'")
+    return profile
+
+
+def _contradiction_details(contradictions: list[str]) -> list[dict]:
+    details = []
+    for code in sorted(set(contradictions)):
+        if code.startswith("high_snp_distance"):
+            details.append({"code": code, "severity": "major", "rationale": "SNP distance exceeds plausible linkage threshold"})
+        elif code == "lineage_mismatch":
+            details.append({"code": code, "severity": "major", "rationale": "Cases have discordant lineage assignment"})
+        elif code == "resistance_profile_discordant":
+            details.append({"code": code, "severity": "major", "rationale": "Resistance profiles are discordant"})
+        elif code.startswith("temporal_gap_exceeds"):
+            details.append({"code": code, "severity": "minor", "rationale": "Specimen timing exceeds configured plausibility window"})
+        elif code == "infectious_period_non_overlap":
+            details.append({"code": code, "severity": "major", "rationale": "Estimated infectious periods do not overlap"})
+        else:
+            details.append({"code": code, "severity": "minor", "rationale": "Potential inconsistency detected"})
+    return details
+
+
+def _pair_data_completeness_score(left: dict, right: dict) -> float:
+    # Core evidence completeness used for scoring penalty.
+    core_checks = [
+        bool(left.get("sequence")) and bool(right.get("sequence")),
+        bool(left.get("lineage")) and bool(right.get("lineage")),
+        bool(left.get("specimen_date")) and bool(right.get("specimen_date")),
+        bool(left.get("predicted_drug_resistance")) and bool(right.get("predicted_drug_resistance")),
+    ]
+    core_available = sum(1 for present in core_checks if present)
+    return round(core_available / len(core_checks), 3)
+
+
 class CasePairReviewUpsert(BaseModel):
     case_a: Annotated[str, StringConstraints(strip_whitespace=True, min_length=36, max_length=36)]
     case_b: Annotated[str, StringConstraints(strip_whitespace=True, min_length=36, max_length=36)]
@@ -369,6 +427,44 @@ def _infectious_period_overlap(row_a: dict, row_b: dict) -> dict:
     }
 
 
+def _directionality_hypothesis(row_a: dict, row_b: dict, overlap: dict) -> dict:
+    specimen_a = row_a.get("specimen_date")
+    specimen_b = row_b.get("specimen_date")
+    case_a = str(row_a.get("case_id") or "")
+    case_b = str(row_b.get("case_id") or "")
+
+    if not specimen_a or not specimen_b or not overlap.get("available"):
+        return {
+            "likely_source": None,
+            "likely_recipient": None,
+            "confidence": "low",
+            "rationale": "Insufficient temporal or infectious-period data for directionality",
+        }
+
+    if specimen_a == specimen_b:
+        return {
+            "likely_source": None,
+            "likely_recipient": None,
+            "confidence": "low",
+            "rationale": "Specimen dates are identical; cannot infer direction",
+        }
+
+    source, recipient = (case_a, case_b) if specimen_a < specimen_b else (case_b, case_a)
+    days_between = abs((specimen_b - specimen_a).days)
+    confidence = "moderate" if overlap.get("overlap") and days_between <= 45 else "low"
+
+    return {
+        "likely_source": source,
+        "likely_recipient": recipient,
+        "confidence": confidence,
+        "rationale": (
+            "Earlier specimen date aligns with estimated infectious period overlap"
+            if confidence == "moderate"
+            else "Temporal order suggests direction but overlap support is limited"
+        ),
+    }
+
+
 def _build_evidence_card(
     *,
     snp_distance: int | None,
@@ -391,6 +487,9 @@ def _build_evidence_card(
     row_b: dict,
     overall_score: int,
     contradictory_evidence: list,
+    contradiction_details: list[dict],
+    data_completeness_score: float,
+    confidence_thresholds: dict,
 ) -> dict:
     """Build a structured transmission evidence card for a single case pair.
 
@@ -492,11 +591,15 @@ def _build_evidence_card(
         signals.append({"signal": "Contradictions", "value": "None identified", "direction": "neutral"})
 
     # ── Confidence label ───────────────────────────────────────────────────────
-    if overall_score >= 5:
+    strong_threshold = int(confidence_thresholds.get("strong", 5))
+    moderate_threshold = int(confidence_thresholds.get("moderate", 3))
+    weak_threshold = int(confidence_thresholds.get("weak", 1))
+
+    if overall_score >= strong_threshold:
         confidence = "strong"
-    elif overall_score >= 3:
+    elif overall_score >= moderate_threshold:
         confidence = "moderate"
-    elif overall_score >= 1:
+    elif overall_score >= weak_threshold:
         confidence = "weak"
     elif contradictory_evidence:
         confidence = "contradicted"
@@ -566,6 +669,10 @@ def _build_evidence_card(
     else:
         sentences.append(f"Contradictory signals present: {'; '.join(sorted(set(contradictory_evidence)))}.")
 
+    sentences.append(f"Data completeness score for this pair is {data_completeness_score:.2f}.")
+
+    directionality = _directionality_hypothesis(row_a, row_b, infectious_overlap)
+
     recommendation_map = {
         "strong": "Immediate investigation and contact tracing are recommended. This pair should be prioritised for public health follow-up.",
         "moderate": "Contact tracing and further investigation are recommended. This pair warrants formal review.",
@@ -579,6 +686,9 @@ def _build_evidence_card(
         "confidence": confidence,
         "supporting_signal_count": supporting_count,
         "contradicting_signal_count": contradicting_count,
+        "data_completeness_score": data_completeness_score,
+        "contradiction_details": contradiction_details,
+        "directionality_hypothesis": directionality,
         "interpretation": " ".join(sentences),
         "recommendation": recommendation_map[confidence],
     }
@@ -741,6 +851,23 @@ def _calibration_summary(comparisons: list[dict]) -> dict:
     }
 
 
+def _calibration_by_confidence(comparisons: list[dict]) -> dict:
+    tiers = defaultdict(lambda: {"count": 0, "exact_matches": 0})
+    for row in comparisons:
+        tier = str(row.get("model_confidence") or "unknown")
+        tiers[tier]["count"] += 1
+        if row.get("match"):
+            tiers[tier]["exact_matches"] += 1
+    return {
+        tier: {
+            "count": stats["count"],
+            "exact_matches": stats["exact_matches"],
+            "exact_agreement": round(stats["exact_matches"] / stats["count"], 4) if stats["count"] else None,
+        }
+        for tier, stats in sorted(tiers.items())
+    }
+
+
 def _build_case_pair_evidence_payload(
     rows: list,
     pair_epi_index: dict[tuple[str, str], dict],
@@ -749,7 +876,13 @@ def _build_case_pair_evidence_payload(
     snp_moderate_threshold: int,
     temporal_window_days: int,
     max_pairs: int,
+    scoring_profile: dict | None = None,
 ) -> dict:
+    profile = scoring_profile or SCORING_PROFILES["default_v1"]
+    score_weights = profile.get("score_weights") or {}
+    confidence_thresholds = profile.get("confidence_thresholds") or {}
+    missing_data_penalty_max = int(profile.get("missing_data_penalty_max") or 0)
+
     rows_by_id = {str(r["case_id"]): r for r in rows if r.get("case_id")}
     ordered_case_ids = sorted(rows_by_id.keys(), key=lambda cid: str(rows_by_id[cid].get("specimen_date") or "9999-12-31"))
 
@@ -813,6 +946,10 @@ def _build_case_pair_evidence_payload(
             temporal_plausible = None
             missing_evidence.append("missing_specimen_date")
 
+        infectious_overlap = _infectious_period_overlap(left, right)
+        if infectious_overlap.get("available") and not infectious_overlap.get("overlap"):
+            contradictory_evidence.append("infectious_period_non_overlap")
+
         region_a = str(left.get("region") or "Unknown")
         region_b = str(right.get("region") or "Unknown")
         same_region = region_a == region_b and region_a != "Unknown"
@@ -865,25 +1002,30 @@ def _build_case_pair_evidence_payload(
         observation_mode = "directly_observed" if epi.get("direct_observation") else "inferred"
 
         overall_score = 0
-        score_map = {
-            "strong epi support": 3,
-            "moderate epi support": 2,
-            "weak epi support": 1,
-            "contradictory": -3,
-            "unknown": 0,
-        }
-        overall_score += score_map.get(genomic_support, 0)
-        overall_score += score_map.get(epi_support, 0)
+        overall_score += int(score_weights.get(genomic_support, 0))
+        overall_score += int(score_weights.get(epi_support, 0))
         if resistance_concordance == "concordant":
             overall_score += 1
         elif resistance_concordance == "discordant":
             overall_score -= 1
 
-        if overall_score >= 5:
+        data_completeness_score = _pair_data_completeness_score(left, right)
+        uncertainty_penalty = round((1.0 - data_completeness_score) * missing_data_penalty_max)
+        if uncertainty_penalty > 0:
+            overall_score -= uncertainty_penalty
+            missing_evidence.append(f"data_completeness_penalty:{uncertainty_penalty}")
+
+        contradiction_details = _contradiction_details(contradictory_evidence)
+
+        strong_threshold = int(confidence_thresholds.get("strong", 5))
+        moderate_threshold = int(confidence_thresholds.get("moderate", 3))
+        weak_threshold = int(confidence_thresholds.get("weak", 1))
+
+        if overall_score >= strong_threshold:
             overall_interpretation = "strong support, needs reviewer confirmation"
-        elif overall_score >= 3:
+        elif overall_score >= moderate_threshold:
             overall_interpretation = "moderate support, needs reviewer confirmation"
-        elif overall_score >= 1:
+        elif overall_score >= weak_threshold:
             overall_interpretation = "weak support, review with caution"
         elif contradictory_evidence:
             overall_interpretation = "contradictory evidence"
@@ -913,6 +1055,9 @@ def _build_case_pair_evidence_payload(
             row_b=right,
             overall_score=overall_score,
             contradictory_evidence=contradictory_evidence,
+            contradiction_details=contradiction_details,
+            data_completeness_score=data_completeness_score,
+            confidence_thresholds=confidence_thresholds,
         )
 
         pairs.append(
@@ -947,6 +1092,8 @@ def _build_case_pair_evidence_payload(
                     "supports": sorted(set(supporting_evidence)),
                     "missing": sorted(set(missing_evidence)),
                     "contradicts": sorted(set(contradictory_evidence)),
+                    "contradiction_details": contradiction_details,
+                    "data_completeness_score": data_completeness_score,
                     "basis": evidence_basis,
                     "observation_mode": observation_mode,
                 },
@@ -959,6 +1106,7 @@ def _build_case_pair_evidence_payload(
     return {
         "pair_count": len(pairs),
         "support_summary": dict(support_summary),
+        "scoring_profile_version": str(profile.get("version") or "default_v1"),
         "pairs": pairs,
         "reviewer_classification_options": list(REVIEW_CLASSIFICATIONS),
     }
@@ -969,6 +1117,7 @@ def case_pair_evidence(
     cluster_id: str | None = Query(None),
     max_cases: int = Query(40, ge=2, le=120),
     max_pairs: int = Query(250, ge=1, le=2000),
+    scoring_profile: str = "default_v1",
     snp_strong_threshold: int = Query(5, ge=0, le=100),
     snp_moderate_threshold: int = Query(12, ge=1, le=200),
     temporal_window_days: int = Query(45, ge=1, le=365),
@@ -982,6 +1131,7 @@ def case_pair_evidence(
 
     rows.sort(key=lambda r: str(r.get("specimen_date") or "9999-12-31"))
     rows = rows[:max_cases]
+    profile = _resolve_scoring_profile(scoring_profile)
 
     case_ids = {str(r.get("case_id")) for r in rows if r.get("case_id")}
     pair_epi_index = _build_pair_epi_index(db, case_ids)
@@ -992,6 +1142,7 @@ def case_pair_evidence(
         snp_moderate_threshold=snp_moderate_threshold,
         temporal_window_days=temporal_window_days,
         max_pairs=max_pairs,
+        scoring_profile=profile,
     )
 
     pair_keys = {_pair_key(str(p["case_a"]), str(p["case_b"])) for p in payload.get("pairs", [])}
@@ -1007,6 +1158,8 @@ def case_pair_evidence(
         "cluster_id": cluster_id,
         "max_cases": max_cases,
         "max_pairs": max_pairs,
+        "scoring_profile": scoring_profile,
+        "scoring_profile_version": str(profile.get("version") or "default_v1"),
         "snp_strong_threshold": snp_strong_threshold,
         "snp_moderate_threshold": snp_moderate_threshold,
         "temporal_window_days": temporal_window_days,
@@ -1026,6 +1179,7 @@ def case_pair_evidence(
 def transmission_evidence(
     case_a_id: str,
     case_b_id: str,
+    scoring_profile: str = "default_v1",
     snp_strong_threshold: int = Query(5, ge=0, le=100),
     snp_moderate_threshold: int = Query(12, ge=1, le=200),
     temporal_window_days: int = Query(45, ge=1, le=365),
@@ -1104,19 +1258,33 @@ def transmission_evidence(
     if temporal_plausible is False:
         epi_score -= 1
 
-    score_map = {"strong epi support": 3, "moderate epi support": 2, "weak epi support": 1, "contradictory": -3, "unknown": 0}
-    genomic_support_score = (
-        3 if snp_distance is not None and snp_distance <= snp_strong_threshold
-        else 2 if snp_distance is not None and snp_distance <= snp_moderate_threshold
-        else 1 if snp_distance is not None and snp_distance <= 20
-        else -3 if snp_distance is not None
-        else 0
+    profile = _resolve_scoring_profile(scoring_profile)
+    score_map = profile.get("score_weights") or {}
+    confidence_thresholds = profile.get("confidence_thresholds") or {}
+    missing_data_penalty_max = int(profile.get("missing_data_penalty_max") or 0)
+
+    genomic_support_label = (
+        "strong epi support" if snp_distance is not None and snp_distance <= snp_strong_threshold
+        else "moderate epi support" if snp_distance is not None and snp_distance <= snp_moderate_threshold
+        else "weak epi support" if snp_distance is not None and snp_distance <= 20
+        else "contradictory" if snp_distance is not None
+        else "unknown"
     )
-    overall_score = genomic_support_score + score_map.get(_score_label(epi_score), 0)
+    overall_score = int(score_map.get(genomic_support_label, 0)) + int(score_map.get(_score_label(epi_score), 0))
     if resistance_concordance == "concordant":
         overall_score += 1
     elif resistance_concordance == "discordant":
         overall_score -= 1
+
+    infectious_overlap = _infectious_period_overlap(row_a, row_b)
+    if infectious_overlap.get("available") and not infectious_overlap.get("overlap"):
+        contradictory_evidence.append("infectious_period_non_overlap")
+
+    data_completeness_score = _pair_data_completeness_score(row_a, row_b)
+    uncertainty_penalty = round((1.0 - data_completeness_score) * missing_data_penalty_max)
+    if uncertainty_penalty > 0:
+        overall_score -= uncertainty_penalty
+    contradiction_details = _contradiction_details(contradictory_evidence)
 
     card = _build_evidence_card(
         snp_distance=snp_distance,
@@ -1139,6 +1307,9 @@ def transmission_evidence(
         row_b=row_b,
         overall_score=overall_score,
         contradictory_evidence=contradictory_evidence,
+        contradiction_details=contradiction_details,
+        data_completeness_score=data_completeness_score,
+        confidence_thresholds=confidence_thresholds,
     )
 
     return {
@@ -1146,6 +1317,8 @@ def transmission_evidence(
         "case_b": norm_b,
         "pair": f"{norm_a[:8]} -> {norm_b[:8]}",
         "parameters": {
+            "scoring_profile": scoring_profile,
+            "scoring_profile_version": str(profile.get("version") or "default_v1"),
             "snp_strong_threshold": snp_strong_threshold,
             "snp_moderate_threshold": snp_moderate_threshold,
             "temporal_window_days": temporal_window_days,
@@ -1307,6 +1480,7 @@ def case_pair_calibration(
     cluster_id: str | None = Query(None),
     max_cases: int = Query(80, ge=2, le=300),
     max_pairs: int = Query(1000, ge=1, le=10000),
+    scoring_profile: str = "default_v1",
     snp_strong_threshold: int = Query(5, ge=0, le=100),
     snp_moderate_threshold: int = Query(12, ge=1, le=200),
     temporal_window_days: int = Query(45, ge=1, le=365),
@@ -1320,6 +1494,7 @@ def case_pair_calibration(
 
     rows.sort(key=lambda r: str(r.get("specimen_date") or "9999-12-31"))
     rows = rows[:max_cases]
+    profile = _resolve_scoring_profile(scoring_profile)
     case_ids = {str(r.get("case_id")) for r in rows if r.get("case_id")}
     pair_epi_index = _build_pair_epi_index(db, case_ids)
     evidence_payload = _build_case_pair_evidence_payload(
@@ -1329,6 +1504,7 @@ def case_pair_calibration(
         snp_moderate_threshold=snp_moderate_threshold,
         temporal_window_days=temporal_window_days,
         max_pairs=max_pairs,
+        scoring_profile=profile,
     )
 
     pairs = evidence_payload.get("pairs") or []
@@ -1349,6 +1525,7 @@ def case_pair_calibration(
                 "case_a": pair.get("case_a"),
                 "case_b": pair.get("case_b"),
                 "model_interpretation": pair.get("overall_interpretation"),
+                "model_confidence": (((pair.get("evidence_card") or {}).get("confidence")) or "unknown"),
                 "model_label": model_label,
                 "reviewer_label": reviewer_label,
                 "match": model_label == reviewer_label,
@@ -1364,6 +1541,7 @@ def case_pair_calibration(
         timeline_counts[month] += 1
 
     summary = _calibration_summary(comparisons)
+    by_confidence = _calibration_by_confidence(comparisons)
 
     return {
         "generated_at": datetime.utcnow().isoformat() + "Z",
@@ -1371,6 +1549,8 @@ def case_pair_calibration(
             "cluster_id": cluster_id,
             "max_cases": max_cases,
             "max_pairs": max_pairs,
+            "scoring_profile": scoring_profile,
+            "scoring_profile_version": str(profile.get("version") or "default_v1"),
             "snp_strong_threshold": snp_strong_threshold,
             "snp_moderate_threshold": snp_moderate_threshold,
             "temporal_window_days": temporal_window_days,
@@ -1379,6 +1559,7 @@ def case_pair_calibration(
         "reviewed_pair_count": len(comparisons),
         "coverage": round(len(comparisons) / len(pairs), 4) if pairs else None,
         "summary": summary,
+        "summary_by_confidence": by_confidence,
         "review_volume_by_month": [
             {"month": month, "count": count}
             for month, count in sorted(timeline_counts.items())
@@ -1389,6 +1570,120 @@ def case_pair_calibration(
             "Model labels are mapped from heuristic interpretations and require calibration before operational claims.",
             "Agreement values are descriptive quality metrics, not external validation evidence.",
         ],
+        **_validation_notice(),
+    }
+
+
+@router.get("/pair-triage-queue")
+def pair_triage_queue(
+    cluster_id: str | None = Query(None),
+    max_cases: int = Query(80, ge=2, le=300),
+    max_pairs: int = Query(500, ge=1, le=2000),
+    limit: int = Query(100, ge=1, le=500),
+    scoring_profile: str = "default_v1",
+    snp_strong_threshold: int = Query(5, ge=0, le=100),
+    snp_moderate_threshold: int = Query(12, ge=1, le=200),
+    temporal_window_days: int = Query(45, ge=1, le=365),
+    db: Session = Depends(get_db),
+):
+    """Operational queue of case pairs ranked by review priority."""
+    profile = _resolve_scoring_profile(scoring_profile)
+    rows = _case_rows(db)
+    if cluster_id:
+        cid = _normalise_uuid(cluster_id)
+        rows = [r for r in rows if str(r.get("cluster_id") or "") == cid]
+
+    rows.sort(key=lambda r: str(r.get("specimen_date") or "9999-12-31"))
+    rows = rows[:max_cases]
+    case_ids = {str(r.get("case_id")) for r in rows if r.get("case_id")}
+    pair_epi_index = _build_pair_epi_index(db, case_ids)
+    payload = _build_case_pair_evidence_payload(
+        rows,
+        pair_epi_index,
+        snp_strong_threshold=snp_strong_threshold,
+        snp_moderate_threshold=snp_moderate_threshold,
+        temporal_window_days=temporal_window_days,
+        max_pairs=max_pairs,
+        scoring_profile=profile,
+    )
+
+    pair_keys = {_pair_key(str(p["case_a"]), str(p["case_b"])) for p in payload.get("pairs", [])}
+    reviews = _latest_pair_review_map(db, pair_keys)
+
+    confidence_points = {
+        "strong": 5,
+        "moderate": 3,
+        "weak": 1,
+        "contradicted": -2,
+        "insufficient": 0,
+        "unknown": 0,
+    }
+
+    queue = []
+    for pair in payload.get("pairs", []):
+        key = _pair_key(str(pair.get("case_a") or ""), str(pair.get("case_b") or ""))
+        review = reviews.get(key)
+        card = pair.get("evidence_card") or {}
+        confidence = str(card.get("confidence") or "unknown")
+        temporal = pair.get("temporal_plausibility") or {}
+        contradictions = ((pair.get("evidence") or {}).get("contradiction_details") or [])
+
+        priority = confidence_points.get(confidence, 0)
+        reasons = [f"confidence:{confidence}"]
+
+        if review:
+            priority -= 2
+            reasons.append("already_reviewed")
+        else:
+            priority += 2
+            reasons.append("unreviewed")
+
+        if temporal.get("plausible") is True:
+            priority += 1
+            reasons.append("temporal_plausible")
+
+        major_contradictions = sum(1 for c in contradictions if c.get("severity") == "major")
+        if major_contradictions:
+            priority -= major_contradictions
+            reasons.append(f"major_contradictions:{major_contradictions}")
+
+        completeness = float((pair.get("evidence") or {}).get("data_completeness_score") or 0)
+        if completeness >= 0.7:
+            priority += 1
+            reasons.append("good_data_completeness")
+
+        queue.append(
+            {
+                "pair": pair.get("pair"),
+                "case_a": pair.get("case_a"),
+                "case_b": pair.get("case_b"),
+                "priority_score": priority,
+                "confidence": confidence,
+                "overall_interpretation": pair.get("overall_interpretation"),
+                "review_status": "reviewed" if review else "unreviewed",
+                "review": review,
+                "reasons": reasons,
+                "data_completeness_score": completeness,
+            }
+        )
+
+    queue.sort(key=lambda item: (-int(item.get("priority_score") or 0), str(item.get("pair") or "")))
+
+    return {
+        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "parameters": {
+            "cluster_id": cluster_id,
+            "max_cases": max_cases,
+            "max_pairs": max_pairs,
+            "limit": limit,
+            "scoring_profile": scoring_profile,
+            "scoring_profile_version": str(profile.get("version") or "default_v1"),
+            "snp_strong_threshold": snp_strong_threshold,
+            "snp_moderate_threshold": snp_moderate_threshold,
+            "temporal_window_days": temporal_window_days,
+        },
+        "queue_count": len(queue),
+        "queue": queue[:limit],
         **_validation_notice(),
     }
 

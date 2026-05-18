@@ -11,7 +11,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from backend.auth import AuthenticatedUser, require_roles
-from backend.database import SessionLocal
+from backend.routers.dependencies import get_db
 from backend.snp_validation import validated_snp_distance
 from backend.synthesis.transmission_synthesis import (
     SynthesisConfig,
@@ -116,14 +116,6 @@ class CasePairReviewRestore(BaseModel):
     case_a: Annotated[str, StringConstraints(strip_whitespace=True, min_length=36, max_length=36)]
     case_b: Annotated[str, StringConstraints(strip_whitespace=True, min_length=36, max_length=36)]
     reviewer: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)] | None = None
-
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 
 def _export_json(path: str) -> dict | None:
@@ -723,12 +715,20 @@ def _build_pair_epi_index(db: Session, case_ids: set[str]) -> dict[tuple[str, st
         FROM case_location_events cle
         LEFT JOIN locations l ON l.location_id = cle.location_id
         LEFT JOIN exposures e ON e.exposure_id = cle.exposure_id
+                WHERE COALESCE(cle.entered_in_error, FALSE) = FALSE
+                    AND (l.location_id IS NULL OR COALESCE(l.entered_in_error, FALSE) = FALSE)
+                    AND (e.exposure_id IS NULL OR COALESCE(e.entered_in_error, FALSE) = FALSE)
     """)).mappings().all()
 
     contact_rows = db.execute(text("""
-        SELECT case_id::text AS case_id,
-               contact_id::text AS contact_id
-        FROM case_contact_links
+         SELECT ccl.case_id::text AS case_id,
+             ccl.contact_id::text AS contact_id
+         FROM case_contact_links ccl
+         LEFT JOIN contacts c ON c.contact_id = ccl.contact_id
+         LEFT JOIN exposures e ON e.exposure_id = ccl.exposure_id
+         WHERE COALESCE(ccl.entered_in_error, FALSE) = FALSE
+           AND (c.contact_id IS NULL OR COALESCE(c.entered_in_error, FALSE) = FALSE)
+           AND (e.exposure_id IS NULL OR COALESCE(e.entered_in_error, FALSE) = FALSE)
     """)).mappings().all()
 
     by_case_locations: dict[str, list[dict]] = defaultdict(list)
@@ -1845,7 +1845,7 @@ def case_pair_calibration_sweep(
     temporal_window_options: str = Query("30,45,60"),
     strong_epi_weight_options: str = Query("2,3,4"),
     contradiction_weight_options: str = Query("-2,-3,-4"),
-    min_reviewed_pairs: int = Query(8, ge=1, le=5000),
+    min_reviewed_pairs: int = Query(25, ge=1, le=5000),
     max_candidates: int = Query(100, ge=1, le=400),
     db: Session = Depends(get_db),
 ):

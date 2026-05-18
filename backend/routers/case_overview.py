@@ -6,8 +6,8 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from backend.data_safety import get_data_safety_status
-from backend.database import SessionLocal
 from backend.models import Case
+from backend.routers.dependencies import get_db
 
 
 router = APIRouter(prefix="/cases", tags=["cases"])
@@ -18,14 +18,6 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..
 def _export_path(*parts: str) -> str:
     """Return an absolute path under the repository export directory."""
     return os.path.join(PROJECT_ROOT, "exports", *parts)
-
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 
 def _to_int(value: object) -> int:

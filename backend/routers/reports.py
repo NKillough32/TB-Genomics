@@ -11,7 +11,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from backend.data_safety import get_data_safety_status
-from backend.database import SessionLocal
+from backend.routers.dependencies import get_db
 from backend.routers.case_overview import data_readiness, surveillance_kpis
 from backend.synthesis.transmission_synthesis import (
     SynthesisConfig,
@@ -23,14 +23,6 @@ from backend.synthesis.transmission_synthesis import (
 router = APIRouter(prefix="/reports", tags=["reports"])
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 
 def _export_path(*parts: str) -> str:

@@ -161,6 +161,9 @@ def load_epi_records_for_cases(
         JOIN contacts c ON c.contact_id = ccl.contact_id
         LEFT JOIN exposures e ON e.exposure_id = ccl.exposure_id
         WHERE ccl.case_id IN ({placeholders})
+                    AND COALESCE(ccl.entered_in_error, FALSE) = FALSE
+                    AND COALESCE(c.entered_in_error, FALSE) = FALSE
+                    AND (e.exposure_id IS NULL OR COALESCE(e.entered_in_error, FALSE) = FALSE)
     """
 
     contact_rows = db.execute(text(contact_sql), params).mappings().all()
@@ -202,6 +205,9 @@ def load_epi_records_for_cases(
         JOIN locations l ON l.location_id = cle.location_id
         LEFT JOIN exposures e ON e.exposure_id = cle.exposure_id
         WHERE cle.case_id IN ({placeholders})
+                    AND COALESCE(cle.entered_in_error, FALSE) = FALSE
+                    AND COALESCE(l.entered_in_error, FALSE) = FALSE
+                    AND (e.exposure_id IS NULL OR COALESCE(e.entered_in_error, FALSE) = FALSE)
     """
 
     location_rows = db.execute(text(location_sql), params).mappings().all()

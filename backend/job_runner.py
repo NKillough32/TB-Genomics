@@ -14,6 +14,7 @@ os.makedirs("logs", exist_ok=True)
 python_exe = sys.executable
 
 JOBS = {}
+JOBS_LOCK = threading.RLock()
 ALLOWED_JOBS = {
     "derive_sequence_clusters": [python_exe, "scripts/derive_sequence_clusters.py"],
     "compare_clustering_methods": [python_exe, "scripts/compare_clustering_methods.py"],
@@ -23,6 +24,25 @@ ALLOWED_JOBS = {
     "run_outbreaker2": ["Rscript", "outbreaker2/run_outbreaker2.R"],
     "run_secondary_validation": [python_exe, "scripts/run_secondary_engine_validation.py"],
 }
+
+
+def set_job_state(job_id: str, **fields):
+    with JOBS_LOCK:
+        current = JOBS.get(job_id)
+        if current is None:
+            return
+        current.update(fields)
+
+
+def get_job_snapshot(job_id: str) -> dict | None:
+    with JOBS_LOCK:
+        current = JOBS.get(job_id)
+        return dict(current) if isinstance(current, dict) else None
+
+
+def _create_job(job_id: str, payload: dict):
+    with JOBS_LOCK:
+        JOBS[job_id] = payload
 
 def _log_to_audit(action: str, user_id: str, details: dict):
     """Log an action to the audit trail."""
@@ -46,18 +66,17 @@ def run_job(job_name):
         return None
     job_id = str(uuid.uuid4())
     log = f"logs/{job_id}.log"
-    JOBS[job_id] = {"job": job_name, "status": "queued", "progress": 0, "logfile": log}
+    _create_job(job_id, {"job": job_name, "status": "queued", "progress": 0, "logfile": log})
 
     def task():
-        JOBS[job_id]["status"] = "running"
-        JOBS[job_id]["progress"] = 10
+        set_job_state(job_id, status="running", progress=10)
         
         # Log job start
         _log_to_audit("job_started", "system", {"job_id": job_id, "job_name": job_name})
         
         with open(log, "w", encoding="utf-8") as lf:
             try:
-                JOBS[job_id]["progress"] = 40
+                set_job_state(job_id, progress=40)
                 # Get the project root (parent of backend dir)
                 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
                 
@@ -162,13 +181,12 @@ def run_job(job_name):
                         cwd=project_root,
                     )
                 
-                JOBS[job_id]["progress"] = 100
-                JOBS[job_id]["status"] = "completed"
+                set_job_state(job_id, progress=100, status="completed")
                 
                 # Log job completion
                 _log_to_audit("job_completed", "system", {"job_id": job_id, "job_name": job_name})
             except Exception as e:
-                JOBS[job_id]["status"] = "failed"
+                set_job_state(job_id, status="failed")
                 lf.write(str(e))
                 
                 # Log job failure
@@ -192,14 +210,14 @@ def run_pipeline():
     """Run all analysis steps sequentially under a single pipeline job ID."""
     pipeline_id = str(uuid.uuid4())
     log = f"logs/{pipeline_id}.log"
-    JOBS[pipeline_id] = {
+    _create_job(pipeline_id, {
         "job": "full_pipeline",
         "status": "running",
         "progress": 0,
         "logfile": log,
         "pipeline_step": 0,
         "pipeline_total": len(PIPELINE_STEPS),
-    }
+    })
 
     def _task():
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -208,8 +226,11 @@ def run_pipeline():
         with open(log, "w", encoding="utf-8") as lf:
             total = len(PIPELINE_STEPS)
             for idx, step in enumerate(PIPELINE_STEPS):
-                JOBS[pipeline_id]["pipeline_step"] = idx + 1
-                JOBS[pipeline_id]["progress"] = int((idx / total) * 95)
+                set_job_state(
+                    pipeline_id,
+                    pipeline_step=idx + 1,
+                    progress=int((idx / total) * 95),
+                )
                 lf.write(f"\n{'='*60}\nPIPELINE STEP {idx+1}/{total}: {step}\n{'='*60}\n")
                 lf.flush()
 
@@ -217,28 +238,27 @@ def run_pipeline():
                 # and blocking until it finishes.
                 child_id = run_job(step)
                 if child_id is None:
-                    JOBS[pipeline_id]["status"] = "failed"
+                    set_job_state(pipeline_id, status="failed")
                     lf.write(f"Step {step} is not allowed - aborting pipeline.\n")
                     _log_to_audit("pipeline_failed", "system", {"pipeline_id": pipeline_id, "failed_step": step})
                     return
 
                 # Poll until child completes
                 while True:
-                    child = JOBS.get(child_id, {})
+                    child = get_job_snapshot(child_id) or {}
                     if child.get("status") in ("completed", "failed"):
                         break
                     threading.Event().wait(0.5)
 
-                if JOBS.get(child_id, {}).get("status") == "failed":
-                    JOBS[pipeline_id]["status"] = "failed"
+                if (get_job_snapshot(child_id) or {}).get("status") == "failed":
+                    set_job_state(pipeline_id, status="failed")
                     lf.write(f"Step {step} failed - aborting pipeline.\n")
                     _log_to_audit("pipeline_failed", "system", {"pipeline_id": pipeline_id, "failed_step": step})
                     return
 
                 lf.write(f"Step {step} completed OK.\n")
 
-            JOBS[pipeline_id]["progress"] = 100
-            JOBS[pipeline_id]["status"] = "completed"
+            set_job_state(pipeline_id, progress=100, status="completed")
             _log_to_audit("pipeline_completed", "system", {"pipeline_id": pipeline_id})
 
     threading.Thread(target=_task).start()

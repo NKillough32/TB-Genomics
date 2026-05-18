@@ -352,6 +352,30 @@ tryCatch({
   } else {
     numeric(0)
   }
+  alpha_cols <- grep("^alpha_", names(chain_df), value = TRUE)
+  alpha_post <- if (length(alpha_cols) > 0 && post_start <= nrow(chain_df)) {
+    chain_df[post_start:nrow(chain_df), alpha_cols, drop = FALSE]
+  } else {
+    data.frame()
+  }
+  alpha_ess_by_case <- list()
+  alpha_ess_values <- numeric(0)
+  if (nrow(alpha_post) > 2 && ncol(alpha_post) > 0) {
+    case_ids_chr <- as.character(cases$case_id)
+    for (col_name in names(alpha_post)) {
+      idx <- suppressWarnings(as.integer(sub("^alpha_", "", col_name)))
+      case_label <- if (!is.na(idx) && idx >= 1 && idx <= length(case_ids_chr)) {
+        case_ids_chr[idx]
+      } else {
+        col_name
+      }
+      ess <- estimate_ess(alpha_post[[col_name]])
+      alpha_ess_by_case[[case_label]] <- ifelse(is.finite(ess), round(ess, 2), NA_real_)
+      if (is.finite(ess)) {
+        alpha_ess_values <- c(alpha_ess_values, ess)
+      }
+    }
+  }
   summary_stats <- list(
     n_generations = nrow(chain_df),
     burnin = burnin_effective,
@@ -371,6 +395,23 @@ tryCatch({
       round(estimate_ess(like_values), 2),
       NA_real_
     ),
+    alpha_column_count = length(alpha_cols),
+    alpha_mcmc_effective_sample_size_mean = ifelse(
+      length(alpha_ess_values) > 0,
+      round(mean(alpha_ess_values), 2),
+      NA_real_
+    ),
+    alpha_mcmc_effective_sample_size_min = ifelse(
+      length(alpha_ess_values) > 0,
+      round(min(alpha_ess_values), 2),
+      NA_real_
+    ),
+    alpha_mcmc_effective_sample_size_max = ifelse(
+      length(alpha_ess_values) > 0,
+      round(max(alpha_ess_values), 2),
+      NA_real_
+    ),
+    alpha_mcmc_effective_sample_size_by_case = alpha_ess_by_case,
     mcmc_diagnostic_status = diagnostic_status,
     mcmc_late_drift_fraction = ifelse(is.na(late_drift), NA_real_, late_drift),
     mcmc_iteration_config = list(

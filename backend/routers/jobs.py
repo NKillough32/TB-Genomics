@@ -1,9 +1,9 @@
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import FileResponse, StreamingResponse
-from backend.job_runner import run_job, run_pipeline, JOBS, PIPELINE_STEPS
-from backend.database import SessionLocal
+from backend.job_runner import get_job_snapshot, run_job, run_pipeline, PIPELINE_STEPS
 from backend.data_safety import enforce_operational_dataset, get_data_safety_status
+from backend.routers.dependencies import get_db
 from backend.quality_gates import build_workflow_status
 from sqlalchemy.orm import Session
 import os
@@ -12,14 +12,6 @@ import zipfile
 import io
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
-
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 
 PUBLIC_HEALTH_ACTION_JOBS = {
@@ -56,11 +48,11 @@ def jobs_data_safety(db: Session = Depends(get_db)):
 
 @router.get("/status/{job_id}")
 def status(job_id: str):
-    return JOBS.get(job_id, {"status": "unknown"})
+    return get_job_snapshot(job_id) or {"status": "unknown"}
 
 @router.get("/logs/{job_id}")
 def logs(job_id: str):
-    job = JOBS.get(job_id)
+    job = get_job_snapshot(job_id)
     if not job:
         return {"error": "unknown job"}
     return FileResponse(job["logfile"], filename=f"{job_id}.log")

@@ -11,7 +11,7 @@ from itertools import combinations
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-from backend.database import SessionLocal
+from backend.routers.dependencies import get_db
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 logger = logging.getLogger(__name__)
@@ -54,14 +54,6 @@ def _get_latest_signoff(db: Session) -> dict | None:
         return dict(row) if row else None
     except Exception:
         return None
-
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 
 def _lineage_analysis_summary(db: Session) -> dict:

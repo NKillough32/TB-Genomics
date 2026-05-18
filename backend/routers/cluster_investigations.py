@@ -21,7 +21,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from backend.auth import AuthenticatedUser, require_roles
-from backend.database import SessionLocal
+from backend.routers.dependencies import get_db
 
 logger = logging.getLogger(__name__)
 
@@ -39,14 +39,6 @@ def _validation_notice() -> dict:
 
 
 # -- DB helpers -----------------------------------------------------------------
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
 
 def _normalise_cluster_id(cluster_id: str) -> str:
     try:

@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Source+Serif+4:opsz,wght@8..60,600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=5" />
+  <link rel="stylesheet" href="styles.css?v=7" />
 </head>
 <body>
 <div class="page-glow" aria-hidden="true"></div>
@@ -257,6 +257,7 @@
         <button class="cic-tab" role="tab" onclick="cicTab(this,'cicTabEpi')">Epi notes</button>
         <button class="cic-tab" role="tab" onclick="cicTab(this,'cicTabActions')">Actions</button>
         <button class="cic-tab" role="tab" onclick="cicTab(this,'cicTabSignOff')">Sign-off</button>
+        <button class="cic-tab" role="tab" onclick="cicTab(this,'cicTabAnalytics')">Analytics</button>
       </div>
 
       <!-- Tab: Members -->
@@ -362,6 +363,57 @@
         <div id="cicActionStatus" class="cic-msg"></div>
         <h3 class="cic-section-title">Recorded actions</h3>
         <div id="cicActionsTable"></div>
+      </div>
+
+      <!-- Tab: Analytics -->
+      <div id="cicTabAnalytics" class="cic-tab-content" style="display:none">
+        <h3 class="cic-section-title">Cluster prioritisation</h3>
+        <div id="cicAnalyticsWhy"></div>
+
+        <h3 class="cic-section-title">Pair evidence</h3>
+        <div id="cicPairEvidence"></div>
+
+        <h3 class="cic-section-title">Review pair</h3>
+        <p class="hint">Click a pair from the evidence table or enter UUIDs manually, then save a reviewer classification.</p>
+        <label>Recent pairs
+          <select id="cicReviewPairSelect" class="cic-input" onchange="cicSelectPairForReview()">
+            <option value="">Select a pair from the loaded evidence</option>
+          </select>
+        </label>
+        <div class="cic-form-grid">
+          <label>Case A
+            <input id="cicReviewCaseA" class="cic-input" type="text" placeholder="Full case UUID" />
+          </label>
+          <label>Case B
+            <input id="cicReviewCaseB" class="cic-input" type="text" placeholder="Full case UUID" />
+          </label>
+          <label>Classification
+            <select id="cicReviewClassification" class="cic-input">
+              <option value="confirmed transmission">Confirmed transmission</option>
+              <option value="probable transmission">Probable transmission</option>
+              <option value="possible transmission">Possible transmission</option>
+              <option value="unlikely transmission">Unlikely transmission</option>
+              <option value="insufficient evidence" selected>Insufficient evidence</option>
+            </select>
+          </label>
+          <label>Reviewer
+            <input id="cicReviewReviewer" class="cic-input" type="text" placeholder="Name or initials" />
+          </label>
+          <label>Cluster ID (optional)
+            <input id="cicReviewClusterId" class="cic-input" type="text" placeholder="Current cluster UUID" />
+          </label>
+          <label>Notes
+            <textarea id="cicReviewNotes" class="cic-textarea" rows="3" placeholder="Optional review notes…"></textarea>
+          </label>
+        </div>
+        <button onclick="cicSubmitPairReview()">Save pair review</button>
+        <div id="cicReviewStatus" class="cic-msg"></div>
+
+        <h3 class="cic-section-title">Saved pair reviews</h3>
+        <label>Filter saved reviews
+          <input id="cicPairReviewsFilter" class="cic-input" type="text" placeholder="Filter by pair, reviewer, or classification" oninput="cicApplyReviewsFilter()" />
+        </label>
+        <div id="cicPairReviews"></div>
       </div>
 
       <!-- Tab: Sign-off -->

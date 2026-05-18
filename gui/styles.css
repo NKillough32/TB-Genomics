@@ -684,24 +684,24 @@ footer {
 }
 
 .kpi-banner {
-	display: flex;
-	gap: 1rem;
-	flex-wrap: wrap;
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	gap: 0.8rem;
 	min-width: 0;
 	margin: 0.6rem 0 0.4rem;
 }
 .kpi-tile {
-	flex: 1 1 120px;
+	min-width: 0;
 	background: #fff;
 	border: 1px solid #cae6df;
 	border-radius: 10px;
-	padding: 0.7rem 1rem;
+	padding: 0.7rem 0.75rem;
 	display: flex;
 	flex-direction: column;
 	align-items: center;
 }
 .kpi-num {
-	font-size: 2rem;
+	font-size: clamp(1.45rem, 4.5vw, 2rem);
 	font-weight: 800;
 	color: #1a5c4a;
 	line-height: 1.1;
@@ -712,6 +712,8 @@ footer {
 	text-transform: uppercase;
 	letter-spacing: 0.06em;
 	margin-top: 0.15rem;
+	text-align: center;
+	overflow-wrap: anywhere;
 }
 .kpi-ts {
 	font-size: 0.72rem;
@@ -850,13 +852,21 @@ footer {
 	.card:nth-child(1),
 	.card:nth-child(2),
 	.card:nth-child(3) {
-		grid-column: span 12;
+		grid-column: 1 / -1;
 	}
 }
 
 @media (max-width: 720px) {
 	header {
 		margin-top: 0.8rem;
+	}
+
+	.workflow-map {
+		grid-template-columns: 1fr;
+	}
+
+	.kpi-banner {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
 	}
 
 	.header-inner {
@@ -898,6 +908,12 @@ footer {
 
 	.data-table {
 		font-size: 0.78rem;
+	}
+}
+
+@media (max-width: 430px) {
+	.kpi-banner {
+		grid-template-columns: 1fr;
 	}
 }
 

@@ -526,6 +526,7 @@ function generateCaseReport(caseIdOverride){
 // ── Cluster Investigation Centre ─────────────────────────────────────────────
 let _cicCurrentCluster = null;
 let _cicCurrentMembers = [];
+let _cicLatestReviewsData = null;
 
 const _CIC_BAND_COLOUR = {
 	critical: '#b91c1c',
@@ -603,6 +604,7 @@ async function _cicRefreshDetail(){
 		_cicRenderActions(d);
 		_cicRenderEpiCaseOptions(d.members || []);
 		await cicLoadStructuredEvidence();
+		await cicLoadAnalyticsReview();
 		if(d.epi_notes) document.getElementById('cicEpiNotes').value = d.epi_notes;
 		if(d.assigned_to) document.getElementById('cicAssignee').value = d.assigned_to;
 	}catch(e){
@@ -726,6 +728,265 @@ function _cicRenderActions(d){
 		html += '</tbody></table>';
 	}
 	document.getElementById('cicActionsTable').innerHTML = html;
+}
+
+function _cicRenderAnalyticsWhy(data){
+	const box=document.getElementById('cicAnalyticsWhy');
+	if(!box) return;
+	if(!data){
+		box.innerHTML='<p class="hint">No prioritisation data available.</p>';
+		return;
+	}
+	const reasons=Array.isArray(data.reasons)?data.reasons:[];
+	const metrics=data.metrics||{};
+	let html=`<div class="kpi-strip">Cases: ${escapeHtml(metrics.case_count||0)} | Recent: ${escapeHtml(metrics.recent_cases||0)} | Regions: ${escapeHtml(metrics.region_count||0)} | High-confidence edges: ${escapeHtml(metrics.high_confidence_edges||0)}</div>`;
+	if(data.summary){
+		html+=`<p class="hint">${escapeHtml(data.summary)}</p>`;
+	}
+	if(reasons.length){
+		html+='<ul class="hint">';
+		for(const reason of reasons){
+			html+=`<li>${escapeHtml(reason)}</li>`;
+		}
+		html+='</ul>';
+	}else{
+		html+='<p class="hint">No prioritisation reasons were returned.</p>';
+	}
+	box.innerHTML=html;
+}
+
+function _cicRenderPairEvidence(data){
+	const box=document.getElementById('cicPairEvidence');
+	const pairSelect=document.getElementById('cicReviewPairSelect');
+	if(!box) return;
+	const pairs=Array.isArray(data?.pairs)?data.pairs:[];
+	if(!pairs.length){
+		box.innerHTML='<p class="hint">No pair evidence available for this cluster.</p>';
+		if(pairSelect) pairSelect.innerHTML='<option value="">Select a pair from the loaded evidence</option>';
+		return;
+	}
+	if(pairSelect){
+		let selectHtml='<option value="">Select a pair from the loaded evidence</option>';
+		for(const pair of pairs.slice(0,50)){
+			const optionValue=JSON.stringify({caseA: pair.case_a || '', caseB: pair.case_b || ''});
+			selectHtml+=`<option value="${escapeAttr(optionValue)}">${escapeHtml(pair.pair||'')} · ${escapeHtml(pair.overall_interpretation||'')}</option>`;
+		}
+		pairSelect.innerHTML=selectHtml;
+	}
+	let html=`<div class="kpi-strip">Pairs: ${escapeHtml(data.pair_count||pairs.length)}</div>`;
+	const summary=Object.entries(data.support_summary||{}).map(([label,count])=>`${escapeHtml(label)}: ${escapeHtml(count)}`);
+	if(summary.length){
+		html+=`<p class="hint">${summary.join(' | ')}</p>`;
+	}
+	html+='<div class="analytics-table-wrap"><table class="data-table"><thead><tr><th>Pair</th><th>Genomic</th><th>Epi</th><th>Temporal</th><th>Interpretation</th><th>Evidence</th><th>Review</th><th></th><th></th></tr></thead><tbody>';
+	for(const pair of pairs.slice(0,25)){
+		const genomic=pair.genomic_plausibility||{};
+		const epi=pair.epidemiological_support||{};
+		const temporal=pair.temporal_plausibility||{};
+		const evidence=pair.evidence||{};
+		const review=pair.reviewer_classification||{};
+		const reviewText=review.classification
+			? `${review.classification}${review.reviewer ? ` by ${review.reviewer}` : ''}${review.reviewed_at ? ` (${String(review.reviewed_at).replace('T',' ').replace('Z',' UTC')})` : ''}`
+			: 'not reviewed';
+		html+=`<tr>
+			<td><code>${escapeHtml(pair.pair||'')}</code></td>
+			<td>${escapeHtml(genomic.support||'')}</td>
+			<td>${escapeHtml(epi.support||'')}</td>
+			<td>${escapeHtml(temporal.delta_days ?? 'n/a')}</td>
+			<td>${escapeHtml(pair.overall_interpretation||'')}</td>
+			<td>${escapeHtml([evidence.basis, Array.isArray(evidence.supports) && evidence.supports.length ? evidence.supports.slice(0,3).join(', ') : ''].filter(Boolean).join(' | '))}</td>
+			<td>${escapeHtml(reviewText)}</td>
+			<td><button class="mini-btn" onclick="cicPrefillPairReview(${escapeAttr(JSON.stringify(pair.case_a||''))}, ${escapeAttr(JSON.stringify(pair.case_b||''))})">Use</button></td>
+			<td><button class="mini-btn" onclick="cicCopyPairIds(${escapeAttr(JSON.stringify(pair.case_a||''))}, ${escapeAttr(JSON.stringify(pair.case_b||''))})">Copy IDs</button></td>
+		</tr>`;
+	}
+	html+='</tbody></table></div>';
+	if(pairs.length > 25){
+		html += `<p class="hint">Showing the first 25 pairs of ${escapeHtml(pairs.length)}.</p>`;
+	}
+	box.innerHTML=html;
+}
+
+function _cicRenderPairReviews(data){
+	const box=document.getElementById('cicPairReviews');
+	if(!box) return;
+	const allReviews=Array.isArray(data?.reviews)?data.reviews:[];
+	if(!allReviews.length){
+		box.innerHTML='<p class="hint">No saved pair reviews yet.</p>';
+		return;
+	}
+	const filterValue=(document.getElementById('cicPairReviewsFilter')?.value||'').trim().toLowerCase();
+	const reviews = filterValue
+		? allReviews.filter((review)=>[
+			review.pair,
+			review.reviewer,
+			review.reviewer_classification,
+			review.notes,
+		].filter(Boolean).join(' ').toLowerCase().includes(filterValue))
+		: allReviews;
+	let html=`<div class="kpi-strip">Saved reviews: ${escapeHtml(data.total||allReviews.length)} | Matches: ${escapeHtml(reviews.length)}</div>`;
+	if(filterValue && !reviews.length){
+		box.innerHTML=html + '<p class="hint">No saved reviews match the current filter.</p>';
+		return;
+	}
+	html+='<div class="analytics-table-wrap"><table class="data-table"><thead><tr><th>Pair</th><th>Classification</th><th>Reviewer</th><th>Notes</th><th>Reviewed at</th></tr></thead><tbody>';
+	for(const review of reviews.slice(0,25)){
+		html+=`<tr><td><code>${escapeHtml(review.pair||'')}</code></td><td>${escapeHtml(review.reviewer_classification||'')}</td><td>${escapeHtml(review.reviewer||'')}</td><td>${escapeHtml(review.notes||'')}</td><td>${escapeHtml((review.reviewed_at||'').replace('T',' ').replace('Z',' UTC'))}</td></tr>`;
+	}
+	html+='</tbody></table></div>';
+	if(reviews.length > 25){
+		html += `<p class="hint">Showing the first 25 saved reviews of ${escapeHtml(reviews.length)}.</p>`;
+	}
+	box.innerHTML=html;
+}
+
+function cicApplyReviewsFilter(){
+	if(_cicLatestReviewsData){
+		_cicRenderPairReviews(_cicLatestReviewsData);
+	}
+}
+
+async function cicCopyPairIds(caseA, caseB){
+	const text=`${caseA || ''}\n${caseB || ''}`;
+	const status=document.getElementById('cicReviewStatus');
+	try{
+		if(navigator.clipboard && navigator.clipboard.writeText){
+			await navigator.clipboard.writeText(text);
+			if(status) status.textContent='Pair IDs copied to clipboard.';
+			return;
+		}
+		throw new Error('Clipboard API unavailable');
+	}catch(_e){
+		if(status) status.textContent='Copy failed. Select the IDs from the pair row manually.';
+	}
+}
+
+function cicPrefillPairReview(caseA, caseB){
+	const caseAInput=document.getElementById('cicReviewCaseA');
+	const caseBInput=document.getElementById('cicReviewCaseB');
+	const pairSelect=document.getElementById('cicReviewPairSelect');
+	const clusterInput=document.getElementById('cicReviewClusterId');
+	if(caseAInput) caseAInput.value=caseA || '';
+	if(caseBInput) caseBInput.value=caseB || '';
+	if(pairSelect) pairSelect.value=JSON.stringify({caseA: caseA || '', caseB: caseB || ''});
+	if(clusterInput && _cicCurrentCluster) clusterInput.value=_cicCurrentCluster;
+	const status=document.getElementById('cicReviewStatus');
+	if(status) status.textContent='Pair loaded into review form.';
+}
+
+function cicSelectPairForReview(){
+	const select=document.getElementById('cicReviewPairSelect');
+	if(!select || !select.value) return;
+	try{
+		const pair=JSON.parse(select.value);
+		cicPrefillPairReview(pair.caseA || '', pair.caseB || '');
+	}catch(_e){
+		const status=document.getElementById('cicReviewStatus');
+		if(status) status.textContent='Could not load the selected pair.';
+	}
+}
+
+async function cicSubmitPairReview(){
+	const status=document.getElementById('cicReviewStatus');
+	const caseA=(document.getElementById('cicReviewCaseA')?.value||'').trim();
+	const caseB=(document.getElementById('cicReviewCaseB')?.value||'').trim();
+	const reviewer_classification=document.getElementById('cicReviewClassification')?.value||'insufficient evidence';
+	const reviewer=(document.getElementById('cicReviewReviewer')?.value||'').trim();
+	const notes=(document.getElementById('cicReviewNotes')?.value||'').trim();
+	const clusterId=(document.getElementById('cicReviewClusterId')?.value||_cicCurrentCluster||'').trim();
+	if(!caseA || !caseB){
+		if(status) status.textContent='Enter both case UUIDs before saving a review.';
+		return;
+	}
+	if(!reviewer){
+		if(status) status.textContent='Enter the reviewer name or initials.';
+		return;
+	}
+	if(caseA === caseB){
+		if(status) status.textContent='Case A and Case B must be different.';
+		return;
+	}
+	if(status) status.textContent='Saving pair review...';
+	try{
+		const response=await fetch(`${API}/analytics/case-pair-review`,{
+			method:'POST',
+			headers:{'Content-Type':'application/json'},
+			body:JSON.stringify({
+				case_a: caseA,
+				case_b: caseB,
+				reviewer_classification,
+				reviewer,
+				notes: notes || null,
+				cluster_id: clusterId || null,
+			}),
+		});
+		if(!response.ok){
+			const payload=await response.json().catch(()=>null);
+			if(status) status.textContent='Error: ' + ((payload && (payload.detail || payload.error)) || response.status);
+			return;
+		}
+		if(document.getElementById('cicReviewNotes')) document.getElementById('cicReviewNotes').value='';
+		if(status) status.textContent='✓ Pair review saved.';
+		await cicLoadAnalyticsReview();
+	}catch(e){
+		if(status) status.textContent='Error: ' + e;
+	}
+}
+
+async function cicLoadAnalyticsReview(){
+	const whyBox=document.getElementById('cicAnalyticsWhy');
+	const evidenceBox=document.getElementById('cicPairEvidence');
+	const reviewsBox=document.getElementById('cicPairReviews');
+	if(whyBox) whyBox.innerHTML='<p class="hint">Loading cluster prioritisation...</p>';
+	if(evidenceBox) evidenceBox.innerHTML='<p class="hint">Loading pair evidence...</p>';
+	if(reviewsBox) reviewsBox.innerHTML='<p class="hint">Loading saved pair reviews...</p>';
+	const clusterId=_cicCurrentCluster;
+	if(!clusterId){
+		if(whyBox) whyBox.innerHTML='<p class="hint">Open a cluster to view analytics.</p>';
+		if(evidenceBox) evidenceBox.innerHTML='';
+		if(reviewsBox) reviewsBox.innerHTML='';
+		_cicLatestReviewsData = null;
+		const clusterInput=document.getElementById('cicReviewClusterId');
+		if(clusterInput) clusterInput.value='';
+		return;
+	}
+	const clusterInput=document.getElementById('cicReviewClusterId');
+	if(clusterInput) clusterInput.value=clusterId;
+	try{
+		const [whyResult, evidenceResult, reviewsResult] = await Promise.allSettled([
+			fetch(`${API}/analytics/cluster-why/${encodeURIComponent(clusterId)}`),
+			fetch(`${API}/analytics/case-pair-evidence?cluster_id=${encodeURIComponent(clusterId)}`),
+			fetch(`${API}/analytics/case-pair-reviews?cluster_id=${encodeURIComponent(clusterId)}&limit=100`),
+		]);
+
+		const whyResp = whyResult.status === 'fulfilled' ? whyResult.value : null;
+		const evidenceResp = evidenceResult.status === 'fulfilled' ? evidenceResult.value : null;
+		const reviewsResp = reviewsResult.status === 'fulfilled' ? reviewsResult.value : null;
+
+		const whyData = whyResp && whyResp.ok ? await whyResp.json() : null;
+		const evidenceData = evidenceResp && evidenceResp.ok ? await evidenceResp.json() : null;
+		const reviewsData = reviewsResp && reviewsResp.ok ? await reviewsResp.json() : null;
+
+		if(whyBox){
+			if(whyData) _cicRenderAnalyticsWhy(whyData);
+			else whyBox.innerHTML='<p class="hint">Cluster prioritisation could not be loaded.</p>';
+		}
+		if(evidenceBox){
+			if(evidenceData) _cicRenderPairEvidence(evidenceData);
+			else evidenceBox.innerHTML='<p class="hint">Pair evidence could not be loaded.</p>';
+		}
+		if(reviewsBox){
+			if(reviewsData){
+				_cicLatestReviewsData = reviewsData;
+				_cicRenderPairReviews(reviewsData);
+			}
+			else reviewsBox.innerHTML='<p class="hint">Saved pair reviews could not be loaded.</p>';
+		}
+	}catch(e){
+		if(whyBox) whyBox.textContent='Cluster prioritisation failed: ' + e;
+		if(evidenceBox) evidenceBox.textContent='Pair evidence failed: ' + e;
+		if(reviewsBox) reviewsBox.textContent='Pair reviews failed: ' + e;
+	}
 }
 
 async function cicRecordLocationEvent(){

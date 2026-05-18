@@ -12,16 +12,12 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from sqlalchemy import text
 
 from backend.database import SessionLocal
+from backend.snp_validation import validated_snp_distance
 
 
-def _snp_distance(seq_a: str, seq_b: str) -> int:
-    if not seq_a or not seq_b:
-        return 10**9
-    a = seq_a.upper()
-    b = seq_b.upper()
-    common = min(len(a), len(b))
-    mismatches = sum(1 for i in range(common) if a[i] != b[i])
-    return mismatches + abs(len(a) - len(b))
+def _snp_distance(seq_a: str, seq_b: str) -> tuple[int, int, int, str]:
+    result = validated_snp_distance(seq_a, seq_b)
+    return result.distance, result.comparable_sites, result.ambiguous_sites, result.status
 
 
 class UnionFind:
@@ -54,6 +50,7 @@ def main() -> None:
     os.makedirs("exports", exist_ok=True)
     threshold = int(os.getenv("SEQ_CLUSTER_MAX_DISTANCE", "25"))
     min_cluster_size = int(os.getenv("SEQ_CLUSTER_MIN_SIZE", "2"))
+    alert_min_cluster_size = int(os.getenv("TB_CLUSTER_ALERT_MIN_CASES", "5"))
 
     db = SessionLocal()
     try:
@@ -94,11 +91,23 @@ def main() -> None:
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "threshold_snp_distance": threshold,
             "min_cluster_size": min_cluster_size,
+            "alert_min_cluster_size": alert_min_cluster_size,
             "sequenced_cases": len(samples),
             "clustered_cases": 0,
             "cluster_count": 0,
             "unclustered_cases": len(samples),
             "pairwise_links_under_threshold": 0,
+            "pairwise_comparable_sites": {
+                "mean": None,
+                "min": None,
+                "max": None,
+            },
+            "link_pair_comparable_sites": {
+                "mean": None,
+                "min": None,
+                "max": None,
+            },
+            "pairwise_snp_distance_histogram": {},
             "clusters": [],
         }
 
@@ -108,7 +117,16 @@ def main() -> None:
             with open("exports/sequence_cluster_assignments.csv", "w", newline="", encoding="utf-8") as f:
                 writer = csv.DictWriter(
                     f,
-                    fieldnames=["case_id", "specimen_date", "geographic_region", "cluster_id", "source"],
+                    fieldnames=[
+                        "case_id",
+                        "specimen_date",
+                        "geographic_region",
+                        "cluster_id",
+                        "source",
+                        "mean_comparable_sites_to_cluster",
+                        "min_comparable_sites_to_cluster",
+                        "max_comparable_sites_to_cluster",
+                    ],
                 )
                 writer.writeheader()
             db.commit()
@@ -117,13 +135,32 @@ def main() -> None:
 
         uf = UnionFind([s["case_id"] for s in samples])
         sample_map = {s["case_id"]: s for s in samples}
+        comparable_stats = {
+            case_id: {"sum": 0, "count": 0, "min": None, "max": None}
+            for case_id in sample_map.keys()
+        }
 
         pairwise_links = 0
+        pairwise_comparable_sites: list[int] = []
+        link_pair_comparable_sites: list[int] = []
+        snp_distance_histogram: dict[str, int] = {}
         for a_id, b_id in combinations(sample_map.keys(), 2):
-            dist = _snp_distance(sample_map[a_id]["sequence"], sample_map[b_id]["sequence"])
+            dist, comparable_sites, _ambiguous_sites, _status = _snp_distance(
+                sample_map[a_id]["sequence"], sample_map[b_id]["sequence"]
+            )
+            pairwise_comparable_sites.append(comparable_sites)
+            key = str(dist)
+            snp_distance_histogram[key] = snp_distance_histogram.get(key, 0) + 1
             if dist <= threshold:
                 uf.union(a_id, b_id)
                 pairwise_links += 1
+                link_pair_comparable_sites.append(comparable_sites)
+                for case_id in (a_id, b_id):
+                    stats = comparable_stats[case_id]
+                    stats["sum"] += comparable_sites
+                    stats["count"] += 1
+                    stats["min"] = comparable_sites if stats["min"] is None else min(stats["min"], comparable_sites)
+                    stats["max"] = comparable_sites if stats["max"] is None else max(stats["max"], comparable_sites)
 
         groups = {}
         for case_id in sample_map.keys():
@@ -146,7 +183,7 @@ def main() -> None:
                     "cluster_id": cluster_uuid,
                     "snp_distance": threshold,
                     "investigation_status": "open",
-                    "alert_flag": len(members) >= 5,
+                    "alert_flag": len(members) >= alert_min_cluster_size,
                 },
             )
 
@@ -156,6 +193,8 @@ def main() -> None:
                     {"sample_id": case_id, "cluster_id": cluster_uuid},
                 )
                 s = sample_map[case_id]
+                stats = comparable_stats.get(case_id, {"sum": 0, "count": 0, "min": None, "max": None})
+                mean_sites = round(stats["sum"] / stats["count"], 2) if stats["count"] else None
                 assignments.append(
                     {
                         "case_id": case_id,
@@ -163,6 +202,9 @@ def main() -> None:
                         "geographic_region": s.get("geographic_region") or "",
                         "cluster_id": cluster_uuid,
                         "source": "sequence_derived",
+                        "mean_comparable_sites_to_cluster": mean_sites,
+                        "min_comparable_sites_to_cluster": stats["min"],
+                        "max_comparable_sites_to_cluster": stats["max"],
                     }
                 )
 
@@ -175,6 +217,22 @@ def main() -> None:
             )
 
         summary["pairwise_links_under_threshold"] = pairwise_links
+        if pairwise_comparable_sites:
+            summary["pairwise_comparable_sites"] = {
+                "mean": round(sum(pairwise_comparable_sites) / len(pairwise_comparable_sites), 2),
+                "min": min(pairwise_comparable_sites),
+                "max": max(pairwise_comparable_sites),
+            }
+        if link_pair_comparable_sites:
+            summary["link_pair_comparable_sites"] = {
+                "mean": round(sum(link_pair_comparable_sites) / len(link_pair_comparable_sites), 2),
+                "min": min(link_pair_comparable_sites),
+                "max": max(link_pair_comparable_sites),
+            }
+        summary["pairwise_snp_distance_histogram"] = {
+            key: snp_distance_histogram[key]
+            for key in sorted(snp_distance_histogram.keys(), key=lambda v: int(v))
+        }
         summary["cluster_count"] = len(summary["clusters"])
         summary["clustered_cases"] = sum(c["case_count"] for c in summary["clusters"])
         summary["unclustered_cases"] = len(samples) - summary["clustered_cases"]
@@ -185,7 +243,16 @@ def main() -> None:
         with open("exports/sequence_cluster_assignments.csv", "w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(
                 f,
-                fieldnames=["case_id", "specimen_date", "geographic_region", "cluster_id", "source"],
+                fieldnames=[
+                    "case_id",
+                    "specimen_date",
+                    "geographic_region",
+                    "cluster_id",
+                    "source",
+                    "mean_comparable_sites_to_cluster",
+                    "min_comparable_sites_to_cluster",
+                    "max_comparable_sites_to_cluster",
+                ],
             )
             writer.writeheader()
             for row in assignments:

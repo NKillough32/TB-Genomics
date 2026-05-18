@@ -20,11 +20,16 @@ tryCatch({
   cases <- read.csv("exports/cases.csv", stringsAsFactors = FALSE)
   dna <- read.dna("exports/dna.fasta", format = "fasta")
 
-  # Provide explicit interval distributions to avoid outbreaker2 default SI
-  # construction edge cases on sparse/synthetic timestamp data.
-  si_window <- 120
-  w_raw <- dgamma(1:si_window, shape = 2.0, scale = 14.0)
-  f_raw <- dgamma(1:si_window, shape = 2.0, scale = 7.0)
+  # TB serial interval defaults (long-tailed compared with acute infections).
+  # Defaults can be tuned per deployment using environment variables.
+  si_window <- as.integer(Sys.getenv("TB_OUTBREAKER_SI_WINDOW", "730"))
+  serial_w_shape <- as.numeric(Sys.getenv("TB_OUTBREAKER_W_SHAPE", "2.0"))
+  serial_w_scale <- as.numeric(Sys.getenv("TB_OUTBREAKER_W_SCALE", "90.0"))
+  serial_f_shape <- as.numeric(Sys.getenv("TB_OUTBREAKER_F_SHAPE", "1.5"))
+  serial_f_scale <- as.numeric(Sys.getenv("TB_OUTBREAKER_F_SCALE", "90.0"))
+
+  w_raw <- dgamma(1:si_window, shape = serial_w_shape, scale = serial_w_scale)
+  f_raw <- dgamma(1:si_window, shape = serial_f_shape, scale = serial_f_scale)
   w_dens <- w_raw / sum(w_raw)
   f_dens <- f_raw / sum(f_raw)
 
@@ -49,11 +54,28 @@ tryCatch({
 
   # Run outbreak investigation
   cat("Running outbreaker2 analysis...\n")
-  n_iter_total <- 2000
-  burnin_iters <- 500
-  cfg <- create_config(n_iter = n_iter_total, sample_every = 1)
+  n_iter_total <- as.integer(Sys.getenv("TB_OUTBREAKER_ITER", "50000"))
+  burnin_iters <- as.integer(Sys.getenv("TB_OUTBREAKER_BURNIN", "10000"))
+  thin_every <- as.integer(Sys.getenv("TB_OUTBREAKER_THIN", "10"))
+  cfg <- create_config(n_iter = n_iter_total, sample_every = thin_every)
   res <- outbreaker(data = out_data, config = cfg)
   chain_df <- as.data.frame(res)
+
+  estimate_ess <- function(series) {
+    x <- as.numeric(series)
+    x <- x[is.finite(x)]
+    n <- length(x)
+    if (n < 3) {
+      return(NA_real_)
+    }
+    rho1 <- suppressWarnings(cor(x[1:(n - 1)], x[2:n], use = "complete.obs"))
+    if (is.na(rho1)) {
+      return(NA_real_)
+    }
+    rho1 <- max(min(rho1, 0.99), -0.99)
+    ess <- n * (1 - rho1) / (1 + rho1)
+    max(1, min(n, ess))
+  }
 
   build_transmission_network <- function(result, ids, burnin_iter) {
     chain_local <- as.data.frame(result)
@@ -334,6 +356,7 @@ tryCatch({
     n_generations = nrow(chain_df),
     burnin = burnin_effective,
     n_samples = max(0, nrow(chain_df) - burnin_effective),
+    thinning = thin_every,
     case_count = length(cases$case_id),
     likelihood_mean = ifelse(
       length(like_values) > 0, mean(like_values), NA_real_
@@ -343,8 +366,25 @@ tryCatch({
     ),
     transmission_edges = length(network$edges),
     posterior_samples = network$posterior_samples,
+    mcmc_effective_sample_size = ifelse(
+      length(like_values) > 2,
+      round(estimate_ess(like_values), 2),
+      NA_real_
+    ),
     mcmc_diagnostic_status = diagnostic_status,
     mcmc_late_drift_fraction = ifelse(is.na(late_drift), NA_real_, late_drift),
+    mcmc_iteration_config = list(
+      n_iter_total = n_iter_total,
+      burnin_iters = burnin_iters,
+      thin_every = thin_every
+    ),
+    serial_interval_config = list(
+      si_window = si_window,
+      w_shape = serial_w_shape,
+      w_scale = serial_w_scale,
+      f_shape = serial_f_shape,
+      f_scale = serial_f_scale
+    ),
     data_provenance = "real",
     analysis_engine = "outbreaker2",
     generated_at = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC")

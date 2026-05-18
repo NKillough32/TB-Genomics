@@ -105,6 +105,19 @@ class CasePairReviewUpsert(BaseModel):
     cluster_id: Annotated[str, StringConstraints(strip_whitespace=True, min_length=36, max_length=36)] | None = None
 
 
+class CasePairReviewEnteredInError(BaseModel):
+    case_a: Annotated[str, StringConstraints(strip_whitespace=True, min_length=36, max_length=36)]
+    case_b: Annotated[str, StringConstraints(strip_whitespace=True, min_length=36, max_length=36)]
+    reason: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+    reviewer: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)] | None = None
+
+
+class CasePairReviewRestore(BaseModel):
+    case_a: Annotated[str, StringConstraints(strip_whitespace=True, min_length=36, max_length=36)]
+    case_b: Annotated[str, StringConstraints(strip_whitespace=True, min_length=36, max_length=36)]
+    reviewer: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)] | None = None
+
+
 def get_db():
     db = SessionLocal()
     try:
@@ -184,6 +197,7 @@ def _latest_pair_review_map(db: Session, pair_keys: set[tuple[str, str]]) -> dic
                    source_cluster_id::text AS source_cluster_id,
                    reviewed_at
             FROM case_pair_reviews
+            WHERE COALESCE(entered_in_error, FALSE) = FALSE
             ORDER BY reviewed_at DESC
             LIMIT 5000
         """)).mappings().all()
@@ -1373,6 +1387,10 @@ def upsert_case_pair_review(
             reviewer,
             notes,
             source_cluster_id,
+            entered_in_error,
+            entered_in_error_at,
+            entered_in_error_by,
+            entered_in_error_reason,
             reviewed_at
         )
         VALUES (
@@ -1382,6 +1400,10 @@ def upsert_case_pair_review(
             :reviewer,
             :notes,
             CAST(:cluster_id AS UUID),
+            FALSE,
+            NULL,
+            NULL,
+            NULL,
             NOW()
         )
         ON CONFLICT (case_a, case_b)
@@ -1390,6 +1412,10 @@ def upsert_case_pair_review(
             reviewer = EXCLUDED.reviewer,
             notes = EXCLUDED.notes,
             source_cluster_id = EXCLUDED.source_cluster_id,
+            entered_in_error = FALSE,
+            entered_in_error_at = NULL,
+            entered_in_error_by = NULL,
+            entered_in_error_reason = NULL,
             reviewed_at = NOW()
     """), {
         "case_a": case_a,
@@ -1442,6 +1468,7 @@ def upsert_case_pair_review(
 def list_case_pair_reviews(
     cluster_id: str | None = Query(None),
     case_id: str | None = Query(None),
+    include_entered_in_error: bool = Query(False),
     limit: int = Query(200, ge=1, le=2000),
     db: Session = Depends(get_db),
 ):
@@ -1456,6 +1483,8 @@ def list_case_pair_reviews(
         norm_case = _normalise_uuid(case_id)
         where.append("(case_a = CAST(:case_id AS UUID) OR case_b = CAST(:case_id AS UUID))")
         params["case_id"] = norm_case
+    if not include_entered_in_error:
+        where.append("COALESCE(entered_in_error, FALSE) = FALSE")
 
     where_clause = f"WHERE {' AND '.join(where)}" if where else ""
     sql = f"""
@@ -1465,6 +1494,10 @@ def list_case_pair_reviews(
                reviewer,
                notes,
                source_cluster_id::text AS cluster_id,
+             COALESCE(entered_in_error, FALSE) AS entered_in_error,
+             entered_in_error_at,
+             entered_in_error_by,
+             entered_in_error_reason,
                reviewed_at
         FROM case_pair_reviews
         {where_clause}
@@ -1484,11 +1517,146 @@ def list_case_pair_reviews(
                 "reviewer": str(r.get("reviewer") or ""),
                 "notes": r.get("notes"),
                 "cluster_id": str(r.get("cluster_id") or "") or None,
+                "entered_in_error": bool(r.get("entered_in_error")),
+                "entered_in_error_at": r.get("entered_in_error_at").isoformat() if r.get("entered_in_error_at") else None,
+                "entered_in_error_by": str(r.get("entered_in_error_by") or "") or None,
+                "entered_in_error_reason": r.get("entered_in_error_reason"),
                 "reviewed_at": r.get("reviewed_at").isoformat() if r.get("reviewed_at") else None,
             }
             for r in rows
         ],
         "reviewer_classification_options": list(REVIEW_CLASSIFICATIONS),
+    }
+
+
+@router.post("/case-pair-review/entered-in-error")
+def mark_case_pair_review_entered_in_error(
+    payload: CasePairReviewEnteredInError,
+    db: Session = Depends(get_db),
+    user: AuthenticatedUser = Depends(require_roles("analyst")),
+):
+    left = _normalise_uuid(payload.case_a)
+    right = _normalise_uuid(payload.case_b)
+    if left == right:
+        raise HTTPException(status_code=422, detail="case_a and case_b must be different cases")
+
+    case_a, case_b = _pair_key(left, right)
+    reviewer = (payload.reviewer or user.subject).strip()
+
+    result = db.execute(
+        text(
+            """
+            UPDATE case_pair_reviews
+            SET entered_in_error = TRUE,
+                entered_in_error_at = NOW(),
+                entered_in_error_by = :reviewer,
+                entered_in_error_reason = :reason,
+                reviewed_at = NOW()
+            WHERE case_a = CAST(:case_a AS UUID)
+              AND case_b = CAST(:case_b AS UUID)
+            """
+        ),
+        {
+            "case_a": case_a,
+            "case_b": case_b,
+            "reviewer": reviewer,
+            "reason": payload.reason.strip(),
+        },
+    )
+    if (result.rowcount or 0) == 0:
+        raise HTTPException(status_code=404, detail="Case pair review not found")
+
+    db.execute(
+        text(
+            """
+            INSERT INTO audit_log (action, user_id, details, timestamp)
+            VALUES (:action, :user_id, CAST(:details AS JSONB), NOW())
+            """
+        ),
+        {
+            "action": "case_pair_review_entered_in_error",
+            "user_id": reviewer,
+            "details": json.dumps(
+                {
+                    "case_a": case_a,
+                    "case_b": case_b,
+                    "reason": payload.reason.strip(),
+                }
+            ),
+        },
+    )
+    db.commit()
+
+    return {
+        "case_a": case_a,
+        "case_b": case_b,
+        "entered_in_error": True,
+        "entered_in_error_reason": payload.reason.strip(),
+        "entered_in_error_by": reviewer,
+        "updated_at": datetime.utcnow().isoformat() + "Z",
+    }
+
+
+@router.post("/case-pair-review/restore")
+def restore_case_pair_review(
+    payload: CasePairReviewRestore,
+    db: Session = Depends(get_db),
+    user: AuthenticatedUser = Depends(require_roles("analyst")),
+):
+    left = _normalise_uuid(payload.case_a)
+    right = _normalise_uuid(payload.case_b)
+    if left == right:
+        raise HTTPException(status_code=422, detail="case_a and case_b must be different cases")
+
+    case_a, case_b = _pair_key(left, right)
+    reviewer = (payload.reviewer or user.subject).strip()
+
+    result = db.execute(
+        text(
+            """
+            UPDATE case_pair_reviews
+            SET entered_in_error = FALSE,
+                entered_in_error_at = NULL,
+                entered_in_error_by = NULL,
+                entered_in_error_reason = NULL,
+                reviewed_at = NOW()
+            WHERE case_a = CAST(:case_a AS UUID)
+              AND case_b = CAST(:case_b AS UUID)
+            """
+        ),
+        {
+            "case_a": case_a,
+            "case_b": case_b,
+        },
+    )
+    if (result.rowcount or 0) == 0:
+        raise HTTPException(status_code=404, detail="Case pair review not found")
+
+    db.execute(
+        text(
+            """
+            INSERT INTO audit_log (action, user_id, details, timestamp)
+            VALUES (:action, :user_id, CAST(:details AS JSONB), NOW())
+            """
+        ),
+        {
+            "action": "case_pair_review_restored",
+            "user_id": reviewer,
+            "details": json.dumps(
+                {
+                    "case_a": case_a,
+                    "case_b": case_b,
+                }
+            ),
+        },
+    )
+    db.commit()
+
+    return {
+        "case_a": case_a,
+        "case_b": case_b,
+        "entered_in_error": False,
+        "updated_at": datetime.utcnow().isoformat() + "Z",
     }
 
 
@@ -1521,18 +1689,18 @@ def cluster_why_it_matters(
     return payload
 
 
-@router.get("/case-pair-calibration")
-def case_pair_calibration(
-    cluster_id: str | None = Query(None),
-    max_cases: int = Query(80, ge=2, le=300),
-    max_pairs: int = Query(1000, ge=1, le=10000),
-    scoring_profile: str = "default_v1",
-    snp_strong_threshold: int = Query(5, ge=0, le=100),
-    snp_moderate_threshold: int = Query(12, ge=1, le=200),
-    temporal_window_days: int = Query(45, ge=1, le=365),
-    db: Session = Depends(get_db),
-):
-    """Compare model pair interpretations with reviewer classifications."""
+def _run_case_pair_calibration(
+    db: Session,
+    *,
+    cluster_id: str | None,
+    max_cases: int,
+    max_pairs: int,
+    scoring_profile_name: str,
+    scoring_profile: dict,
+    snp_strong_threshold: int,
+    snp_moderate_threshold: int,
+    temporal_window_days: int,
+) -> dict:
     rows = _case_rows(db)
     if cluster_id:
         cid = _normalise_uuid(cluster_id)
@@ -1540,7 +1708,6 @@ def case_pair_calibration(
 
     rows.sort(key=lambda r: str(r.get("specimen_date") or "9999-12-31"))
     rows = rows[:max_cases]
-    profile = _resolve_scoring_profile(scoring_profile)
     case_ids = {str(r.get("case_id")) for r in rows if r.get("case_id")}
     pair_epi_index = _build_pair_epi_index(db, case_ids)
     evidence_payload = _build_case_pair_evidence_payload(
@@ -1550,7 +1717,7 @@ def case_pair_calibration(
         snp_moderate_threshold=snp_moderate_threshold,
         temporal_window_days=temporal_window_days,
         max_pairs=max_pairs,
-        scoring_profile=profile,
+        scoring_profile=scoring_profile,
     )
 
     pairs = evidence_payload.get("pairs") or []
@@ -1595,8 +1762,8 @@ def case_pair_calibration(
             "cluster_id": cluster_id,
             "max_cases": max_cases,
             "max_pairs": max_pairs,
-            "scoring_profile": scoring_profile,
-            "scoring_profile_version": str(profile.get("version") or "default_v1"),
+            "scoring_profile": scoring_profile_name,
+            "scoring_profile_version": str(scoring_profile.get("version") or scoring_profile_name),
             "snp_strong_threshold": snp_strong_threshold,
             "snp_moderate_threshold": snp_moderate_threshold,
             "temporal_window_days": temporal_window_days,
@@ -1615,6 +1782,218 @@ def case_pair_calibration(
         "notes": [
             "Model labels are mapped from heuristic interpretations and require calibration before operational claims.",
             "Agreement values are descriptive quality metrics, not external validation evidence.",
+        ],
+        **_validation_notice(),
+    }
+
+
+def _parse_int_options(raw: str, *, minimum: int, maximum: int, field_name: str) -> list[int]:
+    values: list[int] = []
+    for token in str(raw or "").split(","):
+        item = token.strip()
+        if not item:
+            continue
+        try:
+            value = int(item)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=f"Invalid integer in {field_name}: '{item}'") from exc
+        if value < minimum or value > maximum:
+            raise HTTPException(
+                status_code=422,
+                detail=f"{field_name} values must be between {minimum} and {maximum}",
+            )
+        values.append(value)
+    if not values:
+        raise HTTPException(status_code=422, detail=f"{field_name} must include at least one integer")
+    return sorted(set(values))
+
+
+@router.get("/case-pair-calibration")
+def case_pair_calibration(
+    cluster_id: str | None = Query(None),
+    max_cases: int = Query(80, ge=2, le=300),
+    max_pairs: int = Query(1000, ge=1, le=10000),
+    scoring_profile: str = "default_v1",
+    snp_strong_threshold: int = Query(5, ge=0, le=100),
+    snp_moderate_threshold: int = Query(12, ge=1, le=200),
+    temporal_window_days: int = Query(45, ge=1, le=365),
+    db: Session = Depends(get_db),
+):
+    """Compare model pair interpretations with reviewer classifications."""
+    profile = _resolve_scoring_profile(scoring_profile)
+    return _run_case_pair_calibration(
+        db,
+        cluster_id=cluster_id,
+        max_cases=max_cases,
+        max_pairs=max_pairs,
+        scoring_profile_name=scoring_profile,
+        scoring_profile=profile,
+        snp_strong_threshold=snp_strong_threshold,
+        snp_moderate_threshold=snp_moderate_threshold,
+        temporal_window_days=temporal_window_days,
+    )
+
+
+@router.get("/case-pair-calibration/sweep")
+def case_pair_calibration_sweep(
+    cluster_id: str | None = Query(None),
+    max_cases: int = Query(80, ge=2, le=300),
+    max_pairs: int = Query(1000, ge=1, le=10000),
+    base_scoring_profile: str = "default_v1",
+    snp_strong_threshold_options: str = Query("4,5,6"),
+    snp_moderate_threshold_options: str = Query("10,12,14"),
+    temporal_window_options: str = Query("30,45,60"),
+    strong_epi_weight_options: str = Query("2,3,4"),
+    contradiction_weight_options: str = Query("-2,-3,-4"),
+    min_reviewed_pairs: int = Query(8, ge=1, le=5000),
+    max_candidates: int = Query(100, ge=1, le=400),
+    db: Session = Depends(get_db),
+):
+    """Run an automated sweep of scoring parameters and return the best calibration candidate."""
+    base = _resolve_scoring_profile(base_scoring_profile)
+
+    strong_thresholds = _parse_int_options(
+        snp_strong_threshold_options,
+        minimum=0,
+        maximum=100,
+        field_name="snp_strong_threshold_options",
+    )
+    moderate_thresholds = _parse_int_options(
+        snp_moderate_threshold_options,
+        minimum=1,
+        maximum=200,
+        field_name="snp_moderate_threshold_options",
+    )
+    temporal_windows = _parse_int_options(
+        temporal_window_options,
+        minimum=1,
+        maximum=365,
+        field_name="temporal_window_options",
+    )
+    strong_weights = _parse_int_options(
+        strong_epi_weight_options,
+        minimum=1,
+        maximum=8,
+        field_name="strong_epi_weight_options",
+    )
+    contradiction_weights = _parse_int_options(
+        contradiction_weight_options,
+        minimum=-12,
+        maximum=-1,
+        field_name="contradiction_weight_options",
+    )
+
+    candidates = []
+    evaluated = 0
+    for strong_threshold in strong_thresholds:
+        for moderate_threshold in moderate_thresholds:
+            if strong_threshold >= moderate_threshold:
+                continue
+            for temporal_window in temporal_windows:
+                for strong_weight in strong_weights:
+                    for contradiction_weight in contradiction_weights:
+                        if evaluated >= max_candidates:
+                            break
+                        evaluated += 1
+                        score_weights = dict(base.get("score_weights") or {})
+                        score_weights["strong epi support"] = strong_weight
+                        score_weights["moderate epi support"] = max(1, strong_weight - 1)
+                        score_weights["weak epi support"] = max(1, strong_weight - 2)
+                        score_weights["contradictory"] = contradiction_weight
+
+                        profile = {
+                            **base,
+                            "version": (
+                                f"sweep_st{strong_threshold}_mt{moderate_threshold}_tw{temporal_window}_"
+                                f"sw{strong_weight}_cw{abs(contradiction_weight)}"
+                            ),
+                            "score_weights": score_weights,
+                        }
+
+                        result = _run_case_pair_calibration(
+                            db,
+                            cluster_id=cluster_id,
+                            max_cases=max_cases,
+                            max_pairs=max_pairs,
+                            scoring_profile_name=profile["version"],
+                            scoring_profile=profile,
+                            snp_strong_threshold=strong_threshold,
+                            snp_moderate_threshold=moderate_threshold,
+                            temporal_window_days=temporal_window,
+                        )
+
+                        summary = result.get("summary") or {}
+                        binary_kappa = summary.get("binary_kappa")
+                        reviewed_pair_count = int(result.get("reviewed_pair_count") or 0)
+                        coverage = result.get("coverage")
+                        candidates.append(
+                            {
+                                "profile_version": profile["version"],
+                                "snp_strong_threshold": strong_threshold,
+                                "snp_moderate_threshold": moderate_threshold,
+                                "temporal_window_days": temporal_window,
+                                "score_weights": score_weights,
+                                "reviewed_pair_count": reviewed_pair_count,
+                                "coverage": coverage,
+                                "binary_kappa": binary_kappa,
+                                "binary_agreement": summary.get("binary_agreement"),
+                                "exact_agreement": summary.get("exact_agreement"),
+                            }
+                        )
+                    if evaluated >= max_candidates:
+                        break
+                if evaluated >= max_candidates:
+                    break
+            if evaluated >= max_candidates:
+                break
+        if evaluated >= max_candidates:
+            break
+
+    eligible = [c for c in candidates if c["reviewed_pair_count"] >= min_reviewed_pairs and c["binary_kappa"] is not None]
+    if not eligible:
+        eligible = [c for c in candidates if c["binary_kappa"] is not None]
+
+    best_candidate = None
+    if eligible:
+        best_candidate = sorted(
+            eligible,
+            key=lambda c: (
+                float(c.get("binary_kappa") or -9.0),
+                float(c.get("coverage") or 0.0),
+                int(c.get("reviewed_pair_count") or 0),
+            ),
+            reverse=True,
+        )[0]
+
+    return {
+        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "parameters": {
+            "cluster_id": cluster_id,
+            "max_cases": max_cases,
+            "max_pairs": max_pairs,
+            "base_scoring_profile": base_scoring_profile,
+            "snp_strong_threshold_options": strong_thresholds,
+            "snp_moderate_threshold_options": moderate_thresholds,
+            "temporal_window_options": temporal_windows,
+            "strong_epi_weight_options": strong_weights,
+            "contradiction_weight_options": contradiction_weights,
+            "min_reviewed_pairs": min_reviewed_pairs,
+            "max_candidates": max_candidates,
+        },
+        "candidate_count": len(candidates),
+        "best_candidate": best_candidate,
+        "top_candidates": sorted(
+            [c for c in candidates if c.get("binary_kappa") is not None],
+            key=lambda c: (
+                float(c.get("binary_kappa") or -9.0),
+                float(c.get("coverage") or 0.0),
+                int(c.get("reviewed_pair_count") or 0),
+            ),
+            reverse=True,
+        )[:10],
+        "notes": [
+            "Sweep candidates are ranked by binary Cohen kappa first, then review coverage.",
+            "Use this as a calibration aid; retain human review before changing operational thresholds.",
         ],
         **_validation_notice(),
     }

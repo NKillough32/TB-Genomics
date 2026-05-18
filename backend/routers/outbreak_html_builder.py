@@ -1420,6 +1420,65 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
                        f"<div class='tbl-wrap'><table><thead><tr><th>Region</th><th>Eligible</th><th>Sequenced</th><th>Coverage</th></tr></thead>"
                        f"<tbody>{region_rows_html}</tbody></table></div>")
 
+    kpi_extra_html = ""
+    if isinstance(kpi_data, dict):
+        lineage_rows = ""
+        for row in (kpi_data.get("lineage_distribution") or [])[:6]:
+            lineage_rows += (
+                f"<tr><td>{_safe_html(str(row.get('lineage', 'unknown')))}</td>"
+                f"<td>{_safe_html(str(row.get('case_count', 0)))}</td></tr>"
+            )
+
+        growth = kpi_data.get("cluster_growth") or {}
+        growth_rows = (
+            f"<tr><th>Cases in last 30 days</th><td>{_safe_html(str(growth.get('last_30_days', 0)))}</td></tr>"
+            f"<tr><th>Cases in previous 30 days</th><td>{_safe_html(str(growth.get('previous_30_days', 0)))}</td></tr>"
+            f"<tr><th>Cases in last 60 days</th><td>{_safe_html(str(growth.get('last_60_days', 0)))}</td></tr>"
+            f"<tr><th>Cases in previous 60 days</th><td>{_safe_html(str(growth.get('previous_60_days', 0)))}</td></tr>"
+            f"<tr><th>Cases in last 90 days</th><td>{_safe_html(str(growth.get('last_90_days', 0)))}</td></tr>"
+            f"<tr><th>Cases in previous 90 days</th><td>{_safe_html(str(growth.get('previous_90_days', 0)))}</td></tr>"
+        )
+
+        seq_quality = (kpi_data.get("sequence_clustering_quality") or {})
+        pairwise_sites = seq_quality.get("pairwise_comparable_sites") or {}
+        link_sites = seq_quality.get("link_pair_comparable_sites") or {}
+        seq_quality_rows = (
+            f"<tr><th>Pairwise comparable sites (mean)</th><td>{_safe_html(str(pairwise_sites.get('mean', 'n/a')))}</td></tr>"
+            f"<tr><th>Pairwise comparable sites (p10)</th><td>{_safe_html(str(pairwise_sites.get('p10', 'n/a')))}</td></tr>"
+            f"<tr><th>Link-pair comparable sites (mean)</th><td>{_safe_html(str(link_sites.get('mean', 'n/a')))}</td></tr>"
+            f"<tr><th>Link-pair comparable sites (p10)</th><td>{_safe_html(str(link_sites.get('p10', 'n/a')))}</td></tr>"
+        )
+
+        hist_rows = ""
+        hist = seq_quality.get("pairwise_snp_distance_histogram") or sequence_summary_data.get("pairwise_snp_distance_histogram") or {}
+        for bin_name in ["0-5", "6-12", "13-25", ">25", "unknown"]:
+            if bin_name in hist:
+                hist_rows += f"<tr><td>{_safe_html(bin_name)}</td><td>{_safe_html(str(hist.get(bin_name, 0)))}</td></tr>"
+
+        lineage_html = ""
+        if lineage_rows:
+            lineage_html = (
+                "<h3>Lineage distribution (reporting window)</h3>"
+                "<div class='tbl-wrap'><table><thead><tr><th>Lineage</th><th>Cases</th></tr></thead>"
+                f"<tbody>{lineage_rows}</tbody></table></div>"
+            )
+        hist_html = ""
+        if hist_rows:
+            hist_html = (
+                "<h3>Pairwise SNP distance distribution</h3>"
+                "<div class='tbl-wrap'><table><thead><tr><th>Distance bin</th><th>Pairs</th></tr></thead>"
+                f"<tbody>{hist_rows}</tbody></table></div>"
+            )
+
+        kpi_extra_html = (
+            "<h3>Growth and sequencing quality context</h3>"
+            f"<table class='kv-table'><tbody>{growth_rows}</tbody></table>"
+            "<h3>Comparable-site quality indicators</h3>"
+            f"<table class='kv-table'><tbody>{seq_quality_rows}</tbody></table>"
+            f"{lineage_html}"
+            f"{hist_html}"
+        )
+
     # 6. Weekly trends table
     trend_rows_html = ""
     for r in weekly_trends:
@@ -2064,6 +2123,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
       <h2>Programme surveillance KPIs (last 12 weeks)</h2>
       {kpi_kv}
       {region_html}
+            {kpi_extra_html}
     </section>
 
     <section class="card" id="weekly">

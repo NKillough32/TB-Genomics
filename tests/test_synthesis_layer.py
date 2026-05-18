@@ -1,5 +1,6 @@
 from backend.synthesis.scoring import cluster_priority_score
 from backend.synthesis.transmission_synthesis import (
+    _bool_temporal_support,
     _epi_support_level,
     _sequence_proxy_distance,
     build_transmission_synthesis,
@@ -67,6 +68,14 @@ def test_epi_support_level_combines_temporal_and_geographic_context():
     assert _epi_support_level(True, False) == "temporal_only"
     assert _epi_support_level(False, True) == "geographic_only"
     assert _epi_support_level(False, False) == "none"
+
+
+def test_bool_temporal_support_enforces_direction_with_tolerance():
+    dt = __import__("datetime").date
+    source = dt(2026, 1, 20)
+    target = dt(2026, 1, 10)
+    assert _bool_temporal_support(source, target, window_days=45, tolerance_days=5) is False
+    assert _bool_temporal_support(source, target, window_days=45, tolerance_days=15) is True
 
 
 def test_transmission_synthesis_reports_validation_and_calibration(monkeypatch):
@@ -143,6 +152,84 @@ def test_transmission_synthesis_reports_validation_and_calibration(monkeypatch):
     assert payload["pairs"][0]["epi_support"] == "temporal_and_geographic"
     assert "epi_evidence" in payload["pairs"][0]
     assert payload["warning"].startswith("This synthesis output is heuristic")
+
+
+def test_transmission_synthesis_flags_lineage_and_resistance_discordance(monkeypatch):
+    from backend.synthesis import transmission_synthesis as mod
+
+    monkeypatch.setattr(
+        mod,
+        "_case_rows",
+        lambda db, cluster_id=None: [
+            {
+                "case_id": "case-a",
+                "specimen_date": __import__("datetime").date(2026, 2, 20),
+                "region": "A",
+                "cluster_id": "cluster-1",
+                "lineage": "L2",
+                "predicted_drug_resistance": {"rifampicin": "resistant"},
+                "sequence": "ACGT",
+                "mean_depth": 40.0,
+                "coverage_breadth": 0.98,
+                "qc_status": "pass",
+                "contamination_flag": False,
+            },
+            {
+                "case_id": "case-b",
+                "specimen_date": __import__("datetime").date(2026, 1, 1),
+                "region": "A",
+                "cluster_id": "cluster-1",
+                "lineage": "L4",
+                "predicted_drug_resistance": {"isoniazid": "resistant"},
+                "sequence": "ACGT",
+                "mean_depth": 40.0,
+                "coverage_breadth": 0.98,
+                "qc_status": "pass",
+                "contamination_flag": False,
+            },
+        ],
+    )
+    monkeypatch.setattr(
+        mod,
+        "_load_sequence_proxy",
+        lambda: (
+            {
+                "case-a": {"cluster_id": "cluster-1"},
+                "case-b": {"cluster_id": "cluster-1"},
+            },
+            25,
+            0.8,
+        ),
+    )
+    monkeypatch.setattr(
+        mod,
+        "_export_json",
+        lambda path: {
+            "edges": [
+                {
+                    "source": "case-a",
+                    "target": "case-b",
+                    "probability": 0.95,
+                    "confidence": "high",
+                }
+            ]
+        },
+    )
+    monkeypatch.setattr(
+        mod,
+        "load_epi_records_for_cases",
+        lambda db, case_ids: {"contact_links": {}, "location_events": {}},
+    )
+
+    payload = build_transmission_synthesis(db=object(), cluster_id=None)
+    pair = payload["pairs"][0]
+
+    assert pair["lineage_concordance"] == "discordant"
+    assert pair["resistance_profile_concordance"] == "discordant"
+    assert "lineage_discordance" in pair["flags"]
+    assert "resistance_profile_discordance" in pair["flags"]
+    assert "temporally_implausible_direction" in pair["flags"]
+    assert pair["confidence_code"] == "contradictory"
 
 
 # ---------------------------------------------------------------------------

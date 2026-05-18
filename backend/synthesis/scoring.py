@@ -136,7 +136,7 @@ def category_label(category: str) -> str:
 
 def serialise_parameters(values: dict[str, Any]) -> dict[str, Any]:
     """Keep config echoed in responses JSON-safe and explicit."""
-    return {
+    serialised = {
         "low_snp_threshold": int(values["low_snp_threshold"]),
         "high_snp_contradiction_threshold": int(values["high_snp_contradiction_threshold"]),
         "temporal_window_days": int(values["temporal_window_days"]),
@@ -146,4 +146,7 @@ def serialise_parameters(values: dict[str, Any]) -> dict[str, Any]:
         "rapid_growth_case_threshold": int(values["rapid_growth_case_threshold"]),
         "wide_date_spread_days": int(values["wide_date_spread_days"]),
     }
+    if "temporal_backfill_tolerance_days" in values:
+        serialised["temporal_backfill_tolerance_days"] = int(values["temporal_backfill_tolerance_days"])
+    return serialised
 

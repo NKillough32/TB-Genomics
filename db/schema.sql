@@ -126,6 +126,10 @@ CREATE TABLE IF NOT EXISTS contacts (
   contact_type TEXT,
   relationship_type TEXT,
   pseudonymised_identifier TEXT,
+  entered_in_error BOOLEAN NOT NULL DEFAULT FALSE,
+  entered_in_error_at TIMESTAMP,
+  entered_in_error_by TEXT,
+  entered_in_error_reason TEXT,
   created_at TIMESTAMP DEFAULT NOW()
 );
 
@@ -136,6 +140,10 @@ CREATE TABLE IF NOT EXISTS locations (
   address_line TEXT,
   geographic_region TEXT,
   postcode_prefix TEXT,
+  entered_in_error BOOLEAN NOT NULL DEFAULT FALSE,
+  entered_in_error_at TIMESTAMP,
+  entered_in_error_by TEXT,
+  entered_in_error_reason TEXT,
   created_at TIMESTAMP DEFAULT NOW()
 );
 
@@ -148,6 +156,10 @@ CREATE TABLE IF NOT EXISTS exposures (
   confidence TEXT CHECK (confidence IS NULL OR confidence IN ('low', 'medium', 'high')),
   source TEXT,
   notes TEXT,
+  entered_in_error BOOLEAN NOT NULL DEFAULT FALSE,
+  entered_in_error_at TIMESTAMP,
+  entered_in_error_by TEXT,
+  entered_in_error_reason TEXT,
   created_at TIMESTAMP DEFAULT NOW()
 );
 
@@ -162,6 +174,10 @@ CREATE TABLE IF NOT EXISTS case_location_events (
   confidence TEXT CHECK (confidence IS NULL OR confidence IN ('low', 'medium', 'high')),
   source TEXT,
   notes TEXT,
+  entered_in_error BOOLEAN NOT NULL DEFAULT FALSE,
+  entered_in_error_at TIMESTAMP,
+  entered_in_error_by TEXT,
+  entered_in_error_reason TEXT,
   created_at TIMESTAMP DEFAULT NOW()
 );
 
@@ -176,6 +192,10 @@ CREATE TABLE IF NOT EXISTS case_contact_links (
   source TEXT,
   confidence TEXT CHECK (confidence IS NULL OR confidence IN ('low', 'medium', 'high')),
   notes TEXT,
+  entered_in_error BOOLEAN NOT NULL DEFAULT FALSE,
+  entered_in_error_at TIMESTAMP,
+  entered_in_error_by TEXT,
+  entered_in_error_reason TEXT,
   created_at TIMESTAMP DEFAULT NOW()
 );
 
@@ -202,6 +222,10 @@ CREATE TABLE IF NOT EXISTS case_pair_reviews (
   reviewer TEXT NOT NULL,
   notes TEXT,
   source_cluster_id UUID REFERENCES clusters(cluster_id) ON DELETE SET NULL,
+  entered_in_error BOOLEAN NOT NULL DEFAULT FALSE,
+  entered_in_error_at TIMESTAMP,
+  entered_in_error_by TEXT,
+  entered_in_error_reason TEXT,
   reviewed_at TIMESTAMP DEFAULT NOW(),
   PRIMARY KEY (case_a, case_b),
   CHECK (case_a <> case_b)

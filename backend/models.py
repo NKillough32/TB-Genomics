@@ -147,6 +147,10 @@ class Contact(Base):
     contact_type = Column(String)
     relationship_type = Column(String)
     pseudonymised_identifier = Column(String)
+    entered_in_error = Column(Boolean, nullable=False, default=False)
+    entered_in_error_at = Column(TIMESTAMP)
+    entered_in_error_by = Column(String)
+    entered_in_error_reason = Column(String)
     created_at = Column(TIMESTAMP)
 
 
@@ -159,6 +163,10 @@ class Location(Base):
     address_line = Column(String)
     geographic_region = Column(String)
     postcode_prefix = Column(String)
+    entered_in_error = Column(Boolean, nullable=False, default=False)
+    entered_in_error_at = Column(TIMESTAMP)
+    entered_in_error_by = Column(String)
+    entered_in_error_reason = Column(String)
     created_at = Column(TIMESTAMP)
 
 
@@ -173,6 +181,10 @@ class Exposure(Base):
     confidence = Column(String)
     source = Column(String)
     notes = Column(String)
+    entered_in_error = Column(Boolean, nullable=False, default=False)
+    entered_in_error_at = Column(TIMESTAMP)
+    entered_in_error_by = Column(String)
+    entered_in_error_reason = Column(String)
     created_at = Column(TIMESTAMP)
 
 
@@ -189,6 +201,10 @@ class CaseLocationEvent(Base):
     confidence = Column(String)
     source = Column(String)
     notes = Column(String)
+    entered_in_error = Column(Boolean, nullable=False, default=False)
+    entered_in_error_at = Column(TIMESTAMP)
+    entered_in_error_by = Column(String)
+    entered_in_error_reason = Column(String)
     created_at = Column(TIMESTAMP)
 
 
@@ -205,6 +221,10 @@ class CaseContactLink(Base):
     source = Column(String)
     confidence = Column(String)
     notes = Column(String)
+    entered_in_error = Column(Boolean, nullable=False, default=False)
+    entered_in_error_at = Column(TIMESTAMP)
+    entered_in_error_by = Column(String)
+    entered_in_error_reason = Column(String)
     created_at = Column(TIMESTAMP)
 
 
@@ -217,5 +237,9 @@ class CasePairReview(Base):
     reviewer = Column(String, nullable=False)
     notes = Column(String)
     source_cluster_id = Column(UUID(as_uuid=True), ForeignKey("clusters.cluster_id"))
+    entered_in_error = Column(Boolean, nullable=False, default=False)
+    entered_in_error_at = Column(TIMESTAMP)
+    entered_in_error_by = Column(String)
+    entered_in_error_reason = Column(String)
     reviewed_at = Column(TIMESTAMP)
 

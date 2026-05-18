@@ -31,6 +31,7 @@ class SynthesisConfig:
     rapid_growth_recent_days: int = 90
     rapid_growth_case_threshold: int = 4
     wide_date_spread_days: int = 180
+    temporal_backfill_tolerance_days: int = 30
 
 
 def _export_json(path: str) -> dict[str, Any]:
@@ -99,6 +100,36 @@ def _is_resistant(value: Any) -> bool:
     return False
 
 
+def _resistant_drug_set(value: Any) -> set[str]:
+    if isinstance(value, dict):
+        result: set[str] = set()
+        for drug, status in value.items():
+            if str(status).strip().lower() in {"r", "resistant"}:
+                result.add(str(drug).strip().lower())
+        return result
+    if isinstance(value, list):
+        return {str(item).strip().lower() for item in value if str(item).strip()}
+    if isinstance(value, str):
+        value = value.strip().lower()
+        if value in {"r", "resistant", "mdr", "xdr"}:
+            return {value}
+    return set()
+
+
+def _resistance_profile_concordance(source_profile: Any, target_profile: Any) -> str:
+    src = _resistant_drug_set(source_profile)
+    tgt = _resistant_drug_set(target_profile)
+    if not src and not tgt:
+        return "unknown"
+    if src and tgt and src == tgt:
+        return "concordant"
+    if src and tgt and src.intersection(tgt):
+        return "partial_overlap"
+    if src and tgt:
+        return "discordant"
+    return "one_sided"
+
+
 def _case_rows(db: Session, cluster_id: str | None = None):
     sql = """
         SELECT c.pseudonymised_case_id::text AS case_id,
@@ -108,6 +139,8 @@ def _case_rows(db: Session, cluster_id: str | None = None):
                COALESCE(ti.lineage, '') AS lineage,
                ti.predicted_drug_resistance,
                cs.sequence,
+             sqm.mean_depth,
+             sqm.coverage_breadth,
                LOWER(COALESCE(sqm.qc_status, 'not_reported')) AS qc_status,
                COALESCE(sqm.contamination_flag, FALSE) AS contamination_flag
         FROM cases c
@@ -131,10 +164,16 @@ def _normalise_cluster_id(cluster_id: str) -> str:
     return val
 
 
-def _bool_temporal_support(source_date, target_date, window_days: int) -> bool:
+def _bool_temporal_support(
+    source_date,
+    target_date,
+    window_days: int,
+    tolerance_days: int = 30,
+) -> bool:
     if not source_date or not target_date:
         return False
-    return abs((target_date - source_date).days) <= window_days
+    delta_days = (target_date - source_date).days
+    return (-tolerance_days) <= delta_days <= window_days
 
 
 def _epi_support_level(temporal_support: bool, geographic_support: bool) -> str:
@@ -183,6 +222,8 @@ def build_transmission_synthesis(
             "lineage": str(row["lineage"] or ""),
             "predicted_drug_resistance": row["predicted_drug_resistance"],
             "sequence": str(row["sequence"] or ""),
+            "mean_depth": float(row["mean_depth"]) if row.get("mean_depth") is not None else None,
+            "coverage_breadth": float(row["coverage_breadth"]) if row.get("coverage_breadth") is not None else None,
             "qc_status": str(row["qc_status"] or "not_reported"),
             "contamination_flag": bool(row["contamination_flag"]),
             "sequence_cluster_id": str((sequence_assignments.get(cid) or {}).get("cluster_id") or ""),
@@ -246,8 +287,30 @@ def build_transmission_synthesis(
             sequence_threshold,
         )
 
-        temporal_support = _bool_temporal_support(src["specimen_date"], tgt["specimen_date"], cfg.temporal_window_days)
+        temporal_support = _bool_temporal_support(
+            src["specimen_date"],
+            tgt["specimen_date"],
+            cfg.temporal_window_days,
+            cfg.temporal_backfill_tolerance_days,
+        )
         geographic_support = src["region"] == tgt["region"]
+        temporal_delta_days = (
+            (tgt["specimen_date"] - src["specimen_date"]).days
+            if src.get("specimen_date") and tgt.get("specimen_date")
+            else None
+        )
+
+        lineage_source = str(src.get("lineage") or "").strip().lower()
+        lineage_target = str(tgt.get("lineage") or "").strip().lower()
+        if lineage_source and lineage_target:
+            lineage_concordance = "concordant" if lineage_source == lineage_target else "discordant"
+        else:
+            lineage_concordance = "unknown"
+
+        resistance_concordance = _resistance_profile_concordance(
+            src.get("predicted_drug_resistance"),
+            tgt.get("predicted_drug_resistance"),
+        )
 
         # Structured epi evidence from database records (replaces proxy-only approach)
         epi_ev = compute_epi_evidence(
@@ -290,6 +353,30 @@ def build_transmission_synthesis(
             high_posterior_threshold=cfg.high_posterior_threshold,
         )
 
+        if lineage_concordance == "discordant":
+            p_flags.append("lineage_discordance")
+        elif lineage_concordance == "concordant":
+            p_flags.append("lineage_concordance")
+
+        if resistance_concordance == "discordant":
+            p_flags.append("resistance_profile_discordance")
+        elif resistance_concordance == "concordant":
+            p_flags.append("resistance_profile_concordance")
+        elif resistance_concordance == "partial_overlap":
+            p_flags.append("resistance_profile_partial_overlap")
+
+        if temporal_delta_days is not None and temporal_delta_days < -cfg.temporal_backfill_tolerance_days:
+            p_flags.append("temporally_implausible_direction")
+
+        low_depth_threshold = 10.0
+        low_coverage_threshold = 0.90
+        source_low_depth = src.get("mean_depth") is not None and float(src["mean_depth"]) < low_depth_threshold
+        target_low_depth = tgt.get("mean_depth") is not None and float(tgt["mean_depth"]) < low_depth_threshold
+        source_low_cov = src.get("coverage_breadth") is not None and float(src["coverage_breadth"]) < low_coverage_threshold
+        target_low_cov = tgt.get("coverage_breadth") is not None and float(tgt["coverage_breadth"]) < low_coverage_threshold
+        if source_low_depth or target_low_depth or source_low_cov or target_low_cov:
+            p_flags.append("low_sequence_coverage_for_pair")
+
         category = confidence_category(
             snp_distance=snp,
             posterior_probability=posterior,
@@ -298,6 +385,13 @@ def build_transmission_synthesis(
             high_snp_contradiction_threshold=cfg.high_snp_contradiction_threshold,
             high_posterior_threshold=cfg.high_posterior_threshold,
         )
+        if "lineage_discordance" in p_flags:
+            category = "contradictory"
+        elif "resistance_profile_discordance" in p_flags:
+            if category == "strong_support":
+                category = "moderate_support"
+            elif category == "moderate_support":
+                category = "insufficient_evidence"
 
         interpretation = interpretation_text(category, p_flags)
         priority = pair_priority_score(
@@ -317,8 +411,11 @@ def build_transmission_synthesis(
                 "snp_distance": snp,
                 "posterior_probability": round(posterior, 4),
                 "temporal_support": temporal_support,
+                "temporal_delta_days": temporal_delta_days,
                 "geographic_support": geographic_support,
                 "epi_support": epi_support,
+                "lineage_concordance": lineage_concordance,
+                "resistance_profile_concordance": resistance_concordance,
                 "sequence_cluster_match": sequence_cluster_match,
                 "snp_distance_source": snp_source,
                 "confidence": category_display(category),
@@ -338,7 +435,8 @@ def build_transmission_synthesis(
             cluster_strong_or_contradictory[pair_cluster] = cluster_strong_or_contradictory.get(pair_cluster, 0) + 1
 
     by_cluster: list[dict[str, Any]] = []
-    recent_cutoff = datetime.utcnow().date() - timedelta(days=cfg.rapid_growth_recent_days)
+    today = datetime.utcnow().date()
+    recent_cutoff = today - timedelta(days=cfg.rapid_growth_recent_days)
 
     for cluster_key, members in sorted(cluster_members.items()):
         if cluster_id and cluster_key != cluster_id:
@@ -347,6 +445,10 @@ def build_transmission_synthesis(
         member_rows = [case_index[m] for m in members if m in case_index]
         specimen_dates = [m["specimen_date"] for m in member_rows if m["specimen_date"]]
         regions = {m["region"] for m in member_rows if m["region"]}
+        lineage_distribution: dict[str, int] = {}
+        for member in member_rows:
+            lineage_key = str(member.get("lineage") or "unknown").strip() or "unknown"
+            lineage_distribution[lineage_key] = lineage_distribution.get(lineage_key, 0) + 1
         resistance_count = sum(1 for m in member_rows if _is_resistant(m["predicted_drug_resistance"]))
         missing_sequence_or_qc = sum(
             1
@@ -355,6 +457,33 @@ def build_transmission_synthesis(
         )
         recent_case_count = sum(
             1 for m in member_rows if m["specimen_date"] and m["specimen_date"] >= recent_cutoff
+        )
+        cases_last_30 = sum(
+            1 for m in member_rows if m["specimen_date"] and m["specimen_date"] >= (today - timedelta(days=30))
+        )
+        cases_prev_30 = sum(
+            1
+            for m in member_rows
+            if m["specimen_date"]
+            and (today - timedelta(days=60)) <= m["specimen_date"] < (today - timedelta(days=30))
+        )
+        cases_last_60 = sum(
+            1 for m in member_rows if m["specimen_date"] and m["specimen_date"] >= (today - timedelta(days=60))
+        )
+        cases_prev_60 = sum(
+            1
+            for m in member_rows
+            if m["specimen_date"]
+            and (today - timedelta(days=120)) <= m["specimen_date"] < (today - timedelta(days=60))
+        )
+        cases_last_90 = sum(
+            1 for m in member_rows if m["specimen_date"] and m["specimen_date"] >= (today - timedelta(days=90))
+        )
+        cases_prev_90 = sum(
+            1
+            for m in member_rows
+            if m["specimen_date"]
+            and (today - timedelta(days=180)) <= m["specimen_date"] < (today - timedelta(days=90))
         )
 
         c_flags = cluster_flags(
@@ -398,9 +527,18 @@ def build_transmission_synthesis(
                     "resistance_case_count": resistance_count,
                     "missing_sequence_or_qc_case_count": missing_sequence_or_qc,
                     "recent_case_count": recent_case_count,
+                    "growth_windows": {
+                        "last_30_days": cases_last_30,
+                        "previous_30_days": cases_prev_30,
+                        "last_60_days": cases_last_60,
+                        "previous_60_days": cases_prev_60,
+                        "last_90_days": cases_last_90,
+                        "previous_90_days": cases_prev_90,
+                    },
                     "priority_score": c_priority,
                     "priority_band": score_band(c_priority),
                 },
+                "lineage_distribution": dict(sorted(lineage_distribution.items())),
                 "confidence_counts": {
                     "strong_support": sum(1 for p in cluster_pairs if p["confidence_code"] == "strong_support"),
                     "moderate_support": sum(1 for p in cluster_pairs if p["confidence_code"] == "moderate_support"),
@@ -424,6 +562,11 @@ def build_transmission_synthesis(
     by_cluster.sort(key=lambda x: (-x["summary"]["priority_score"], x["cluster_id"]))
     pairs.sort(key=lambda x: (-x["priority_score"], -x["posterior_probability"]))
 
+    global_lineage_distribution: dict[str, int] = {}
+    for case in case_index.values():
+        lineage_key = str(case.get("lineage") or "unknown").strip() or "unknown"
+        global_lineage_distribution[lineage_key] = global_lineage_distribution.get(lineage_key, 0) + 1
+
     return {
         "generated_at": datetime.utcnow().isoformat() + "Z",
         "cluster_id": cluster_id,
@@ -432,6 +575,7 @@ def build_transmission_synthesis(
             "pair_count": len(pairs),
             "high_priority_pairs": sum(1 for p in pairs if p["priority_score"] >= 70),
             "contradictory_pairs": sum(1 for p in pairs if p["confidence_code"] == "contradictory"),
+            "lineage_distribution": dict(sorted(global_lineage_distribution.items())),
         },
         "clusters": by_cluster,
         "pairs": pairs,

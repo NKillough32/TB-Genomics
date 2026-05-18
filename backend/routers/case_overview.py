@@ -133,6 +133,56 @@ def surveillance_kpis(weeks: int = 12, db: Session = Depends(get_db)) -> dict:
     if median_days is not None:
         median_days = round(float(median_days), 2)
 
+    lineage_rows = db.execute(
+        text(
+            """
+            SELECT COALESCE(NULLIF(TRIM(ti.lineage), ''), 'unknown') AS lineage,
+                   COUNT(DISTINCT c.pseudonymised_case_id)::int AS case_count
+            FROM cases c
+            LEFT JOIN tb_interpretation ti ON ti.sample_id = c.pseudonymised_case_id
+            WHERE c.specimen_date >= CURRENT_DATE - (:weeks * INTERVAL '7 days')
+            GROUP BY COALESCE(NULLIF(TRIM(ti.lineage), ''), 'unknown')
+            ORDER BY case_count DESC, lineage ASC
+            """
+        ),
+        params,
+    ).mappings().all()
+
+    growth_row = db.execute(
+        text(
+            """
+            SELECT
+                COUNT(*) FILTER (WHERE specimen_date >= CURRENT_DATE - INTERVAL '30 days')::int AS cases_last_30,
+                COUNT(*) FILTER (
+                    WHERE specimen_date >= CURRENT_DATE - INTERVAL '60 days'
+                      AND specimen_date < CURRENT_DATE - INTERVAL '30 days'
+                )::int AS cases_prev_30,
+                COUNT(*) FILTER (WHERE specimen_date >= CURRENT_DATE - INTERVAL '60 days')::int AS cases_last_60,
+                COUNT(*) FILTER (
+                    WHERE specimen_date >= CURRENT_DATE - INTERVAL '120 days'
+                      AND specimen_date < CURRENT_DATE - INTERVAL '60 days'
+                )::int AS cases_prev_60,
+                COUNT(*) FILTER (WHERE specimen_date >= CURRENT_DATE - INTERVAL '90 days')::int AS cases_last_90,
+                COUNT(*) FILTER (
+                    WHERE specimen_date >= CURRENT_DATE - INTERVAL '180 days'
+                      AND specimen_date < CURRENT_DATE - INTERVAL '90 days'
+                )::int AS cases_prev_90
+            FROM cases
+            """
+        )
+    ).mappings().first() or {}
+
+    sequence_summary = {}
+    sequence_summary_path = _export_path("sequence_clustering_summary.json")
+    if os.path.exists(sequence_summary_path):
+        try:
+            with open(sequence_summary_path, "r", encoding="utf-8") as handle:
+                payload = json.load(handle)
+                if isinstance(payload, dict):
+                    sequence_summary = payload
+        except Exception:
+            sequence_summary = {}
+
     return {
         "window_weeks": weeks,
         "eligible_cases": eligible_cases,
@@ -144,6 +194,26 @@ def surveillance_kpis(weeks: int = 12, db: Session = Depends(get_db)) -> dict:
         "qc_pass_pct": _to_optional_pct(qc_pass_cases, qc_reported_cases),
         "contamination_flag_cases": _to_int(kpi_rows["contamination_flag_cases"]),
         "median_days_specimen_to_qc": median_days,
+        "lineage_distribution": [
+            {
+                "lineage": str(row.get("lineage") or "unknown"),
+                "case_count": _to_int(row.get("case_count")),
+            }
+            for row in lineage_rows
+        ],
+        "cluster_growth": {
+            "last_30_days": _to_int(growth_row.get("cases_last_30")),
+            "previous_30_days": _to_int(growth_row.get("cases_prev_30")),
+            "last_60_days": _to_int(growth_row.get("cases_last_60")),
+            "previous_60_days": _to_int(growth_row.get("cases_prev_60")),
+            "last_90_days": _to_int(growth_row.get("cases_last_90")),
+            "previous_90_days": _to_int(growth_row.get("cases_prev_90")),
+        },
+        "sequence_clustering_quality": {
+            "pairwise_comparable_sites": sequence_summary.get("pairwise_comparable_sites"),
+            "link_pair_comparable_sites": sequence_summary.get("link_pair_comparable_sites"),
+            "pairwise_snp_distance_histogram": sequence_summary.get("pairwise_snp_distance_histogram"),
+        },
         "representativeness_by_region": [
             {
                 "region": row["region"],

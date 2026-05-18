@@ -1385,6 +1385,7 @@ def outbreak_report(db: Session = Depends(get_db)):
     section_divider("Sequencing and QC", min_following_height=3.0)
     append_section_heading("Programme Surveillance KPIs (Last 12 Weeks)")
     if kpi_data:
+        growth = kpi_data.get("cluster_growth") or {}
         kpi_table_data = [
             ["Eligible Cases", str(kpi_data.get("eligible_cases", 0))],
             ["Sequenced Cases", str(kpi_data.get("sequenced_cases", 0))],
@@ -1395,6 +1396,12 @@ def outbreak_report(db: Session = Depends(get_db)):
             ["QC Pass Rate (%)", str(kpi_data.get("qc_pass_pct", "n/a"))],
             ["Contamination Flags", str(kpi_data.get("contamination_flag_cases", 0))],
             ["Median Days Specimen to QC", str(kpi_data.get("median_days_specimen_to_qc", "n/a"))],
+            ["Cases in Last 30 Days", str(growth.get("last_30_days", 0))],
+            ["Cases in Previous 30 Days", str(growth.get("previous_30_days", 0))],
+            ["Cases in Last 60 Days", str(growth.get("last_60_days", 0))],
+            ["Cases in Previous 60 Days", str(growth.get("previous_60_days", 0))],
+            ["Cases in Last 90 Days", str(growth.get("last_90_days", 0))],
+            ["Cases in Previous 90 Days", str(growth.get("previous_90_days", 0))],
         ]
         kpi_table = Table(wrap_rows(kpi_table_data, header_style=cell_body_style, body_style=cell_body_style), colWidths=[2.8 * inch, 3.0 * inch])
         kpi_table.setStyle(standard_table_style(font_size=9.0, header=False))
@@ -1428,6 +1435,48 @@ def outbreak_report(db: Session = Depends(get_db)):
             region_table = Table(wrap_rows(region_rows), colWidths=[2.1 * inch, 1.1 * inch, 1.1 * inch, 1.1 * inch])
             region_table.setStyle(standard_table_style(font_size=8.4, header=True))
             append_table_with_caption(region_table, spacer_after=0.0)
+
+        lineage_distribution = kpi_data.get("lineage_distribution") or []
+        if lineage_distribution:
+            story.append(Spacer(1, 0.12 * inch))
+            story.append(Paragraph("Lineage Distribution (Reporting Window)", styles["Heading4"]))
+            lineage_rows = [["Lineage", "Cases"]]
+            for row in lineage_distribution[:8]:
+                lineage_rows.append([
+                    str(row.get("lineage", "unknown")),
+                    str(row.get("case_count", 0)),
+                ])
+            lineage_table = Table(wrap_rows(lineage_rows), colWidths=[2.8 * inch, 1.6 * inch])
+            lineage_table.setStyle(standard_table_style(font_size=8.4, header=True))
+            append_table_with_caption(lineage_table, spacer_after=0.0)
+
+        seq_quality = kpi_data.get("sequence_clustering_quality") or {}
+        pairwise_sites = seq_quality.get("pairwise_comparable_sites") or {}
+        link_sites = seq_quality.get("link_pair_comparable_sites") or {}
+        seq_quality_rows = [
+            ["Pairwise Comparable Sites (mean)", str(pairwise_sites.get("mean", "n/a"))],
+            ["Pairwise Comparable Sites (p10)", str(pairwise_sites.get("p10", "n/a"))],
+            ["Link-Pair Comparable Sites (mean)", str(link_sites.get("mean", "n/a"))],
+            ["Link-Pair Comparable Sites (p10)", str(link_sites.get("p10", "n/a"))],
+        ]
+        seq_quality_table = Table(wrap_rows(seq_quality_rows, header_style=cell_body_style, body_style=cell_body_style), colWidths=[3.2 * inch, 2.6 * inch])
+        seq_quality_table.setStyle(standard_table_style(font_size=8.6, header=False))
+        story.append(Spacer(1, 0.12 * inch))
+        story.append(Paragraph("Comparable-Site Quality Indicators", styles["Heading4"]))
+        append_table_with_caption(seq_quality_table, spacer_after=0.0)
+
+        snp_hist = seq_quality.get("pairwise_snp_distance_histogram") or (sequence_summary_data.get("pairwise_snp_distance_histogram") if sequence_summary_data else {}) or {}
+        if snp_hist:
+            hist_rows = [["Distance Bin", "Pair Count"]]
+            for bin_name in ["0-5", "6-12", "13-25", ">25", "unknown"]:
+                if bin_name in snp_hist:
+                    hist_rows.append([bin_name, str(snp_hist.get(bin_name, 0))])
+            if len(hist_rows) > 1:
+                story.append(Spacer(1, 0.12 * inch))
+                story.append(Paragraph("Pairwise SNP Distance Distribution", styles["Heading4"]))
+                hist_table = Table(wrap_rows(hist_rows), colWidths=[2.3 * inch, 1.8 * inch])
+                hist_table.setStyle(standard_table_style(font_size=8.4, header=True))
+                append_table_with_caption(hist_table, spacer_after=0.0)
     else:
         story.append(Paragraph(
             "Full surveillance KPI artifact unavailable at report generation time. "

@@ -318,13 +318,44 @@ In plain language, these endpoints answer:
 Important limitation:
 - The synthesis layer is heuristic and non-validated.
 - SNP support is currently based on precomputed sequence-cluster assignments, not a fully validated SNP alignment pipeline.
-- Epidemiological support is still proxy-based and needs structured exposure/contact fields for stronger interpretation.
+- Epidemiological support now includes structured exposure/contact/location evidence where available, but completeness still varies by operational data quality.
 - Cluster-risk scores need calibration before real-world use.
 - Token-based RBAC is available for API routes. Set `TB_AUTH_REQUIRED=1` and
   configure `TB_AUTH_TOKENS` as `token=role` or `token=subject|role,role`.
   This is not a full NHS identity/access-governance system, but synthesis,
   investigation, ingest, job, and sign-off routes are protected by viewer,
   analyst, operator, and admin role checks.
+
+Calibration and threshold tuning
+--------------------------------
+
+The platform now supports a repeatable reviewer-agreement tuning loop.
+
+Core calibration endpoints:
+
+- GET /analytics/case-pair-calibration
+- GET /analytics/case-pair-calibration/sweep
+
+Use `/analytics/case-pair-calibration` to inspect agreement for one profile and one threshold set.
+Use `/analytics/case-pair-calibration/sweep` to evaluate multiple threshold and weight combinations and return top-ranked candidates by binary Cohen kappa and coverage.
+
+Example sweep query:
+
+```
+/analytics/case-pair-calibration/sweep?snp_strong_threshold_options=4,5,6&snp_moderate_threshold_options=10,12,14&temporal_window_options=30,45,60&strong_epi_weight_options=2,3,4&contradiction_weight_options=-2,-3,-4
+```
+
+Operational rationale for key defaults:
+
+- `TB_CLUSTER_ALERT_MIN_CASES` (default 5): avoids over-alerting on very small groups where unstable denominators inflate apparent growth.
+- `TB_OUTBREAKER_ITER`, `TB_OUTBREAKER_BURNIN`, `TB_OUTBREAKER_THIN`: increase when convergence diagnostics are weak; defaults are set for practical runtime but should be reviewed for larger investigations.
+- `TB_OUTBREAKER_SI_MEAN`, `TB_OUTBREAKER_SI_SD`, `TB_OUTBREAKER_SI_MAX`: set serial-interval priors to your programme context and keep assumptions documented in MDT notes.
+
+Decision framework:
+
+- Prefer candidate profiles with higher binary kappa only when reviewed-pair coverage remains adequate.
+- Keep pairwise SNP/QC/epi contradiction flags as hard review prompts even when model agreement improves.
+- Record chosen profile version and threshold set in governance documentation before operational rollout.
 
 Ingest example bundle (for user onboarding)
 -------------------------------------------

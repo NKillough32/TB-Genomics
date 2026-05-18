@@ -35,6 +35,10 @@ class ExposureOut(ExposureCreate):
     model_config = ConfigDict(from_attributes=True)
 
     exposure_id: UUID
+    entered_in_error: bool = False
+    entered_in_error_at: datetime | None = None
+    entered_in_error_by: str | None = None
+    entered_in_error_reason: str | None = None
     created_at: datetime | None = None
 
 
@@ -49,6 +53,10 @@ class ContactOut(ContactCreate):
     model_config = ConfigDict(from_attributes=True)
 
     contact_id: UUID
+    entered_in_error: bool = False
+    entered_in_error_at: datetime | None = None
+    entered_in_error_by: str | None = None
+    entered_in_error_reason: str | None = None
     created_at: datetime | None = None
 
 
@@ -64,6 +72,10 @@ class LocationOut(LocationCreate):
     model_config = ConfigDict(from_attributes=True)
 
     location_id: UUID
+    entered_in_error: bool = False
+    entered_in_error_at: datetime | None = None
+    entered_in_error_by: str | None = None
+    entered_in_error_reason: str | None = None
     created_at: datetime | None = None
 
 
@@ -80,6 +92,10 @@ class CaseLocationEventOut(BaseModel):
     confidence: str | None = None
     source: str | None = None
     notes: str | None = None
+    entered_in_error: bool = False
+    entered_in_error_at: datetime | None = None
+    entered_in_error_by: str | None = None
+    entered_in_error_reason: str | None = None
     created_at: datetime | None = None
 
 
@@ -126,7 +142,15 @@ class CaseContactLinkOut(BaseModel):
     source: str | None = None
     confidence: str | None = None
     notes: str | None = None
+    entered_in_error: bool = False
+    entered_in_error_at: datetime | None = None
+    entered_in_error_by: str | None = None
+    entered_in_error_reason: str | None = None
     created_at: datetime | None = None
+
+
+class EnteredInErrorPayload(BaseModel):
+    reason: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
 
 class CaseContactLinkCreate(BaseModel):
@@ -165,6 +189,13 @@ def _get_or_404(db: Session, model, primary_key: UUID, label: str):
     return item
 
 
+def _get_active_or_404(db: Session, model, primary_key: UUID, label: str):
+    item = _get_or_404(db, model, primary_key, label)
+    if bool(getattr(item, "entered_in_error", False)):
+        raise HTTPException(status_code=404, detail=f"{label} not found")
+    return item
+
+
 def _clean_optional(value: str | None) -> str | None:
     if value is None:
         return None
@@ -184,7 +215,7 @@ def _create_inline_exposure(
     end_date: date | None = None,
 ) -> UUID | None:
     if exposure_id:
-        _get_or_404(db, Exposure, exposure_id, "Exposure")
+        _get_active_or_404(db, Exposure, exposure_id, "Exposure")
         return exposure_id
     exposure_type = _clean_optional(exposure_type)
     if not exposure_type:
@@ -207,9 +238,13 @@ def _create_inline_exposure(
 def list_exposures(
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
+    include_entered_in_error: bool = Query(False),
     db: Session = Depends(get_db),
 ):
-    return db.query(Exposure).order_by(Exposure.created_at.desc()).offset(offset).limit(limit).all()
+    query = db.query(Exposure)
+    if not include_entered_in_error:
+        query = query.filter(Exposure.entered_in_error.is_(False))
+    return query.order_by(Exposure.created_at.desc()).offset(offset).limit(limit).all()
 
 
 @router.post("/exposures", response_model=ExposureOut)
@@ -230,16 +265,20 @@ def create_exposure(
 
 @router.get("/exposures/{exposure_id}", response_model=ExposureOut)
 def get_exposure(exposure_id: UUID, db: Session = Depends(get_db)):
-    return _get_or_404(db, Exposure, exposure_id, "Exposure")
+    return _get_active_or_404(db, Exposure, exposure_id, "Exposure")
 
 
 @router.get("/contacts", response_model=list[ContactOut])
 def list_contacts(
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
+    include_entered_in_error: bool = Query(False),
     db: Session = Depends(get_db),
 ):
-    return db.query(Contact).order_by(Contact.created_at.desc()).offset(offset).limit(limit).all()
+    query = db.query(Contact)
+    if not include_entered_in_error:
+        query = query.filter(Contact.entered_in_error.is_(False))
+    return query.order_by(Contact.created_at.desc()).offset(offset).limit(limit).all()
 
 
 @router.post("/contacts", response_model=ContactOut)
@@ -260,16 +299,20 @@ def create_contact(
 
 @router.get("/contacts/{contact_id}", response_model=ContactOut)
 def get_contact(contact_id: UUID, db: Session = Depends(get_db)):
-    return _get_or_404(db, Contact, contact_id, "Contact")
+    return _get_active_or_404(db, Contact, contact_id, "Contact")
 
 
 @router.get("/locations", response_model=list[LocationOut])
 def list_locations(
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
+    include_entered_in_error: bool = Query(False),
     db: Session = Depends(get_db),
 ):
-    return db.query(Location).order_by(Location.created_at.desc()).offset(offset).limit(limit).all()
+    query = db.query(Location)
+    if not include_entered_in_error:
+        query = query.filter(Location.entered_in_error.is_(False))
+    return query.order_by(Location.created_at.desc()).offset(offset).limit(limit).all()
 
 
 @router.post("/locations", response_model=LocationOut)
@@ -290,7 +333,7 @@ def create_location(
 
 @router.get("/locations/{location_id}", response_model=LocationOut)
 def get_location(location_id: UUID, db: Session = Depends(get_db)):
-    return _get_or_404(db, Location, location_id, "Location")
+    return _get_active_or_404(db, Location, location_id, "Location")
 
 
 @router.get("/case-location-events", response_model=list[CaseLocationEventOut])
@@ -299,9 +342,12 @@ def list_case_location_events(
     location_id: UUID | None = None,
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
+    include_entered_in_error: bool = Query(False),
     db: Session = Depends(get_db),
 ):
     query = db.query(CaseLocationEvent)
+    if not include_entered_in_error:
+        query = query.filter(CaseLocationEvent.entered_in_error.is_(False))
     if case_id:
         query = query.filter(CaseLocationEvent.case_id == case_id)
     if location_id:
@@ -317,7 +363,7 @@ def create_case_location_event(
 ):
     location_id = payload.location_id
     if location_id:
-        _get_or_404(db, Location, location_id, "Location")
+        _get_active_or_404(db, Location, location_id, "Location")
     else:
         location_name = _clean_optional(payload.location_name)
         if not location_name:
@@ -373,12 +419,12 @@ def update_case_location_event(
     db: Session = Depends(get_db),
     _user: AuthenticatedUser = Depends(require_roles("operator")),
 ):
-    event = _get_or_404(db, CaseLocationEvent, event_id, "Case location event")
+    event = _get_active_or_404(db, CaseLocationEvent, event_id, "Case location event")
     updates = payload.model_dump(exclude_unset=True)
     if "location_id" in updates and updates["location_id"] is not None:
-        _get_or_404(db, Location, updates["location_id"], "Location")
+        _get_active_or_404(db, Location, updates["location_id"], "Location")
     if "exposure_id" in updates and updates["exposure_id"] is not None:
-        _get_or_404(db, Exposure, updates["exposure_id"], "Exposure")
+        _get_active_or_404(db, Exposure, updates["exposure_id"], "Exposure")
     if updates.get("event_type") is not None:
         updates["event_type"] = updates["event_type"].strip()
         if not updates["event_type"]:
@@ -398,9 +444,12 @@ def list_case_contact_links(
     contact_id: UUID | None = None,
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
+    include_entered_in_error: bool = Query(False),
     db: Session = Depends(get_db),
 ):
     query = db.query(CaseContactLink)
+    if not include_entered_in_error:
+        query = query.filter(CaseContactLink.entered_in_error.is_(False))
     if case_id:
         query = query.filter(CaseContactLink.case_id == case_id)
     if contact_id:
@@ -416,7 +465,7 @@ def create_case_contact_link(
 ):
     contact_id = payload.contact_id
     if contact_id:
-        _get_or_404(db, Contact, contact_id, "Contact")
+        _get_active_or_404(db, Contact, contact_id, "Contact")
     else:
         contact_label = _clean_optional(payload.contact_label)
         if not contact_label:
@@ -473,16 +522,180 @@ def update_case_contact_link(
     db: Session = Depends(get_db),
     _user: AuthenticatedUser = Depends(require_roles("operator")),
 ):
-    link = _get_or_404(db, CaseContactLink, link_id, "Case contact link")
+    link = _get_active_or_404(db, CaseContactLink, link_id, "Case contact link")
     updates = payload.model_dump(exclude_unset=True)
     if "contact_id" in updates and updates["contact_id"] is not None:
-        _get_or_404(db, Contact, updates["contact_id"], "Contact")
+        _get_active_or_404(db, Contact, updates["contact_id"], "Contact")
     if "exposure_id" in updates and updates["exposure_id"] is not None:
-        _get_or_404(db, Exposure, updates["exposure_id"], "Exposure")
+        _get_active_or_404(db, Exposure, updates["exposure_id"], "Exposure")
     for key, value in updates.items():
         setattr(link, key, value)
     _write_audit(db, "case_contact_link_updated", _user.subject,
                  {"link_id": str(link_id), "updated_fields": list(updates.keys())})
+    db.commit()
+    db.refresh(link)
+    return link
+
+
+def _mark_entered_in_error(item, user: AuthenticatedUser, reason: str) -> None:
+    item.entered_in_error = True
+    item.entered_in_error_at = datetime.utcnow()
+    item.entered_in_error_by = user.subject
+    item.entered_in_error_reason = reason.strip()
+
+
+def _restore_from_entered_in_error(item) -> None:
+    item.entered_in_error = False
+    item.entered_in_error_at = None
+    item.entered_in_error_by = None
+    item.entered_in_error_reason = None
+
+
+@router.post("/exposures/{exposure_id}/entered-in-error", response_model=ExposureOut)
+def mark_exposure_entered_in_error(
+    exposure_id: UUID,
+    payload: EnteredInErrorPayload,
+    db: Session = Depends(get_db),
+    user: AuthenticatedUser = Depends(require_roles("operator")),
+):
+    exposure = _get_or_404(db, Exposure, exposure_id, "Exposure")
+    _mark_entered_in_error(exposure, user, payload.reason)
+    _write_audit(db, "exposure_entered_in_error", user.subject,
+                 {"exposure_id": str(exposure_id), "reason": payload.reason.strip()})
+    db.commit()
+    db.refresh(exposure)
+    return exposure
+
+
+@router.post("/contacts/{contact_id}/entered-in-error", response_model=ContactOut)
+def mark_contact_entered_in_error(
+    contact_id: UUID,
+    payload: EnteredInErrorPayload,
+    db: Session = Depends(get_db),
+    user: AuthenticatedUser = Depends(require_roles("operator")),
+):
+    contact = _get_or_404(db, Contact, contact_id, "Contact")
+    _mark_entered_in_error(contact, user, payload.reason)
+    _write_audit(db, "contact_entered_in_error", user.subject,
+                 {"contact_id": str(contact_id), "reason": payload.reason.strip()})
+    db.commit()
+    db.refresh(contact)
+    return contact
+
+
+@router.post("/locations/{location_id}/entered-in-error", response_model=LocationOut)
+def mark_location_entered_in_error(
+    location_id: UUID,
+    payload: EnteredInErrorPayload,
+    db: Session = Depends(get_db),
+    user: AuthenticatedUser = Depends(require_roles("operator")),
+):
+    location = _get_or_404(db, Location, location_id, "Location")
+    _mark_entered_in_error(location, user, payload.reason)
+    _write_audit(db, "location_entered_in_error", user.subject,
+                 {"location_id": str(location_id), "reason": payload.reason.strip()})
+    db.commit()
+    db.refresh(location)
+    return location
+
+
+@router.post("/case-location-events/{event_id}/entered-in-error", response_model=CaseLocationEventOut)
+def mark_case_location_event_entered_in_error(
+    event_id: UUID,
+    payload: EnteredInErrorPayload,
+    db: Session = Depends(get_db),
+    user: AuthenticatedUser = Depends(require_roles("operator")),
+):
+    event = _get_or_404(db, CaseLocationEvent, event_id, "Case location event")
+    _mark_entered_in_error(event, user, payload.reason)
+    _write_audit(db, "case_location_event_entered_in_error", user.subject,
+                 {"event_id": str(event_id), "reason": payload.reason.strip()})
+    db.commit()
+    db.refresh(event)
+    return event
+
+
+@router.post("/case-contact-links/{link_id}/entered-in-error", response_model=CaseContactLinkOut)
+def mark_case_contact_link_entered_in_error(
+    link_id: UUID,
+    payload: EnteredInErrorPayload,
+    db: Session = Depends(get_db),
+    user: AuthenticatedUser = Depends(require_roles("operator")),
+):
+    link = _get_or_404(db, CaseContactLink, link_id, "Case contact link")
+    _mark_entered_in_error(link, user, payload.reason)
+    _write_audit(db, "case_contact_link_entered_in_error", user.subject,
+                 {"link_id": str(link_id), "reason": payload.reason.strip()})
+    db.commit()
+    db.refresh(link)
+    return link
+
+
+@router.post("/exposures/{exposure_id}/restore", response_model=ExposureOut)
+def restore_exposure(
+    exposure_id: UUID,
+    db: Session = Depends(get_db),
+    user: AuthenticatedUser = Depends(require_roles("operator")),
+):
+    exposure = _get_or_404(db, Exposure, exposure_id, "Exposure")
+    _restore_from_entered_in_error(exposure)
+    _write_audit(db, "exposure_restored", user.subject, {"exposure_id": str(exposure_id)})
+    db.commit()
+    db.refresh(exposure)
+    return exposure
+
+
+@router.post("/contacts/{contact_id}/restore", response_model=ContactOut)
+def restore_contact(
+    contact_id: UUID,
+    db: Session = Depends(get_db),
+    user: AuthenticatedUser = Depends(require_roles("operator")),
+):
+    contact = _get_or_404(db, Contact, contact_id, "Contact")
+    _restore_from_entered_in_error(contact)
+    _write_audit(db, "contact_restored", user.subject, {"contact_id": str(contact_id)})
+    db.commit()
+    db.refresh(contact)
+    return contact
+
+
+@router.post("/locations/{location_id}/restore", response_model=LocationOut)
+def restore_location(
+    location_id: UUID,
+    db: Session = Depends(get_db),
+    user: AuthenticatedUser = Depends(require_roles("operator")),
+):
+    location = _get_or_404(db, Location, location_id, "Location")
+    _restore_from_entered_in_error(location)
+    _write_audit(db, "location_restored", user.subject, {"location_id": str(location_id)})
+    db.commit()
+    db.refresh(location)
+    return location
+
+
+@router.post("/case-location-events/{event_id}/restore", response_model=CaseLocationEventOut)
+def restore_case_location_event(
+    event_id: UUID,
+    db: Session = Depends(get_db),
+    user: AuthenticatedUser = Depends(require_roles("operator")),
+):
+    event = _get_or_404(db, CaseLocationEvent, event_id, "Case location event")
+    _restore_from_entered_in_error(event)
+    _write_audit(db, "case_location_event_restored", user.subject, {"event_id": str(event_id)})
+    db.commit()
+    db.refresh(event)
+    return event
+
+
+@router.post("/case-contact-links/{link_id}/restore", response_model=CaseContactLinkOut)
+def restore_case_contact_link(
+    link_id: UUID,
+    db: Session = Depends(get_db),
+    user: AuthenticatedUser = Depends(require_roles("operator")),
+):
+    link = _get_or_404(db, CaseContactLink, link_id, "Case contact link")
+    _restore_from_entered_in_error(link)
+    _write_audit(db, "case_contact_link_restored", user.subject, {"link_id": str(link_id)})
     db.commit()
     db.refresh(link)
     return link

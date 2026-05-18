@@ -1,4 +1,4 @@
-
+﻿
 let API='http://localhost:8000';const API_FALLBACK='http://127.0.0.1:8010';let activeJob=null;
 let demoModeActive=sessionStorage.getItem('tb_demo_mode_active')==='1';
 
@@ -87,7 +87,7 @@ function confirmDemoMode(){
 	closeDemoModeDialog();
 }
 
-// ── KPI Banner ──────────────────────────────────────────────────────────────
+// -- KPI Banner --------------------------------------------------------------
 async function loadKPIBanner(){
 	try{
 		const [summaryResp, lastRunResp] = await Promise.all([
@@ -96,10 +96,10 @@ async function loadKPIBanner(){
 		]);
 		if(summaryResp.ok){
 			const s = await summaryResp.json();
-			document.querySelector('#kpiTotalCases .kpi-num').textContent = s.total_cases ?? '—';
-			document.querySelector('#kpiClustered .kpi-num').textContent = s.clustered_cases ?? '—';
-			document.querySelector('#kpiUnclustered .kpi-num').textContent = s.unclustered_cases ?? '—';
-			document.querySelector('#kpiOpenClusters .kpi-num').textContent = s.open_clusters ?? '—';
+			document.querySelector('#kpiTotalCases .kpi-num').textContent = s.total_cases ?? '-';
+			document.querySelector('#kpiClustered .kpi-num').textContent = s.clustered_cases ?? '-';
+			document.querySelector('#kpiUnclustered .kpi-num').textContent = s.unclustered_cases ?? '-';
+			document.querySelector('#kpiOpenClusters .kpi-num').textContent = s.open_clusters ?? '-';
 			document.getElementById('kpiBannerTimestamp').textContent = 'refreshed ' + new Date().toLocaleTimeString();
 		}
 		if(lastRunResp.ok){
@@ -111,14 +111,14 @@ async function loadKPIBanner(){
 				`Outbreaker2: ${fmt(lr.outbreaker2)}`,
 				`Comparison: ${fmt(lr.cluster_comparison)}`,
 			];
-			document.getElementById('kpiLastRun').textContent = 'Last run — ' + lines.join(' · ');
+			document.getElementById('kpiLastRun').textContent = 'Last run - ' + lines.join('  |  ');
 		}
 	}catch(e){
-		// silently fail — banner is informational only
+		// silently fail - banner is informational only
 	}
 }
 
-// ── Full Pipeline ────────────────────────────────────────────────────────────
+// -- Full Pipeline ------------------------------------------------------------
 function statusClass(status){
 	const value=String(status||'unknown');
 	if(['pass','ready','available','complete','completed'].includes(value)) return 'status-pass';
@@ -176,8 +176,8 @@ async function loadWorkflowStatus(){
 async function runFullPipeline(){
 	const btn = document.getElementById('runPipelineBtn');
 	btn.disabled = true;
-	btn.textContent = '⏳ Pipeline running…';
-	document.getElementById('jobStatus').textContent = 'Starting full pipeline…';
+	btn.textContent = 'Pipeline running...';
+	document.getElementById('jobStatus').textContent = 'Starting full pipeline...';
 	document.getElementById('pipelineStepLabel').textContent = '';
 	try{
 		const r = await fetch(`${API}/jobs/run-pipeline`, {method:'POST'});
@@ -185,7 +185,7 @@ async function runFullPipeline(){
 		if(!d.job_id){
 			document.getElementById('jobStatus').textContent = JSON.stringify(d, null, 2);
 			btn.disabled = false;
-			btn.textContent = '▶ Run full pipeline (all steps)';
+			btn.textContent = '> Run full pipeline (all steps)';
 			return;
 		}
 		activeJob = d.job_id;
@@ -193,7 +193,7 @@ async function runFullPipeline(){
 	}catch(e){
 		document.getElementById('jobStatus').textContent = `Pipeline start failed: ${e}`;
 		btn.disabled = false;
-		btn.textContent = '▶ Run full pipeline (all steps)';
+		btn.textContent = '> Run full pipeline (all steps)';
 	}
 }
 async function pollPipeline(steps){
@@ -215,7 +215,7 @@ async function pollPipeline(steps){
 	} else {
 		const btn = document.getElementById('runPipelineBtn');
 		btn.disabled = false;
-		btn.textContent = '▶ Run full pipeline (all steps)';
+		btn.textContent = '> Run full pipeline (all steps)';
 		if(d.status === 'completed'){
 			loadKPIBanner();
 			loadWorkflowStatus();
@@ -223,7 +223,7 @@ async function pollPipeline(steps){
 	}
 }
 
-// ── Bulk Export ──────────────────────────────────────────────────────────────
+// -- Bulk Export --------------------------------------------------------------
 function downloadAllExports(){
 	window.open(`${API}/jobs/download-all-exports`, '_blank');
 }
@@ -237,8 +237,8 @@ async function loadDataSafety(){
 		const d = await r.json();
 		const existing = document.getElementById('dataSafetyStatus');
 		const html = d.operational_safe
-			? `✅ Dataset mode: OPERATIONAL (${d.total_cases} cases)`
-			: `⚠️ Dataset mode: NON-OPERATIONAL (synthetic/demo detected: ${d.synthetic_case_count} synthetic cases, ${d.synthetic_seed_events} seed events)`;
+			? `[OK] Dataset mode: OPERATIONAL (${d.total_cases} cases)`
+			: `[WARN] Dataset mode: NON-OPERATIONAL (synthetic/demo detected: ${d.synthetic_case_count} synthetic cases, ${d.synthetic_seed_events} seed events)`;
 		if(existing){
 			existing.textContent = html;
 		}else{
@@ -523,7 +523,7 @@ function generateCaseReport(caseIdOverride){
 	if(!caseId){alert('Please enter a Case ID first.');return;}
 	window.open(`${API}/cases/case-report/${encodeURIComponent(caseId)}`,'_blank');
 }
-// ── Cluster Investigation Centre ─────────────────────────────────────────────
+// -- Cluster Investigation Centre ---------------------------------------------
 let _cicCurrentCluster = null;
 let _cicCurrentMembers = [];
 let _cicLatestReviewsData = null;
@@ -537,7 +537,7 @@ const _CIC_BAND_COLOUR = {
 
 async function loadClusterInvestigations(){
 	const listEl = document.getElementById('cicList');
-	listEl.innerHTML = '<p class="hint">Loading clusters…</p>';
+	listEl.innerHTML = '<p class="hint">Loading clusters...</p>';
 	closeCicPanel();
 	try{
 		const r = await fetch(`${API}/cluster-investigations`);
@@ -560,8 +560,8 @@ async function loadClusterInvestigations(){
 				<td>${escapeHtml(inv.case_count)}</td>
 				<td><span class="cic-band-badge" style="background:${escapeAttr(colour)}">${escapeHtml(band.toUpperCase())}</span></td>
 				<td>${escapeHtml(inv.risk_score)}</td>
-				<td>${escapeHtml(statusLabel)}${signed ? ' ✓' : ''}</td>
-				<td>${escapeHtml(inv.assigned_to || '—')}</td>
+				<td>${escapeHtml(statusLabel)}${signed ? ' [OK]' : ''}</td>
+				<td>${escapeHtml(inv.assigned_to || '-')}</td>
 				<td>${escapeHtml(inv.action_count)}</td>
 				<td><button class="mini-btn" onclick="openCicPanel(${escapeAttr(JSON.stringify(inv.cluster_id))})">Investigate</button></td>
 			</tr>`;
@@ -579,7 +579,7 @@ async function openCicPanel(clusterId){
 	panel.style.display = 'block';
 	panel.removeAttribute('aria-hidden');
 	document.getElementById('cicPanelTitle').textContent =
-		'Cluster ' + clusterId.slice(0,8) + '…';
+		'Cluster ' + clusterId.slice(0,8) + '...';
 	// reset tabs to first
 	cicTab(document.querySelector('.cic-tab'), 'cicTabMembers');
 	await _cicRefreshDetail();
@@ -657,7 +657,7 @@ function _cicRenderEpiCaseOptions(members){
 	for(const member of members){
 		const opt=document.createElement('option');
 		opt.value=member.case_id||'';
-		opt.textContent=`${(member.case_id||'').slice(0,8)} — ${member.region||'unknown region'}`;
+		opt.textContent=`${(member.case_id||'').slice(0,8)} - ${member.region||'unknown region'}`;
 		select.appendChild(opt);
 	}
 	if(current && members.some(m=>m.case_id===current)) select.value=current;
@@ -769,7 +769,7 @@ function _cicRenderPairEvidence(data){
 		let selectHtml='<option value="">Select a pair from the loaded evidence</option>';
 		for(const pair of pairs.slice(0,50)){
 			const optionValue=JSON.stringify({caseA: pair.case_a || '', caseB: pair.case_b || ''});
-			selectHtml+=`<option value="${escapeAttr(optionValue)}">${escapeHtml(pair.pair||'')} · ${escapeHtml(pair.overall_interpretation||'')}</option>`;
+			selectHtml+=`<option value="${escapeAttr(optionValue)}">${escapeHtml(pair.pair||'')}  |  ${escapeHtml(pair.overall_interpretation||'')}</option>`;
 		}
 		pairSelect.innerHTML=selectHtml;
 	}
@@ -862,7 +862,7 @@ async function cicCopyPairIds(caseA, caseB){
 	}
 }
 
-// ── Transmission Evidence Card ────────────────────────────────────────────────
+// -- Transmission Evidence Card ------------------------------------------------
 
 function cicShowEvidenceCard(pair){
 	const modal=document.getElementById('evidenceCardModal');
@@ -870,7 +870,7 @@ function cicShowEvidenceCard(pair){
 	const contentEl=document.getElementById('evidenceCardContent');
 	if(!modal || !contentEl) return;
 
-	if(labelEl) labelEl.textContent=`${pair.case_a||''} → ${pair.case_b||''}`;
+	if(labelEl) labelEl.textContent=`${pair.case_a||''} -> ${pair.case_b||''}`;
 
 	const card=pair.evidence_card;
 	if(!card){
@@ -880,7 +880,7 @@ function cicShowEvidenceCard(pair){
 	}
 
 	const confidenceColour={strong:'#1a7a4a',moderate:'#c07000',weak:'#5a5a8a',contradicted:'#b02020',insufficient:'#666'};
-	const directionIcon={supports:'✓ supports','contradicts':'✗ contradicts',neutral:'— neutral',weak:'~ weak',missing:'? missing'};
+	const directionIcon={supports:'[OK] supports','contradicts':'X contradicts',neutral:'- neutral',weak:'~ weak',missing:'? missing'};
 	const directionColour={supports:'#1a6a3a',contradicts:'#b02020',neutral:'#555',weak:'#666',missing:'#8a6000'};
 
 	let html=`<div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem">
@@ -888,7 +888,7 @@ function cicShowEvidenceCard(pair){
 			Confidence: ${escapeHtml(card.confidence||'unknown')}
 		</span>
 		<span style="font-size:.8rem;color:#666">
-			${escapeHtml(card.supporting_signal_count||0)} supporting · ${escapeHtml(card.contradicting_signal_count||0)} contradicting
+			${escapeHtml(card.supporting_signal_count||0)} supporting  |  ${escapeHtml(card.contradicting_signal_count||0)} contradicting
 		</span>
 	</div>`;
 
@@ -1008,7 +1008,7 @@ async function cicSubmitPairReview(){
 			return;
 		}
 		if(document.getElementById('cicReviewNotes')) document.getElementById('cicReviewNotes').value='';
-		if(status) status.textContent='✓ Pair review saved.';
+		if(status) status.textContent='[OK] Pair review saved.';
 		await cicLoadAnalyticsReview();
 	}catch(e){
 		if(status) status.textContent='Error: ' + e;
@@ -1098,7 +1098,7 @@ async function cicRecordLocationEvent(){
 			body:JSON.stringify(payload),
 		});
 		if(r.ok){
-			msg.textContent='✓ Location event recorded.';
+			msg.textContent='[OK] Location event recorded.';
 			document.getElementById('cicLocationName').value='';
 			document.getElementById('cicLocationType').value='';
 			document.getElementById('cicLocationNotes').value='';
@@ -1137,7 +1137,7 @@ async function cicRecordContactLink(){
 			body:JSON.stringify(payload),
 		});
 		if(r.ok){
-			msg.textContent='✓ Contact link recorded.';
+			msg.textContent='[OK] Contact link recorded.';
 			document.getElementById('cicContactLabel').value='';
 			document.getElementById('cicContactRelationship').value='';
 			document.getElementById('cicContactNotes').value='';
@@ -1164,7 +1164,7 @@ async function cicAssign(){
 		const r = await fetch(`${API}/cluster-investigations/${encodeURIComponent(_cicCurrentCluster)}/assign`,
 			{method:'POST', headers:{'Content-Type':'application/json'},
 			 body: JSON.stringify({assigned_to: val})});
-		if(r.ok){ msg.textContent='✓ Assigned to ' + val; await _cicRefreshDetail(); loadClusterInvestigations(); }
+		if(r.ok){ msg.textContent='[OK] Assigned to ' + val; await _cicRefreshDetail(); loadClusterInvestigations(); }
 		else { const e=await r.json(); msg.textContent='Error: '+(e.detail||r.status); }
 	}catch(e){ msg.textContent='Error: '+e; }
 }
@@ -1177,7 +1177,7 @@ async function cicSaveEpiNotes(){
 		const r = await fetch(`${API}/cluster-investigations/${encodeURIComponent(_cicCurrentCluster)}/epi-notes`,
 			{method:'PUT', headers:{'Content-Type':'application/json'},
 			 body: JSON.stringify({epi_notes: notes})});
-		if(r.ok){ msg.textContent='✓ Notes saved.'; }
+		if(r.ok){ msg.textContent='[OK] Notes saved.'; }
 		else { const e=await r.json(); msg.textContent='Error: '+(e.detail||r.status); }
 	}catch(e){ msg.textContent='Error: '+e; }
 }
@@ -1195,7 +1195,7 @@ async function cicRecordAction(){
 			{method:'POST', headers:{'Content-Type':'application/json'},
 			 body: JSON.stringify({action_type:atype, description:desc, performed_by:by, performed_at:date})});
 		if(r.ok){
-			msg.textContent='✓ Action recorded.';
+			msg.textContent='[OK] Action recorded.';
 			document.getElementById('cicActionDesc').value='';
 			document.getElementById('cicActionBy').value='';
 			document.getElementById('cicActionDate').value='';
@@ -1218,7 +1218,7 @@ async function cicSignOff(){
 			{method:'POST', headers:{'Content-Type':'application/json'},
 			 body: JSON.stringify({decision, decision_by:decisionBy, notes: notes||null})});
 		if(r.ok){
-			msg.textContent='✓ Investigation signed off.';
+			msg.textContent='[OK] Investigation signed off.';
 			await _cicRefreshDetail();
 			loadClusterInvestigations();
 		}else{ const e=await r.json(); msg.textContent='Error: '+(e.detail||r.status); }
@@ -1230,7 +1230,7 @@ function cicOpenReport(){
 	window.open(`${API}/cluster-investigations/${encodeURIComponent(_cicCurrentCluster)}/report`, '_blank');
 }
 
-// ── Step 7: Phylogenetic + Visual Analytics ────────────────────────────────
+// -- Step 7: Phylogenetic + Visual Analytics --------------------------------
 function _analyticsClusterId(){
 	return (document.getElementById('analyticsClusterId')?.value||'').trim();
 }
@@ -1315,7 +1315,7 @@ async function loadTransmissionSynthesisOverview(){
 	const view=document.getElementById('synthesisPrimaryView');
 	const btn=document.getElementById('loadSynthesisBtn');
 	const originalBtnLabel=btn?.textContent || 'Load synthesis overview';
-	if(btn){ btn.disabled=true; btn.textContent='Loading synthesis…'; }
+	if(btn){ btn.disabled=true; btn.textContent='Loading synthesis...'; }
 	if(summary) summary.textContent='Loading synthesis overview...';
 	if(view) view.textContent='';
 	try{
@@ -1338,7 +1338,7 @@ async function loadTransmissionSynthesisOverview(){
 		if(view){
 			const clusters=d.clusters||[];
 			let html=`<h4>${cid?'Cluster synthesis':'Transmission synthesis overview'}</h4>`;
-			html+=`<p class="hint">Validation: ${escapeHtml(d.validation_status||'unknown')} · Generated ${escapeHtml((d.generated_at||'').replace('T',' ').replace('Z',' UTC'))}</p>`;
+			html+=`<p class="hint">Validation: ${escapeHtml(d.validation_status||'unknown')}  |  Generated ${escapeHtml((d.generated_at||'').replace('T',' ').replace('Z',' UTC'))}</p>`;
 			html+=_renderSynthesisClusterTable(clusters);
 			if(cid && clusters[0]){
 				const cluster=clusters[0];
@@ -1702,7 +1702,7 @@ function exportClusterDossier(format){
 	window.open(`${API}/analytics/cluster-dossier/${encodeURIComponent(cid)}/export?format=${encodeURIComponent(format)}`,'_blank');
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 function goToCaseEvidenceWorkflow(){
 	const card=document.getElementById('cicCard');
@@ -1912,8 +1912,10 @@ async function loadRegions(){
 			sel.appendChild(opt);
 		}
 	}catch{
-		// Backend unavailable — leave placeholder only
+		// Backend unavailable - leave placeholder only
 	}
 }
-(async()=>{try{await fetch(`${API}/`);document.getElementById('status').innerHTML='<li>✅ Backend running</li>';}catch{document.getElementById('status').innerHTML='<li>❌ Backend unavailable</li>';}refreshDemoModeStatus();loadRegions();loadKPIBanner();loadWorkflowStatus();loadDataSafety();loadDataReadiness();loadAnalyticsClusters();loadTransmissionSynthesisOverview();loadActionableReportSummary();loadFullKpis();loadOutbreakerStatus();loadResistanceValidationStatus();})();
+(async()=>{try{await fetch(`${API}/`);document.getElementById('status').innerHTML='<li>[OK] Backend running</li>';}catch{document.getElementById('status').innerHTML='<li>[X] Backend unavailable</li>';}refreshDemoModeStatus();loadRegions();loadKPIBanner();loadWorkflowStatus();loadDataSafety();loadDataReadiness();loadAnalyticsClusters();loadTransmissionSynthesisOverview();loadActionableReportSummary();loadFullKpis();loadOutbreakerStatus();loadResistanceValidationStatus();})();
+
+
 

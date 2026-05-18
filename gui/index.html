@@ -1,4 +1,4 @@
-
+﻿
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -23,10 +23,10 @@
   <section class="card kpi-banner-card">
     <h2>Programme overview <span id="kpiBannerTimestamp" class="kpi-ts"></span></h2>
     <div id="kpiBanner" class="kpi-banner">
-      <div class="kpi-tile" id="kpiTotalCases"><span class="kpi-num">—</span><span class="kpi-label">Total cases</span></div>
-      <div class="kpi-tile" id="kpiClustered"><span class="kpi-num">—</span><span class="kpi-label">Clustered</span></div>
-      <div class="kpi-tile" id="kpiUnclustered"><span class="kpi-num">—</span><span class="kpi-label">Unclustered</span></div>
-      <div class="kpi-tile" id="kpiOpenClusters"><span class="kpi-num">—</span><span class="kpi-label">Open clusters</span></div>
+      <div class="kpi-tile" id="kpiTotalCases"><span class="kpi-num">-</span><span class="kpi-label">Total cases</span></div>
+      <div class="kpi-tile" id="kpiClustered"><span class="kpi-num">-</span><span class="kpi-label">Clustered</span></div>
+      <div class="kpi-tile" id="kpiUnclustered"><span class="kpi-num">-</span><span class="kpi-label">Unclustered</span></div>
+      <div class="kpi-tile" id="kpiOpenClusters"><span class="kpi-num">-</span><span class="kpi-label">Open clusters</span></div>
     </div>
     <div id="kpiLastRun" class="kpi-lastrun"></div>
   </section>
@@ -58,7 +58,7 @@
   </section>
   <section class="card">
     <h2>Step 1 - System status</h2>
-    <ul id="status" class="status-list"><li>Checking…</li></ul>
+    <ul id="status" class="status-list"><li>Checking...</li></ul>
   </section>
   <section class="card">
     <div class="workflow-status-header">
@@ -129,7 +129,7 @@
     <p class="hint">Primary action for routine use. The full pipeline runs lineage/DR validation, sequence clustering, outbreaker2 export and inference, and method comparison in order.</p>
     <button id="runPipelineBtn" class="btn-primary" onclick="runFullPipeline()">&#9654; Run full pipeline (all steps)</button>
     <details class="individual-steps">
-      <summary class="hint">Or run individual steps…</summary>
+      <summary class="hint">Or run individual steps...</summary>
       <div class="individual-steps-inner">
         <button id="lineageDrBtn" onclick="runJob('run_lineage_dr_validation')">Run lineage/DR validation</button>
         <button id="seqClusterBtn" onclick="runJob('derive_sequence_clusters')">Derive sequence clusters</button>
@@ -231,12 +231,12 @@
     <div id="synthesisPrimaryView" class="analytics-view"></div>
   </section>
 
-  <!-- ── Step 6: Cluster Investigation Centre ─────────────────────────────── -->
+  <!-- -- Step 6: Cluster Investigation Centre ------------------------------- -->
   <section class="card" id="cicCard">
     <h2>Step 6 - Cluster Investigation Centre</h2>
     <p class="hint">
-      End-to-end workflow: risk-scored cluster list → assign reviewer → record
-      epidemiology notes and actions → formal sign-off → generate report.
+      End-to-end workflow: risk-scored cluster list -> assign reviewer -> record
+      epidemiology notes and actions -> formal sign-off -> generate report.
     </p>
     <button class="btn-primary" onclick="loadClusterInvestigations()">&#x1F50D; Load clusters</button>
     <div id="cicList" class="cic-list"></div>
@@ -276,7 +276,7 @@
       <div id="cicTabEpi" class="cic-tab-content" style="display:none">
         <h3 class="cic-section-title">Epidemiology review notes</h3>
         <p class="hint">Document contacts, exposure settings, travel history, social links.</p>
-        <textarea id="cicEpiNotes" class="cic-textarea" rows="8" placeholder="Enter epidemiology notes…"></textarea>
+        <textarea id="cicEpiNotes" class="cic-textarea" rows="8" placeholder="Enter epidemiology notes..."></textarea>
         <button onclick="cicSaveEpiNotes()">Save notes</button>
         <div id="cicEpiStatus" class="cic-msg"></div>
 
@@ -403,7 +403,7 @@
             <input id="cicReviewClusterId" class="cic-input" type="text" placeholder="Current cluster UUID" />
           </label>
           <label>Notes
-            <textarea id="cicReviewNotes" class="cic-textarea" rows="3" placeholder="Optional review notes…"></textarea>
+            <textarea id="cicReviewNotes" class="cic-textarea" rows="3" placeholder="Optional review notes..."></textarea>
           </label>
         </div>
         <button onclick="cicSubmitPairReview()">Save pair review</button>
@@ -433,7 +433,7 @@
             <input id="cicDecisionBy" type="text" class="cic-input" placeholder="Name and role" />
           </label>
           <label>Additional notes (optional)
-            <textarea id="cicSignOffNotes" class="cic-textarea" rows="3" placeholder="Any sign-off remarks…"></textarea>
+            <textarea id="cicSignOffNotes" class="cic-textarea" rows="3" placeholder="Any sign-off remarks..."></textarea>
           </label>
         </div>
         <button class="btn-primary" onclick="cicSignOff()">&#x2713; Sign off investigation</button>
@@ -653,12 +653,12 @@
   <p>Decision-support tool only. No automated decisions are made.</p>
 </footer>
 
-<!-- ── Transmission Evidence Card Modal ──────────────────────────────────── -->
+<!-- -- Transmission Evidence Card Modal ------------------------------------ -->
 <div id="evidenceCardModal" class="modal-overlay" style="display:none" onclick="cicHandleEvidenceCardBackdropClick(event)">
   <div class="modal-card" style="max-width:720px;max-height:85vh;overflow-y:auto">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
       <h3 style="margin:0">Transmission Evidence Card</h3>
-      <button class="mini-btn" onclick="closeEvidenceCardModal()">Close ✕</button>
+      <button class="mini-btn" onclick="closeEvidenceCardModal()">Close X</button>
     </div>
     <div id="evidenceCardPairLabel" style="font-family:monospace;font-size:.85rem;color:#666;margin-bottom:.75rem"></div>
     <div id="evidenceCardContent"></div>
@@ -668,3 +668,5 @@
 <script src="app.js?v=3"></script>
 </body>
 </html>
+
+

@@ -1,4 +1,4 @@
-
+﻿
 TB Genomic Surveillance Platform
 ===============================
 
@@ -48,6 +48,10 @@ External dependencies (not bundled):
 - Python >= 3.10
 - R >= 4.1 with outbreaker2
 
+Repository hygiene note:
+- `R_libs/` is intentionally not tracked in git. Treat it as a local package cache only.
+- Restore R dependencies in your own R environment, or use the existing WSL / Docker fallbacks for supported analysis steps.
+
 Quick start:
 1) Create and activate a virtual environment:
 	python -m venv .venv
@@ -90,10 +94,10 @@ GUI workflow overview
 
 The web interface is organised around the operational workflow:
 
-1. **Prepare** — check system status, data safety, data readiness, uploads, and demo/synthetic data controls.
-2. **Analyse** — run the full pipeline or individual analysis jobs, then review raw results, exports, case search, and case reports.
-3. **Investigate** — review transmission synthesis, open the Cluster Investigation Centre, record case evidence, actions, and sign-off decisions, and inspect visual analytics.
-4. **Report and govern** — generate the final actionable report, inspect runtime/KPI status, record resistance-validation sign-off, manage reusable epidemiology reference records, and view the audit trail.
+1. **Prepare** - check system status, data safety, data readiness, uploads, and demo/synthetic data controls.
+2. **Analyse** - run the full pipeline or individual analysis jobs, then review raw results, exports, case search, and case reports.
+3. **Investigate** - review transmission synthesis, open the Cluster Investigation Centre, record case evidence, actions, and sign-off decisions, and inspect visual analytics.
+4. **Report and govern** - generate the final actionable report, inspect runtime/KPI status, record resistance-validation sign-off, manage reusable epidemiology reference records, and view the audit trail.
 
 Important Step 6 / Step 11 distinction:
 
@@ -261,7 +265,7 @@ Three scripts handle the end-to-end NI data ingest workflow:
 	python scripts/load_ingest_bundle.py --dir path/to/bundle --reset --confirm-reset
 
 Notes:
-- All inserts use `ON CONFLICT DO NOTHING` — re-running is safe.
+- All inserts use `ON CONFLICT DO NOTHING` - re-running is safe.
 - `--reset --confirm-reset` truncates ALL tables before loading; requires both flags to prevent accidents.
 - `ni_column_map.json` contains value maps for HSC Trust names, case status, and all column mappings.
 - Before first use on live NI data: run `--list-columns` to discover actual column names, then update `source_column` values in `ni_column_map.json`.
@@ -349,3 +353,4 @@ The near-term implementation target is documented in
 token-based RBAC deployment, validated ingest, operational readiness checks,
 structured epidemiology linkage, reproducible reports, tests, CI, and governance
 caveats for an internal pilot.
+

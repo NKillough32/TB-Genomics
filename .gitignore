@@ -8,6 +8,7 @@ logs/
 exports/
 uploads/
 mykrobe/
+R_libs/
 ni_exports/
 
 *.log

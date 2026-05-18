@@ -135,6 +135,20 @@ function renderStatusPill(status){
 	return `<span class="status-pill ${statusClass(status)}">${escapeHtml(statusLabel(status))}</span>`;
 }
 
+function renderBadge(label, tone){
+	return `<span class="status-pill ${tone || 'status-muted'}">${escapeHtml(label)}</span>`;
+}
+
+function renderSystemStatusItem(label, headline, tone, note){
+	return `<li class="status-item">
+		<div class="status-item-top">
+			<span class="status-item-label">${escapeHtml(label)}</span>
+			${renderBadge(headline, tone)}
+		</div>
+		${note ? `<p class="status-item-note">${escapeHtml(note)}</p>` : ''}
+	</li>`;
+}
+
 async function loadWorkflowStatus(){
 	const panel=document.getElementById('workflowStatusPanel');
 	if(!panel) return;
@@ -235,15 +249,14 @@ async function loadDataSafety(){
 		const r = await fetch(`${API}/cases/data-safety`);
 		if(!r.ok) return;
 		const d = await r.json();
-		const existing = document.getElementById('dataSafetyStatus');
-		const html = d.operational_safe
-			? `[OK] Dataset mode: OPERATIONAL (${d.total_cases} cases)`
-			: `[WARN] Dataset mode: NON-OPERATIONAL (synthetic/demo detected: ${d.synthetic_case_count} synthetic cases, ${d.synthetic_seed_events} seed events)`;
-		if(existing){
-			existing.textContent = html;
-		}else{
-			statusEl.innerHTML = `${statusEl.innerHTML}<li id="dataSafetyStatus">${html}</li>`;
-		}
+		const safetyHtml = d.operational_safe
+			? renderSystemStatusItem('Dataset mode', 'Operational', 'status-pass', `${d.total_cases} cases available for analysis`)
+			: renderSystemStatusItem('Dataset mode', 'Non-operational', 'status-warn', `Synthetic/demo detected: ${d.synthetic_case_count} synthetic cases, ${d.synthetic_seed_events} seed events`);
+		const backendItem = document.getElementById('backendStatusItem');
+		const backendHtml = backendItem
+			? backendItem.outerHTML
+			: renderSystemStatusItem('Backend', 'Running', 'status-pass', 'API responded successfully');
+		statusEl.innerHTML = `${backendHtml}${safetyHtml}`;
 	}catch(_e){
 		// no-op; keep existing status text
 	}
@@ -261,6 +274,7 @@ async function loadDataReadiness(){
 			return;
 		}
 		const pct=value=>value===null||value===undefined?'n/a':`${Number(value).toFixed(1)}%`;
+		const statusTone=d.status==='ready'?'status-pass':'status-warn';
 		const rows=(d.checks||[]).map(check=>{
 			const status=check.missing>0?'needs_review':'ready';
 			return `<tr>
@@ -272,6 +286,14 @@ async function loadDataReadiness(){
 			</tr>`;
 		}).join('');
 		panel.innerHTML=`
+			<div class="readiness-intro">
+				<div>
+					<span class="readiness-kicker">Overall readiness</span>
+					<strong>${escapeHtml(d.status.replace(/_/g, ' '))}</strong>
+					<p>Review sequencing and QC coverage before moving into analysis or reporting.</p>
+				</div>
+				${renderBadge(d.status === 'ready' ? 'READY' : 'NEEDS REVIEW', statusTone)}
+			</div>
 			<div class="readiness-summary">
 				<div><strong>Total cases</strong><span>${escapeHtml(d.total_cases)}</span></div>
 				<div><strong>Sequencing coverage</strong><span>${escapeHtml(pct(d.sequencing_coverage?.percent))}</span></div>
@@ -1915,7 +1937,7 @@ async function loadRegions(){
 		// Backend unavailable - leave placeholder only
 	}
 }
-(async()=>{try{await fetch(`${API}/`);document.getElementById('status').innerHTML='<li>[OK] Backend running</li>';}catch{document.getElementById('status').innerHTML='<li>[X] Backend unavailable</li>';}refreshDemoModeStatus();loadRegions();loadKPIBanner();loadWorkflowStatus();loadDataSafety();loadDataReadiness();loadAnalyticsClusters();loadTransmissionSynthesisOverview();loadActionableReportSummary();loadFullKpis();loadOutbreakerStatus();loadResistanceValidationStatus();})();
+(async()=>{try{await fetch(`${API}/`);document.getElementById('status').innerHTML=renderSystemStatusItem('Backend','Running','status-pass','API responded successfully');}catch{document.getElementById('status').innerHTML=renderSystemStatusItem('Backend','Unavailable','status-fail','Unable to reach the API from this session');}refreshDemoModeStatus();loadRegions();loadKPIBanner();loadWorkflowStatus();loadDataSafety();loadDataReadiness();loadAnalyticsClusters();loadTransmissionSynthesisOverview();loadActionableReportSummary();loadFullKpis();loadOutbreakerStatus();loadResistanceValidationStatus();})();
 
 
 

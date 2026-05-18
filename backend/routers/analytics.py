@@ -1,6 +1,6 @@
 import json
 from collections import defaultdict
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from itertools import combinations
 from typing import Annotated
 
@@ -86,7 +86,14 @@ def _case_rows(db: Session):
                ti.predicted_drug_resistance,
                LOWER(COALESCE(sqm.qc_status, 'not_reported')) AS qc_status,
                COALESCE(sqm.contamination_flag, FALSE) AS contamination_flag,
-               cs.sequence
+               cs.sequence,
+               c.symptom_onset_date,
+               c.treatment_start_date,
+               COALESCE(c.smear_status, 'unknown') AS smear_status,
+               COALESCE(c.cavitation_status, 'unknown') AS cavitation_status,
+               COALESCE(c.culture_status, 'unknown') AS culture_status,
+               c.culture_positivity_duration_days,
+               c.infectiousness_notes
         FROM cases c
         LEFT JOIN case_clusters cc ON cc.sample_id = c.pseudonymised_case_id
         LEFT JOIN tb_interpretation ti ON ti.sample_id = c.pseudonymised_case_id
@@ -250,6 +257,331 @@ def _resistant_drug_set(predicted_dr: object) -> set[str]:
             if status in {"r", "resistant"} or "resistant" in status:
                 resistant.add(str(drug).strip().lower())
     return resistant
+
+
+# ─── Infectiousness helpers ────────────────────────────────────────────────────
+
+def _compute_infectious_period(row: dict) -> dict:
+    """Estimate the likely infectious window for a TB case.
+
+    Uses clinical fields when available; falls back to a specimen-date proxy.
+    TB is typically infectious from ~4 weeks before symptom onset and becomes
+    non-infectious ~2–3 weeks after effective treatment starts.
+    """
+    symptom_onset = row.get("symptom_onset_date")
+    treatment_start = row.get("treatment_start_date")
+    specimen = row.get("specimen_date")
+    smear = str(row.get("smear_status") or "unknown").lower()
+    cavitation = str(row.get("cavitation_status") or "unknown").lower()
+
+    if symptom_onset and treatment_start:
+        inf_start = symptom_onset - timedelta(days=28)
+        # Smear-positive or cavitating disease: longer infectious tail
+        tail_days = 21 if (smear == "positive" or cavitation == "present") else 14
+        inf_end = treatment_start + timedelta(days=tail_days)
+        return {"start": inf_start, "end": inf_end, "basis": "clinical_data"}
+
+    if symptom_onset:
+        inf_start = symptom_onset - timedelta(days=28)
+        inf_end = (specimen or symptom_onset) + timedelta(days=90)
+        return {"start": inf_start, "end": inf_end, "basis": "symptom_onset_only"}
+
+    if specimen:
+        inf_start = specimen - timedelta(days=60)
+        inf_end = specimen + timedelta(days=90)
+        return {"start": inf_start, "end": inf_end, "basis": "specimen_date_proxy"}
+
+    return {"start": None, "end": None, "basis": "unavailable"}
+
+
+def _infectiousness_weight(row: dict) -> int:
+    """Return an integer infectiousness modifier (-2 to +3) based on clinical fields."""
+    smear = str(row.get("smear_status") or "unknown").lower()
+    cavitation = str(row.get("cavitation_status") or "unknown").lower()
+    culture = str(row.get("culture_status") or "unknown").lower()
+    culture_days = row.get("culture_positivity_duration_days")
+
+    weight = 0
+    if smear == "positive":
+        weight += 1
+    elif smear == "negative":
+        weight -= 1
+    if cavitation == "present":
+        weight += 1
+    if culture == "positive":
+        weight += 1
+    if culture_days and int(culture_days) > 90:
+        weight += 1
+    return max(-2, min(3, weight))
+
+
+def _infectiousness_description(row: dict) -> str:
+    """Human-readable summary of infectiousness indicators."""
+    parts = []
+    smear = str(row.get("smear_status") or "unknown").lower()
+    cavitation = str(row.get("cavitation_status") or "unknown").lower()
+    culture = str(row.get("culture_status") or "unknown").lower()
+    culture_days = row.get("culture_positivity_duration_days")
+
+    if smear in ("positive", "negative"):
+        parts.append(f"smear-{smear}")
+    if cavitation in ("present", "absent"):
+        parts.append(f"cavitation {cavitation}")
+    if culture in ("positive", "negative"):
+        parts.append(f"culture-{culture}")
+    if culture_days:
+        parts.append(f"culture positivity {culture_days}d")
+    return ", ".join(parts) if parts else "no infectiousness data"
+
+
+def _infectious_period_overlap(row_a: dict, row_b: dict) -> dict:
+    """Check whether two cases' estimated infectious periods overlap."""
+    period_a = _compute_infectious_period(row_a)
+    period_b = _compute_infectious_period(row_b)
+
+    if not period_a["start"] or not period_b["start"]:
+        return {
+            "available": False,
+            "overlap": None,
+            "overlap_days": None,
+            "basis_a": period_a["basis"],
+            "basis_b": period_b["basis"],
+        }
+
+    overlap_start = max(period_a["start"], period_b["start"])
+    overlap_end = min(period_a["end"], period_b["end"])
+
+    if overlap_end >= overlap_start:
+        overlap_days = (overlap_end - overlap_start).days
+        return {
+            "available": True,
+            "overlap": True,
+            "overlap_days": overlap_days,
+            "basis_a": period_a["basis"],
+            "basis_b": period_b["basis"],
+        }
+    return {
+        "available": True,
+        "overlap": False,
+        "overlap_days": 0,
+        "basis_a": period_a["basis"],
+        "basis_b": period_b["basis"],
+    }
+
+
+def _build_evidence_card(
+    *,
+    snp_distance: int | None,
+    snp_strong_threshold: int,
+    snp_moderate_threshold: int,
+    lineage_a: str,
+    lineage_b: str,
+    same_lineage: bool,
+    resistance_concordance: str,
+    same_region: bool,
+    region_a: str,
+    region_b: str,
+    temporal_delta_days: int | None,
+    temporal_plausible: bool | None,
+    temporal_window_days: int,
+    epi_domains: list,
+    epi_shared_locations: int,
+    epi_shared_contacts: int,
+    row_a: dict,
+    row_b: dict,
+    overall_score: int,
+    contradictory_evidence: list,
+) -> dict:
+    """Build a structured transmission evidence card for a single case pair.
+
+    Returns a signal table (one row per evidence dimension), a confidence label,
+    and a plain-language interpretation paragraph.
+    """
+    signals: list[dict] = []
+
+    # ── Genomic: SNP distance ──────────────────────────────────────────────────
+    if snp_distance is None:
+        signals.append({"signal": "SNP distance", "value": "No sequence available", "direction": "missing"})
+    elif snp_distance <= snp_strong_threshold:
+        signals.append({"signal": "SNP distance", "value": f"{snp_distance} SNPs (≤{snp_strong_threshold} — strong linkage)", "direction": "supports"})
+    elif snp_distance <= snp_moderate_threshold:
+        signals.append({"signal": "SNP distance", "value": f"{snp_distance} SNPs (moderate range ≤{snp_moderate_threshold})", "direction": "supports"})
+    elif snp_distance <= 20:
+        signals.append({"signal": "SNP distance", "value": f"{snp_distance} SNPs (elevated — weak linkage)", "direction": "weak"})
+    else:
+        signals.append({"signal": "SNP distance", "value": f"{snp_distance} SNPs (exceeds linkage threshold)", "direction": "contradicts"})
+
+    # ── Genomic: Lineage ───────────────────────────────────────────────────────
+    if lineage_a and lineage_b:
+        if same_lineage:
+            signals.append({"signal": "Lineage", "value": f"Matched ({lineage_a})", "direction": "supports"})
+        else:
+            signals.append({"signal": "Lineage", "value": f"Mismatched ({lineage_a} vs {lineage_b})", "direction": "contradicts"})
+    else:
+        signals.append({"signal": "Lineage", "value": "Lineage data incomplete", "direction": "missing"})
+
+    # ── Genomic: Resistance profile ────────────────────────────────────────────
+    if resistance_concordance == "concordant":
+        signals.append({"signal": "Resistance profile", "value": "Concordant", "direction": "supports"})
+    elif resistance_concordance == "partially_concordant":
+        signals.append({"signal": "Resistance profile", "value": "Partial overlap", "direction": "neutral"})
+    elif resistance_concordance == "discordant":
+        signals.append({"signal": "Resistance profile", "value": "Discordant", "direction": "contradicts"})
+    else:
+        signals.append({"signal": "Resistance profile", "value": "No resistance data", "direction": "missing"})
+
+    # ── Epidemiological: Geography ─────────────────────────────────────────────
+    if same_region:
+        signals.append({"signal": "Geography", "value": f"Same region ({region_a})", "direction": "supports"})
+    else:
+        signals.append({"signal": "Geography", "value": f"Different regions ({region_a} / {region_b})", "direction": "neutral"})
+
+    # ── Epidemiological: Temporal overlap ──────────────────────────────────────
+    if temporal_delta_days is not None:
+        if temporal_plausible:
+            signals.append({"signal": "Time overlap", "value": f"{temporal_delta_days} days between specimens (within {temporal_window_days}d window)", "direction": "supports"})
+        else:
+            signals.append({"signal": "Time overlap", "value": f"{temporal_delta_days} days between specimens (exceeds {temporal_window_days}d window)", "direction": "contradicts"})
+    else:
+        signals.append({"signal": "Time overlap", "value": "Specimen dates missing", "direction": "missing"})
+
+    # ── Clinical: Infectious period overlap ────────────────────────────────────
+    infectious_overlap = _infectious_period_overlap(row_a, row_b)
+    if not infectious_overlap["available"]:
+        signals.append({"signal": "Infectious period", "value": "Clinical data insufficient to estimate", "direction": "missing"})
+    elif infectious_overlap["overlap"]:
+        signals.append({"signal": "Infectious period", "value": f"Estimated windows overlap by ~{infectious_overlap['overlap_days']} days ({infectious_overlap['basis_a']} / {infectious_overlap['basis_b']})", "direction": "supports"})
+    else:
+        signals.append({"signal": "Infectious period", "value": f"Estimated windows do not overlap ({infectious_overlap['basis_a']} / {infectious_overlap['basis_b']})", "direction": "contradicts"})
+
+    # ── Epidemiological: Shared exposure ───────────────────────────────────────
+    if epi_shared_locations > 0:
+        domains_str = ", ".join(epi_domains) if epi_domains else "unclassified setting"
+        signals.append({"signal": "Exposure overlap", "value": f"{epi_shared_locations} shared location(s) — {domains_str}", "direction": "supports"})
+    else:
+        signals.append({"signal": "Exposure overlap", "value": "No shared location events recorded", "direction": "missing"})
+
+    # ── Epidemiological: Contact evidence ──────────────────────────────────────
+    if epi_shared_contacts > 0:
+        directness = "direct" if epi_shared_contacts >= 2 else "indirect"
+        signals.append({"signal": "Contact evidence", "value": f"{epi_shared_contacts} shared contact(s) — {directness}", "direction": "supports"})
+    else:
+        signals.append({"signal": "Contact evidence", "value": "No shared contacts recorded", "direction": "missing"})
+
+    # ── Clinical: Infectiousness ───────────────────────────────────────────────
+    weight_a = _infectiousness_weight(row_a)
+    weight_b = _infectiousness_weight(row_b)
+    desc_a = _infectiousness_description(row_a)
+    desc_b = _infectiousness_description(row_b)
+    if weight_a > 0 or weight_b > 0:
+        inf_notes = []
+        if weight_a > 0:
+            inf_notes.append(f"Case A: {desc_a}")
+        if weight_b > 0:
+            inf_notes.append(f"Case B: {desc_b}")
+        signals.append({"signal": "Infectiousness", "value": "; ".join(inf_notes), "direction": "supports"})
+    elif weight_a < 0 or weight_b < 0:
+        signals.append({"signal": "Infectiousness", "value": "Low infectiousness indicators present", "direction": "neutral"})
+    else:
+        signals.append({"signal": "Infectiousness", "value": "Clinical infectiousness data not available", "direction": "missing"})
+
+    # ── Contradictions summary ─────────────────────────────────────────────────
+    if contradictory_evidence:
+        signals.append({"signal": "Contradictions", "value": "; ".join(sorted(set(contradictory_evidence))), "direction": "contradicts"})
+    else:
+        signals.append({"signal": "Contradictions", "value": "None identified", "direction": "neutral"})
+
+    # ── Confidence label ───────────────────────────────────────────────────────
+    if overall_score >= 5:
+        confidence = "strong"
+    elif overall_score >= 3:
+        confidence = "moderate"
+    elif overall_score >= 1:
+        confidence = "weak"
+    elif contradictory_evidence:
+        confidence = "contradicted"
+    else:
+        confidence = "insufficient"
+
+    supporting_count = sum(1 for s in signals if s["direction"] == "supports")
+    contradicting_count = sum(1 for s in signals if s["direction"] == "contradicts")
+
+    # ── Natural language interpretation ───────────────────────────────────────
+    intro_map = {
+        "strong": "Strong genomic and epidemiological support for recent transmission.",
+        "moderate": "Moderate genomic and epidemiological support for recent transmission.",
+        "weak": "Weak or limited support for recent transmission.",
+        "contradicted": "Contradictory evidence detected; direct transmission is unlikely.",
+        "insufficient": "Insufficient evidence to determine transmission status.",
+    }
+    sentences = [intro_map[confidence]]
+
+    if snp_distance is not None:
+        if snp_distance <= snp_strong_threshold:
+            sentences.append(f"SNP distance is {snp_distance}, below the strong linkage threshold of {snp_strong_threshold}.")
+        elif snp_distance <= snp_moderate_threshold:
+            sentences.append(f"SNP distance is {snp_distance} (moderate range, threshold {snp_moderate_threshold}).")
+        else:
+            sentences.append(f"SNP distance is {snp_distance}, which exceeds the genomic linkage threshold.")
+
+    if lineage_a and lineage_b:
+        if same_lineage:
+            sentences.append(f"Lineage is matched ({lineage_a}).")
+        else:
+            sentences.append(f"Lineages differ ({lineage_a} vs {lineage_b}), inconsistent with a single transmission chain.")
+
+    if resistance_concordance == "concordant":
+        sentences.append("Resistance profiles are concordant.")
+    elif resistance_concordance == "discordant":
+        sentences.append("Resistance profiles are discordant, inconsistent with direct transmission.")
+
+    if same_region:
+        sentences.append(f"Both cases are in the same geographic region ({region_a}).")
+
+    if temporal_delta_days is not None:
+        if temporal_plausible:
+            sentences.append(f"Specimen dates are {temporal_delta_days} days apart, within the plausible transmission window.")
+        else:
+            sentences.append(f"Specimen dates are {temporal_delta_days} days apart, exceeding the plausible transmission window.")
+
+    if infectious_overlap["available"]:
+        if infectious_overlap["overlap"]:
+            sentences.append(f"Estimated infectious periods overlap by approximately {infectious_overlap['overlap_days']} days.")
+        else:
+            sentences.append("Estimated infectious periods do not overlap, which reduces transmission plausibility.")
+
+    if epi_shared_locations > 0:
+        domains_str = ", ".join(epi_domains) if epi_domains else "unclassified"
+        sentences.append(f"Shared exposure has been recorded ({domains_str}).")
+    if epi_shared_contacts > 0:
+        sentences.append(f"{epi_shared_contacts} shared contact(s) have been identified.")
+
+    if weight_a > 0:
+        sentences.append(f"Case A has elevated infectiousness indicators ({desc_a}).")
+    if weight_b > 0:
+        sentences.append(f"Case B has elevated infectiousness indicators ({desc_b}).")
+
+    if not contradictory_evidence:
+        sentences.append("No major contradictory signals were identified.")
+    else:
+        sentences.append(f"Contradictory signals present: {'; '.join(sorted(set(contradictory_evidence)))}.")
+
+    recommendation_map = {
+        "strong": "Immediate investigation and contact tracing are recommended. This pair should be prioritised for public health follow-up.",
+        "moderate": "Contact tracing and further investigation are recommended. This pair warrants formal review.",
+        "weak": "Review with additional supporting evidence. Current evidence is insufficient to confirm or exclude transmission.",
+        "contradicted": "Transmission is unlikely given contradictory signals. Record findings for audit purposes.",
+        "insufficient": "Await additional genomic or epidemiological data before drawing conclusions.",
+    }
+
+    return {
+        "signals": signals,
+        "confidence": confidence,
+        "supporting_signal_count": supporting_count,
+        "contradicting_signal_count": contradicting_count,
+        "interpretation": " ".join(sentences),
+        "recommendation": recommendation_map[confidence],
+    }
 
 
 def _build_pair_epi_index(db: Session, case_ids: set[str]) -> dict[tuple[str, str], dict]:
@@ -560,6 +892,29 @@ def _build_case_pair_evidence_payload(
 
         support_summary[overall_interpretation] += 1
 
+        evidence_card = _build_evidence_card(
+            snp_distance=snp_distance,
+            snp_strong_threshold=snp_strong_threshold,
+            snp_moderate_threshold=snp_moderate_threshold,
+            lineage_a=lineage_a,
+            lineage_b=lineage_b,
+            same_lineage=same_lineage,
+            resistance_concordance=resistance_concordance,
+            same_region=same_region,
+            region_a=region_a,
+            region_b=region_b,
+            temporal_delta_days=temporal_delta_days,
+            temporal_plausible=temporal_plausible,
+            temporal_window_days=temporal_window_days,
+            epi_domains=epi_domains,
+            epi_shared_locations=int(epi.get("shared_location_count") or 0),
+            epi_shared_contacts=int(epi.get("shared_contact_count") or 0),
+            row_a=left,
+            row_b=right,
+            overall_score=overall_score,
+            contradictory_evidence=contradictory_evidence,
+        )
+
         pairs.append(
             {
                 "case_a": case_a,
@@ -596,6 +951,7 @@ def _build_case_pair_evidence_payload(
                     "observation_mode": observation_mode,
                 },
                 "overall_interpretation": overall_interpretation,
+                "evidence_card": evidence_card,
                 "reviewer_classification": None,
             }
         )
@@ -664,6 +1020,140 @@ def case_pair_evidence(
     ]
     payload.update(_validation_notice())
     return payload
+
+
+@router.get("/transmission-evidence/{case_a_id}/{case_b_id}")
+def transmission_evidence(
+    case_a_id: str,
+    case_b_id: str,
+    snp_strong_threshold: int = Query(5, ge=0, le=100),
+    snp_moderate_threshold: int = Query(12, ge=1, le=200),
+    temporal_window_days: int = Query(45, ge=1, le=365),
+    db: Session = Depends(get_db),
+):
+    """Return a full structured transmission evidence card for a single case pair."""
+    norm_a = _normalise_uuid(case_a_id)
+    norm_b = _normalise_uuid(case_b_id)
+    if norm_a == norm_b:
+        raise HTTPException(status_code=422, detail="case_a_id and case_b_id must be different cases")
+
+    rows = _case_rows(db)
+    rows_by_id = {str(r["case_id"]): r for r in rows if r.get("case_id")}
+
+    row_a = rows_by_id.get(norm_a)
+    row_b = rows_by_id.get(norm_b)
+    if not row_a:
+        raise HTTPException(status_code=404, detail=f"Case {norm_a} not found")
+    if not row_b:
+        raise HTTPException(status_code=404, detail=f"Case {norm_b} not found")
+
+    case_ids = {norm_a, norm_b}
+    pair_epi_index = _build_pair_epi_index(db, case_ids)
+    epi = pair_epi_index.get(_pair_key(norm_a, norm_b), {})
+    epi_domains = epi.get("domains") or []
+
+    seq_a = str(row_a.get("sequence") or "")
+    seq_b = str(row_b.get("sequence") or "")
+    snp_validation = validated_snp_distance(seq_a, seq_b) if seq_a and seq_b else None
+    snp_distance = snp_validation.distance if snp_validation else None
+
+    lineage_a = str(row_a.get("lineage") or "")
+    lineage_b = str(row_b.get("lineage") or "")
+    same_lineage = bool(lineage_a and lineage_b and lineage_a == lineage_b)
+
+    specimen_a = row_a.get("specimen_date")
+    specimen_b = row_b.get("specimen_date")
+    temporal_delta_days = abs((specimen_b - specimen_a).days) if specimen_a and specimen_b else None
+    temporal_plausible = (temporal_delta_days <= temporal_window_days) if temporal_delta_days is not None else None
+
+    region_a = str(row_a.get("region") or "Unknown")
+    region_b = str(row_b.get("region") or "Unknown")
+    same_region = region_a == region_b and region_a != "Unknown"
+
+    resistant_a = _resistant_drug_set(row_a.get("predicted_drug_resistance"))
+    resistant_b = _resistant_drug_set(row_b.get("predicted_drug_resistance"))
+    if resistant_a or resistant_b:
+        if resistant_a == resistant_b:
+            resistance_concordance = "concordant"
+        elif resistant_a & resistant_b:
+            resistance_concordance = "partially_concordant"
+        else:
+            resistance_concordance = "discordant"
+    else:
+        resistance_concordance = "unknown"
+
+    contradictory_evidence: list[str] = []
+    if snp_distance is not None and snp_distance > 20:
+        contradictory_evidence.append(f"high_snp_distance:{snp_distance}")
+    if lineage_a and lineage_b and not same_lineage:
+        contradictory_evidence.append("lineage_mismatch")
+    if temporal_plausible is False:
+        contradictory_evidence.append(f"temporal_gap_exceeds_{temporal_window_days}d")
+    if resistance_concordance == "discordant":
+        contradictory_evidence.append("resistance_profile_discordant")
+
+    epi_score = 0
+    if epi.get("shared_contact_count", 0) > 0:
+        epi_score += 3
+    if epi.get("shared_location_count", 0) > 0:
+        epi_score += 2
+    if same_region:
+        epi_score += 1
+    if temporal_plausible is True:
+        epi_score += 1
+    if temporal_plausible is False:
+        epi_score -= 1
+
+    score_map = {"strong epi support": 3, "moderate epi support": 2, "weak epi support": 1, "contradictory": -3, "unknown": 0}
+    genomic_support_score = (
+        3 if snp_distance is not None and snp_distance <= snp_strong_threshold
+        else 2 if snp_distance is not None and snp_distance <= snp_moderate_threshold
+        else 1 if snp_distance is not None and snp_distance <= 20
+        else -3 if snp_distance is not None
+        else 0
+    )
+    overall_score = genomic_support_score + score_map.get(_score_label(epi_score), 0)
+    if resistance_concordance == "concordant":
+        overall_score += 1
+    elif resistance_concordance == "discordant":
+        overall_score -= 1
+
+    card = _build_evidence_card(
+        snp_distance=snp_distance,
+        snp_strong_threshold=snp_strong_threshold,
+        snp_moderate_threshold=snp_moderate_threshold,
+        lineage_a=lineage_a,
+        lineage_b=lineage_b,
+        same_lineage=same_lineage,
+        resistance_concordance=resistance_concordance,
+        same_region=same_region,
+        region_a=region_a,
+        region_b=region_b,
+        temporal_delta_days=temporal_delta_days,
+        temporal_plausible=temporal_plausible,
+        temporal_window_days=temporal_window_days,
+        epi_domains=epi_domains,
+        epi_shared_locations=int(epi.get("shared_location_count") or 0),
+        epi_shared_contacts=int(epi.get("shared_contact_count") or 0),
+        row_a=row_a,
+        row_b=row_b,
+        overall_score=overall_score,
+        contradictory_evidence=contradictory_evidence,
+    )
+
+    return {
+        "case_a": norm_a,
+        "case_b": norm_b,
+        "pair": f"{norm_a[:8]} -> {norm_b[:8]}",
+        "parameters": {
+            "snp_strong_threshold": snp_strong_threshold,
+            "snp_moderate_threshold": snp_moderate_threshold,
+            "temporal_window_days": temporal_window_days,
+        },
+        "evidence_card": card,
+        "generated_at": datetime.utcnow().isoformat() + "Z",
+        **_validation_notice(),
+    }
 
 
 @router.post("/case-pair-review")

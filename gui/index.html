@@ -652,6 +652,19 @@
 <footer>
   <p>Decision-support tool only. No automated decisions are made.</p>
 </footer>
+
+<!-- ── Transmission Evidence Card Modal ──────────────────────────────────── -->
+<div id="evidenceCardModal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeEvidenceCardModal()">
+  <div class="modal-card" style="max-width:720px;max-height:85vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+      <h3 style="margin:0">Transmission Evidence Card</h3>
+      <button class="mini-btn" onclick="closeEvidenceCardModal()">Close ✕</button>
+    </div>
+    <div id="evidenceCardPairLabel" style="font-family:monospace;font-size:.85rem;color:#666;margin-bottom:.75rem"></div>
+    <div id="evidenceCardContent"></div>
+  </div>
+</div>
+
 <script src="app.js?v=3"></script>
 </body>
 </html>

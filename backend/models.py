@@ -12,6 +12,14 @@ class Case(Base):
     geographic_region = Column(String)
     case_status = Column(String)
     created_at = Column(TIMESTAMP)
+    # Clinical infectiousness fields (migration 0004)
+    symptom_onset_date = Column(Date, nullable=True)
+    treatment_start_date = Column(Date, nullable=True)
+    smear_status = Column(String, nullable=True)
+    cavitation_status = Column(String, nullable=True)
+    culture_status = Column(String, nullable=True)
+    culture_positivity_duration_days = Column(Integer, nullable=True)
+    infectiousness_notes = Column(String, nullable=True)
 
 
 class TbInterpretation(Base):

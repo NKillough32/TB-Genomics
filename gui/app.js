@@ -778,7 +778,7 @@ function _cicRenderPairEvidence(data){
 	if(summary.length){
 		html+=`<p class="hint">${summary.join(' | ')}</p>`;
 	}
-	html+='<div class="analytics-table-wrap"><table class="data-table"><thead><tr><th>Pair</th><th>Genomic</th><th>Epi</th><th>Temporal</th><th>Interpretation</th><th>Evidence</th><th>Review</th><th></th><th></th></tr></thead><tbody>';
+	html+='<div class="analytics-table-wrap"><table class="data-table"><thead><tr><th>Pair</th><th>Genomic</th><th>Epi</th><th>Temporal</th><th>Interpretation</th><th>Evidence</th><th>Review</th><th></th><th></th><th></th></tr></thead><tbody>';
 	for(const pair of pairs.slice(0,25)){
 		const genomic=pair.genomic_plausibility||{};
 		const epi=pair.epidemiological_support||{};
@@ -798,6 +798,7 @@ function _cicRenderPairEvidence(data){
 			<td>${escapeHtml(reviewText)}</td>
 			<td><button class="mini-btn" onclick="cicPrefillPairReview(${escapeAttr(JSON.stringify(pair.case_a||''))}, ${escapeAttr(JSON.stringify(pair.case_b||''))})">Use</button></td>
 			<td><button class="mini-btn" onclick="cicCopyPairIds(${escapeAttr(JSON.stringify(pair.case_a||''))}, ${escapeAttr(JSON.stringify(pair.case_b||''))})">Copy IDs</button></td>
+			<td><button class="mini-btn" onclick="cicShowEvidenceCard(${escapeAttr(JSON.stringify(pair))})">Evidence</button></td>
 		</tr>`;
 	}
 	html+='</tbody></table></div>';
@@ -861,7 +862,80 @@ async function cicCopyPairIds(caseA, caseB){
 	}
 }
 
-function cicPrefillPairReview(caseA, caseB){
+// ── Transmission Evidence Card ────────────────────────────────────────────────
+
+function cicShowEvidenceCard(pair){
+	const modal=document.getElementById('evidenceCardModal');
+	const labelEl=document.getElementById('evidenceCardPairLabel');
+	const contentEl=document.getElementById('evidenceCardContent');
+	if(!modal || !contentEl) return;
+
+	if(labelEl) labelEl.textContent=`${pair.case_a||''} → ${pair.case_b||''}`;
+
+	const card=pair.evidence_card;
+	if(!card){
+		contentEl.innerHTML='<p class="hint">Evidence card not available for this pair.</p>';
+		modal.style.display='flex';
+		return;
+	}
+
+	const confidenceColour={strong:'#1a7a4a',moderate:'#c07000',weak:'#5a5a8a',contradicted:'#b02020',insufficient:'#666'};
+	const directionIcon={supports:'✓ supports','contradicts':'✗ contradicts',neutral:'— neutral',weak:'~ weak',missing:'? missing'};
+	const directionColour={supports:'#1a6a3a',contradicts:'#b02020',neutral:'#555',weak:'#666',missing:'#8a6000'};
+
+	let html=`<div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem">
+		<span style="font-weight:700;font-size:1rem;color:${escapeHtml(confidenceColour[card.confidence]||'#444')}">
+			Confidence: ${escapeHtml(card.confidence||'unknown')}
+		</span>
+		<span style="font-size:.8rem;color:#666">
+			${escapeHtml(card.supporting_signal_count||0)} supporting · ${escapeHtml(card.contradicting_signal_count||0)} contradicting
+		</span>
+	</div>`;
+
+	// Signal table
+	html+='<table class="data-table" style="margin-bottom:1rem"><thead><tr><th>Signal</th><th>Evidence</th><th>Direction</th></tr></thead><tbody>';
+	for(const sig of (card.signals||[])){
+		const dir=sig.direction||'neutral';
+		const iconText=directionIcon[dir]||dir;
+		const colour=directionColour[dir]||'#444';
+		html+=`<tr>
+			<td style="white-space:nowrap;font-weight:600">${escapeHtml(sig.signal||'')}</td>
+			<td>${escapeHtml(sig.value||'')}</td>
+			<td style="white-space:nowrap;color:${colour};font-weight:600">${escapeHtml(iconText)}</td>
+		</tr>`;
+	}
+	html+='</tbody></table>';
+
+	// Interpretation paragraph
+	if(card.interpretation){
+		html+=`<div style="background:#f5f7fa;border-left:3px solid #0a84c8;padding:.75rem 1rem;margin-bottom:.75rem;border-radius:0 4px 4px 0">
+			<strong>Interpretation</strong><br>
+			<span style="font-size:.9rem">${escapeHtml(card.interpretation)}</span>
+		</div>`;
+	}
+
+	// Recommendation
+	if(card.recommendation){
+		html+=`<div style="background:#f0faf4;border-left:3px solid #1a7a4a;padding:.75rem 1rem;border-radius:0 4px 4px 0">
+			<strong>Recommendation</strong><br>
+			<span style="font-size:.9rem">${escapeHtml(card.recommendation)}</span>
+		</div>`;
+	}
+
+	html+=`<p style="font-size:.75rem;color:#999;margin-top:.75rem">
+		Heuristic evidence synthesis only. Not a validated transmission model. Requires expert review.
+	</p>`;
+
+	contentEl.innerHTML=html;
+	modal.style.display='flex';
+}
+
+function closeEvidenceCardModal(){
+	const modal=document.getElementById('evidenceCardModal');
+	if(modal) modal.style.display='none';
+}
+
+
 	const caseAInput=document.getElementById('cicReviewCaseA');
 	const caseBInput=document.getElementById('cicReviewCaseB');
 	const pairSelect=document.getElementById('cicReviewPairSelect');

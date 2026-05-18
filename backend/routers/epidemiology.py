@@ -7,13 +7,18 @@ from sqlalchemy.orm import Session
 from typing import Annotated
 
 from backend.auth import AuthenticatedUser, require_roles
-from backend.models import CaseContactLink, CaseLocationEvent, Contact, Exposure, Location
+from backend.models import AuditLog, CaseContactLink, CaseLocationEvent, Contact, Exposure, Location
 from backend.routers.case_overview import get_db
 
 
 router = APIRouter(prefix="/epidemiology", tags=["epidemiology"])
 
 Confidence = Annotated[str, StringConstraints(strip_whitespace=True, pattern="^(low|medium|high)$")]
+
+
+def _write_audit(db: Session, action: str, user_id: str, details: dict) -> None:
+    """Append an audit log row within the current transaction (caller must commit)."""
+    db.add(AuditLog(action=action, user_id=user_id, details=details, timestamp=datetime.utcnow()))
 
 
 class ExposureCreate(BaseModel):
@@ -215,6 +220,9 @@ def create_exposure(
 ):
     exposure = Exposure(**payload.model_dump())
     db.add(exposure)
+    db.flush()
+    _write_audit(db, "exposure_created", _user.subject,
+                 {"exposure_id": str(exposure.exposure_id), "exposure_type": exposure.exposure_type})
     db.commit()
     db.refresh(exposure)
     return exposure
@@ -242,6 +250,9 @@ def create_contact(
 ):
     contact = Contact(**payload.model_dump())
     db.add(contact)
+    db.flush()
+    _write_audit(db, "contact_created", _user.subject,
+                 {"contact_id": str(contact.contact_id), "contact_label": contact.contact_label})
     db.commit()
     db.refresh(contact)
     return contact
@@ -269,6 +280,9 @@ def create_location(
 ):
     location = Location(**payload.model_dump())
     db.add(location)
+    db.flush()
+    _write_audit(db, "location_created", _user.subject,
+                 {"location_id": str(location.location_id), "location_name": location.location_name})
     db.commit()
     db.refresh(location)
     return location
@@ -343,6 +357,10 @@ def create_case_location_event(
         notes=_clean_optional(payload.notes),
     )
     db.add(event)
+    db.flush()
+    _write_audit(db, "case_location_event_created", _user.subject,
+                 {"event_id": str(event.event_id), "case_id": str(event.case_id),
+                  "location_id": str(event.location_id), "event_type": event.event_type})
     db.commit()
     db.refresh(event)
     return event
@@ -367,6 +385,8 @@ def update_case_location_event(
             raise HTTPException(status_code=422, detail="event_type must not be empty")
     for key, value in updates.items():
         setattr(event, key, value)
+    _write_audit(db, "case_location_event_updated", _user.subject,
+                 {"event_id": str(event_id), "updated_fields": list(updates.keys())})
     db.commit()
     db.refresh(event)
     return event
@@ -437,6 +457,10 @@ def create_case_contact_link(
         notes=_clean_optional(payload.notes),
     )
     db.add(link)
+    db.flush()
+    _write_audit(db, "case_contact_link_created", _user.subject,
+                 {"link_id": str(link.link_id), "case_id": str(link.case_id),
+                  "contact_id": str(link.contact_id)})
     db.commit()
     db.refresh(link)
     return link
@@ -457,7 +481,8 @@ def update_case_contact_link(
         _get_or_404(db, Exposure, updates["exposure_id"], "Exposure")
     for key, value in updates.items():
         setattr(link, key, value)
+    _write_audit(db, "case_contact_link_updated", _user.subject,
+                 {"link_id": str(link_id), "updated_fields": list(updates.keys())})
     db.commit()
     db.refresh(link)
     return link
-

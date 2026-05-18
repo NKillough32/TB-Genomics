@@ -3,27 +3,47 @@ from __future__ import annotations
 from typing import Any
 
 
+def _epi_supports_transmission(epi_support_level: str) -> bool:
+    """Return True when the epi support level is considered corroborating."""
+    return epi_support_level in {
+        "strong",
+        "moderate",
+        "temporal_and_geographic",  # legacy proxy value
+        "temporal_only",             # legacy proxy value
+    }
+
+
 def confidence_category(
     *,
     snp_distance: int | None,
     posterior_probability: float | None,
-    temporal_support: bool,
+    epi_support_level: str = "unknown",
     low_snp_threshold: int,
     high_snp_contradiction_threshold: int,
     high_posterior_threshold: float,
 ) -> str:
-    """Classify transmission support into operational synthesis categories."""
+    """Classify transmission support into operational synthesis categories.
+
+    ``epi_support_level`` accepts both the structured values returned by
+    :func:`~backend.synthesis.epi_evidence.compute_epi_evidence`
+    (``'strong'``, ``'moderate'``, ``'weak'``, ``'temporal_only'``,
+    ``'none'``, ``'unknown'``) and the older proxy values
+    (``'temporal_and_geographic'``, ``'temporal_only'``, ``'geographic_only'``,
+    ``'none'``) for backward compatibility.
+    """
     if snp_distance is None or posterior_probability is None:
         return "insufficient_evidence"
 
     low_snp = snp_distance <= low_snp_threshold
     high_posterior = posterior_probability >= high_posterior_threshold
+    has_epi = _epi_supports_transmission(epi_support_level)
+    strong_epi = epi_support_level in {"strong", "temporal_and_geographic"}
 
     if high_posterior and snp_distance >= high_snp_contradiction_threshold:
         return "contradictory"
-    if low_snp and high_posterior and temporal_support:
+    if low_snp and high_posterior and strong_epi:
         return "strong_support"
-    if low_snp and (high_posterior or temporal_support):
+    if low_snp and (high_posterior or has_epi):
         return "moderate_support"
     if low_snp:
         return "genomic_only_signal"
@@ -62,9 +82,11 @@ def pair_priority_score(
         elif snp_distance >= 20:
             score -= 8
 
-    if epi_support_level == "temporal_and_geographic":
+    if epi_support_level == "strong":
+        score += 10
+    elif epi_support_level in {"moderate", "temporal_and_geographic"}:
         score += 6
-    elif epi_support_level in {"temporal_only", "geographic_only"}:
+    elif epi_support_level in {"weak", "temporal_only", "geographic_only"}:
         score += 3
 
     score += min(15, len(pair_flags) * 4)

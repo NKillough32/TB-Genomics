@@ -126,6 +126,12 @@ def test_transmission_synthesis_reports_validation_and_calibration(monkeypatch):
             ]
         },
     )
+    # Return empty epi records so the proxy fallback is exercised.
+    monkeypatch.setattr(
+        mod,
+        "load_epi_records_for_cases",
+        lambda db, case_ids: {"contact_links": {}, "location_events": {}},
+    )
 
     payload = build_transmission_synthesis(db=object(), cluster_id=None)
 
@@ -135,5 +141,103 @@ def test_transmission_synthesis_reports_validation_and_calibration(monkeypatch):
     assert payload["pairs"][0]["snp_distance_source"] == "sequence_cluster_proxy"
     assert payload["pairs"][0]["sequence_cluster_match"] is True
     assert payload["pairs"][0]["epi_support"] == "temporal_and_geographic"
+    assert "epi_evidence" in payload["pairs"][0]
     assert payload["warning"].startswith("This synthesis output is heuristic")
+
+
+# ---------------------------------------------------------------------------
+# epi_evidence module unit tests
+# ---------------------------------------------------------------------------
+
+def test_compute_epi_evidence_empty_records_returns_unknown_level():
+    from backend.synthesis.epi_evidence import compute_epi_evidence
+
+    result = compute_epi_evidence(
+        "case-a",
+        "case-b",
+        {"contact_links": {}, "location_events": {}},
+    )
+
+    assert result["epi_support_level"] == "unknown"
+    assert result["shared_contacts"] == []
+    assert result["shared_locations"] == []
+    assert result["shared_exposures"] == []
+    assert "no_epi_records_case_a" in result["missing_data"]
+    assert "no_epi_records_case_b" in result["missing_data"]
+
+
+def test_compute_epi_evidence_shared_contact_raises_level():
+    from datetime import date
+    from backend.synthesis.epi_evidence import compute_epi_evidence
+
+    shared_contact = {
+        "link_id": "link-1",
+        "contact_id": "contact-x",
+        "contact_label": "HCW Facility A",
+        "contact_type": "healthcare",
+        "relationship_type": None,
+        "exposure_id": None,
+        "exposure_type": None,
+        "confidence": "high",
+        "exposure_start_date": None,
+        "exposure_end_date": None,
+    }
+    records = {
+        "contact_links": {
+            "case-a": [shared_contact],
+            "case-b": [shared_contact],
+        },
+        "location_events": {},
+    }
+
+    result = compute_epi_evidence(
+        "case-a",
+        "case-b",
+        records,
+        specimen_date_a=date(2026, 1, 1),
+        specimen_date_b=date(2026, 1, 15),
+        temporal_window_days=45,
+    )
+
+    assert result["epi_support_level"] in {"strong", "moderate"}
+    assert len(result["shared_contacts"]) == 1
+    assert result["shared_contacts"][0]["contact_id"] == "contact-x"
+    assert result["temporal_overlap"] == "plausible"
+
+
+def test_compute_epi_evidence_implausible_dates_with_shared_link_flags_contradiction():
+    from datetime import date
+    from backend.synthesis.epi_evidence import compute_epi_evidence
+
+    shared_contact = {
+        "link_id": "link-1",
+        "contact_id": "contact-x",
+        "contact_label": "HCW Facility A",
+        "contact_type": "healthcare",
+        "relationship_type": None,
+        "exposure_id": None,
+        "exposure_type": None,
+        "confidence": "medium",
+        "exposure_start_date": None,
+        "exposure_end_date": None,
+    }
+    records = {
+        "contact_links": {
+            "case-a": [shared_contact],
+            "case-b": [shared_contact],
+        },
+        "location_events": {},
+    }
+
+    result = compute_epi_evidence(
+        "case-a",
+        "case-b",
+        records,
+        specimen_date_a=date(2024, 1, 1),
+        specimen_date_b=date(2026, 6, 1),  # > 2 years apart
+        temporal_window_days=45,
+    )
+
+    assert result["temporal_overlap"] == "implausible"
+    assert "shared_epi_link_but_implausible_temporal_overlap" in result["contradictions"]
 

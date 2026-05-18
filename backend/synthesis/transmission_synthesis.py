@@ -9,6 +9,7 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from backend.synthesis.epi_evidence import compute_epi_evidence, load_epi_records_for_cases
 from backend.synthesis.explanations import category_display, interpretation_text, recommended_actions
 from backend.synthesis.flags import cluster_flags, pair_flags
 from backend.synthesis.scoring import (
@@ -151,8 +152,9 @@ def _validation_notice() -> dict[str, str]:
         "validation_status": "heuristic_non_validated",
         "warning": (
             "This synthesis output is heuristic and non-validated. Sequence support is derived from "
-            "precomputed sequence-cluster assignments rather than a raw SNP pipeline, epidemiological "
-            "support is proxy-based, and scores require calibration before real-world use."
+            "precomputed sequence-cluster assignments rather than a raw SNP pipeline, and scores require "
+            "calibration before real-world use. Epidemiological support uses structured database records "
+            "where available, falling back to temporal and geographic proximity when records are absent."
         ),
     }
 
@@ -204,6 +206,9 @@ def build_transmission_synthesis(
     net = _export_json("exports/transmission_network.json")
     edges = net.get("edges") or []
 
+    # Bulk-load structured epi records for all cases so per-pair queries are avoided.
+    epi_records = load_epi_records_for_cases(db, case_ids=list(case_index.keys()))
+
     cluster_members: dict[str, set[str]] = {}
     for case in case_index.values():
         ckey = case["cluster_id"] or "unclustered"
@@ -243,7 +248,30 @@ def build_transmission_synthesis(
 
         temporal_support = _bool_temporal_support(src["specimen_date"], tgt["specimen_date"], cfg.temporal_window_days)
         geographic_support = src["region"] == tgt["region"]
-        epi_support = _epi_support_level(temporal_support, geographic_support)
+
+        # Structured epi evidence from database records (replaces proxy-only approach)
+        epi_ev = compute_epi_evidence(
+            source,
+            target,
+            epi_records,
+            specimen_date_a=src["specimen_date"],
+            specimen_date_b=tgt["specimen_date"],
+            temporal_window_days=cfg.temporal_window_days,
+        )
+        epi_support = epi_ev["epi_support_level"]
+
+        # Retain legacy proxy level as fallback label when DB has no records.
+        # When both cases lack structured epi records, fall back entirely to
+        # the specimen-date + geographic-region proxy.  When structured records
+        # yielded temporal_only but the cases share a region, upgrade the label.
+        no_records_both = (
+            "no_epi_records_case_a" in epi_ev.get("missing_data", [])
+            and "no_epi_records_case_b" in epi_ev.get("missing_data", [])
+        )
+        if no_records_both and (temporal_support or geographic_support):
+            epi_support = _epi_support_level(temporal_support, geographic_support)
+        elif epi_support == "temporal_only" and geographic_support:
+            epi_support = "temporal_and_geographic"
 
         src_qc_ok = src["qc_status"] in {"pass", "passed"} and not src["contamination_flag"]
         tgt_qc_ok = tgt["qc_status"] in {"pass", "passed"} and not tgt["contamination_flag"]
@@ -265,7 +293,7 @@ def build_transmission_synthesis(
         category = confidence_category(
             snp_distance=snp,
             posterior_probability=posterior,
-            temporal_support=temporal_support,
+            epi_support_level=epi_support,
             low_snp_threshold=cfg.low_snp_threshold,
             high_snp_contradiction_threshold=cfg.high_snp_contradiction_threshold,
             high_posterior_threshold=cfg.high_posterior_threshold,
@@ -300,6 +328,7 @@ def build_transmission_synthesis(
                 "interpretation": interpretation,
                 "flags": p_flags,
                 "recommended_review_actions": actions,
+                "epi_evidence": epi_ev,
                 "validation_status": "heuristic_non_validated",
             }
         )
@@ -383,8 +412,9 @@ def build_transmission_synthesis(
                 "flags": c_flags,
                 "recommended_investigation_actions": c_actions,
                 "explanation": (
-                    "Synthesis integrates SNP distance, Outbreaker posterior, temporal plausibility, and region context "
-                    "into investigation-ready confidence categories and review priorities."
+                    "Synthesis integrates SNP distance, Outbreaker posterior, and structured epidemiological evidence "
+                    "(shared contacts, locations, and exposures from database records) into investigation-ready "
+                    "confidence categories and review priorities."
                 ),
                 "pairwise_transmission_evidence": cluster_pairs,
                 "validation_status": "heuristic_non_validated",

@@ -935,6 +935,14 @@ function closeEvidenceCardModal(){
 	if(modal) modal.style.display='none';
 }
 
+function cicHandleEvidenceCardBackdropClick(event){
+	if(event && event.target && event.target.id==='evidenceCardModal'){
+		closeEvidenceCardModal();
+	}
+}
+
+
+function cicPrefillPairReview(caseA, caseB){
 
 	const caseAInput=document.getElementById('cicReviewCaseA');
 	const caseBInput=document.getElementById('cicReviewCaseB');

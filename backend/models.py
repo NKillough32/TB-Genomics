@@ -198,3 +198,15 @@ class CaseContactLink(Base):
     confidence = Column(String)
     notes = Column(String)
     created_at = Column(TIMESTAMP)
+
+
+class CasePairReview(Base):
+    __tablename__ = "case_pair_reviews"
+
+    case_a = Column(UUID(as_uuid=True), ForeignKey("cases.pseudonymised_case_id"), primary_key=True)
+    case_b = Column(UUID(as_uuid=True), ForeignKey("cases.pseudonymised_case_id"), primary_key=True)
+    reviewer_classification = Column(String, nullable=False)
+    reviewer = Column(String, nullable=False)
+    notes = Column(String)
+    source_cluster_id = Column(UUID(as_uuid=True), ForeignKey("clusters.cluster_id"))
+    reviewed_at = Column(TIMESTAMP)

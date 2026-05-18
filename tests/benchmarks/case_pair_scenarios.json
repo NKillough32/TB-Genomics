@@ -1,0 +1,66 @@
+[
+  {
+    "name": "known_outbreak_pair",
+    "rows": [
+      {
+        "case_id": "10000000-0000-0000-0000-000000000001",
+        "specimen_date": "2026-01-01",
+        "region": "Belfast",
+        "cluster_id": "11111111-1111-1111-1111-111111111111",
+        "lineage": "L4",
+        "predicted_drug_resistance": {"rifampicin": "susceptible"},
+        "sequence": "ACGTACGT"
+      },
+      {
+        "case_id": "10000000-0000-0000-0000-000000000002",
+        "specimen_date": "2026-01-04",
+        "region": "Belfast",
+        "cluster_id": "11111111-1111-1111-1111-111111111111",
+        "lineage": "L4",
+        "predicted_drug_resistance": {"rifampicin": "susceptible"},
+        "sequence": "ACGTACGA"
+      }
+    ],
+    "pair_epi_index": {
+      "10000000-0000-0000-0000-000000000001|10000000-0000-0000-0000-000000000002": {
+        "domains": ["congregate_setting"],
+        "supports": ["shared_locations:1"],
+        "direct_observation": true,
+        "shared_location_count": 1,
+        "shared_contact_count": 0
+      }
+    },
+    "expected": {
+      "overall_interpretation": "strong support, needs reviewer confirmation",
+      "basis": "genomic+epi"
+    }
+  },
+  {
+    "name": "false_cluster_pair",
+    "rows": [
+      {
+        "case_id": "20000000-0000-0000-0000-000000000001",
+        "specimen_date": "2026-01-01",
+        "region": "A",
+        "cluster_id": "22222222-2222-2222-2222-222222222222",
+        "lineage": "L2",
+        "predicted_drug_resistance": {"rifampicin": "resistant"},
+        "sequence": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      },
+      {
+        "case_id": "20000000-0000-0000-0000-000000000002",
+        "specimen_date": "2026-06-01",
+        "region": "B",
+        "cluster_id": "22222222-2222-2222-2222-222222222222",
+        "lineage": "L4",
+        "predicted_drug_resistance": {"isoniazid": "resistant"},
+        "sequence": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTT"
+      }
+    ],
+    "pair_epi_index": {},
+    "expected": {
+      "overall_interpretation": "contradictory evidence",
+      "basis": "genomic+epi"
+    }
+  }
+]

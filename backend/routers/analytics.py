@@ -1,12 +1,16 @@
 import json
 from collections import defaultdict
 from datetime import datetime
+from itertools import combinations
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fastapi.responses import HTMLResponse
+from pydantic import BaseModel, StringConstraints
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from backend.auth import AuthenticatedUser, require_roles
 from backend.database import SessionLocal
 from backend.snp_validation import validated_snp_distance
 from backend.synthesis.transmission_synthesis import (
@@ -16,6 +20,31 @@ from backend.synthesis.transmission_synthesis import (
 )
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
+
+REVIEW_CLASSIFICATIONS = (
+    "confirmed transmission",
+    "probable transmission",
+    "possible transmission",
+    "unlikely transmission",
+    "insufficient evidence",
+)
+
+ReviewClassification = Annotated[
+    str,
+    StringConstraints(
+        strip_whitespace=True,
+        pattern="^(confirmed transmission|probable transmission|possible transmission|unlikely transmission|insufficient evidence)$",
+    ),
+]
+
+
+class CasePairReviewUpsert(BaseModel):
+    case_a: Annotated[str, StringConstraints(strip_whitespace=True, min_length=36, max_length=36)]
+    case_b: Annotated[str, StringConstraints(strip_whitespace=True, min_length=36, max_length=36)]
+    reviewer_classification: ReviewClassification
+    notes: str | None = None
+    reviewer: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)] | None = None
+    cluster_id: Annotated[str, StringConstraints(strip_whitespace=True, min_length=36, max_length=36)] | None = None
 
 
 def get_db():
@@ -54,10 +83,14 @@ def _case_rows(db: Session):
                COALESCE(c.geographic_region, 'Unknown') AS region,
                COALESCE(cc.cluster_id::text, '') AS cluster_id,
                COALESCE(ti.lineage, '') AS lineage,
+               ti.predicted_drug_resistance,
+               LOWER(COALESCE(sqm.qc_status, 'not_reported')) AS qc_status,
+               COALESCE(sqm.contamination_flag, FALSE) AS contamination_flag,
                cs.sequence
         FROM cases c
         LEFT JOIN case_clusters cc ON cc.sample_id = c.pseudonymised_case_id
         LEFT JOIN tb_interpretation ti ON ti.sample_id = c.pseudonymised_case_id
+        LEFT JOIN sample_qc_metrics sqm ON sqm.sample_id = c.pseudonymised_case_id
         LEFT JOIN consensus_sequences cs ON cs.sample_id = c.pseudonymised_case_id
     """)).mappings().all()
 
@@ -70,6 +103,647 @@ def _validation_notice() -> dict[str, str]:
             "require calibrated pipelines before real-world use."
         ),
     }
+
+
+def _latest_pair_review_map(db: Session, pair_keys: set[tuple[str, str]]) -> dict[tuple[str, str], dict]:
+    if not pair_keys:
+        return {}
+
+    try:
+        rows = db.execute(text("""
+            SELECT case_a::text AS case_a,
+                   case_b::text AS case_b,
+                   reviewer_classification,
+                   reviewer,
+                   notes,
+                   source_cluster_id::text AS source_cluster_id,
+                   reviewed_at
+            FROM case_pair_reviews
+            ORDER BY reviewed_at DESC
+            LIMIT 5000
+        """)).mappings().all()
+    except Exception:
+        return {}
+
+    review_map: dict[tuple[str, str], dict] = {}
+    for row in rows:
+        key = _pair_key(str(row.get("case_a") or ""), str(row.get("case_b") or ""))
+        if key in pair_keys and key not in review_map:
+            review_map[key] = {
+                "classification": str(row.get("reviewer_classification") or ""),
+                "reviewer": str(row.get("reviewer") or ""),
+                "notes": row.get("notes"),
+                "reviewed_at": row.get("reviewed_at").isoformat() if row.get("reviewed_at") else None,
+                "cluster_id": str(row.get("source_cluster_id") or "") or None,
+            }
+    return review_map
+
+
+def _cluster_priority_reasons(
+    rows: list,
+    pair_epi_index: dict[tuple[str, str], dict],
+    cluster_id: str,
+    *,
+    recent_days: int,
+    resistance_drug_keyword: str,
+) -> dict:
+    now = datetime.utcnow().date()
+    case_count = len(rows)
+    recent_cases = 0
+    regions: set[str] = set()
+    resistant_cases = 0
+
+    for row in rows:
+        specimen = row.get("specimen_date")
+        if specimen and (now - specimen).days <= recent_days:
+            recent_cases += 1
+        region = str(row.get("region") or "Unknown")
+        if region and region != "Unknown":
+            regions.add(region)
+        resistant = _resistant_drug_set(row.get("predicted_drug_resistance"))
+        if any(resistance_drug_keyword.lower() in drug for drug in resistant):
+            resistant_cases += 1
+
+    case_ids = sorted(str(r.get("case_id")) for r in rows if r.get("case_id"))
+    congregate_pairs = 0
+    healthcare_pairs = 0
+    household_pairs = 0
+    for case_a, case_b in combinations(case_ids, 2):
+        domains = set((pair_epi_index.get(_pair_key(case_a, case_b), {}) or {}).get("domains") or [])
+        if "congregate_setting" in domains:
+            congregate_pairs += 1
+        if "healthcare_exposure" in domains:
+            healthcare_pairs += 1
+        if "household" in domains:
+            household_pairs += 1
+
+    network = _export_json("exports/transmission_network.json") or {}
+    edges = network.get("edges") or []
+    cluster_set = set(case_ids)
+    high_conf_edges = 0
+    for edge in edges:
+        src = str(edge.get("source") or "")
+        tgt = str(edge.get("target") or "")
+        if src in cluster_set and tgt in cluster_set and float(edge.get("probability") or 0.0) >= 0.70:
+            high_conf_edges += 1
+
+    reasons: list[str] = []
+    reasons.append(f"{case_count} cases are assigned to this genomic cluster")
+    if recent_cases:
+        reasons.append(f"{recent_cases} cases have specimen dates within the last {recent_days} days")
+    if congregate_pairs:
+        reasons.append(f"{congregate_pairs} case-pairs have shared congregate exposure evidence")
+    if household_pairs:
+        reasons.append(f"{household_pairs} case-pairs have household linkage evidence")
+    if healthcare_pairs:
+        reasons.append(f"{healthcare_pairs} case-pairs have shared healthcare exposure evidence")
+    if resistant_cases:
+        reasons.append(f"{resistant_cases} cases include {resistance_drug_keyword} resistance signals")
+    if len(regions) > 1:
+        reasons.append(f"geography spans {len(regions)} regions ({', '.join(sorted(regions))})")
+    if high_conf_edges:
+        reasons.append(f"{high_conf_edges} high-confidence transmission edges are present in model outputs")
+
+    if not reasons:
+        reasons = ["No strong prioritisation signals were detected from currently available evidence"]
+
+    return {
+        "cluster_id": cluster_id,
+        "reasons": reasons,
+        "metrics": {
+            "case_count": case_count,
+            "recent_cases": recent_cases,
+            "congregate_pairs": congregate_pairs,
+            "household_pairs": household_pairs,
+            "healthcare_pairs": healthcare_pairs,
+            "resistant_cases": resistant_cases,
+            "region_count": len(regions),
+            "high_confidence_edges": high_conf_edges,
+        },
+    }
+
+
+def _pair_key(case_a: str, case_b: str) -> tuple[str, str]:
+    return tuple(sorted([str(case_a), str(case_b)]))
+
+
+def _infer_epi_domain(location_type: str, exposure_type: str, context: str) -> str:
+    blob = f"{location_type} {exposure_type} {context}".lower()
+    if any(token in blob for token in ("household", "home", "address", "visitor")):
+        return "household"
+    if any(token in blob for token in ("prison", "hostel", "shelter", "work", "workplace", "school")):
+        return "congregate_setting"
+    if any(token in blob for token in ("ward", "clinic", "hospital", "health", "healthcare", "waiting room")):
+        return "healthcare_exposure"
+    if any(token in blob for token in ("social", "event", "venue", "community", "group")):
+        return "social_exposure"
+    if any(token in blob for token in ("travel", "migration", "arrival", "route", "country")):
+        return "travel_migration"
+    return "unknown"
+
+
+def _resistant_drug_set(predicted_dr: object) -> set[str]:
+    resistant: set[str] = set()
+    if isinstance(predicted_dr, dict):
+        for drug, value in predicted_dr.items():
+            status = str(value).strip().lower()
+            if status in {"r", "resistant"} or "resistant" in status:
+                resistant.add(str(drug).strip().lower())
+    return resistant
+
+
+def _build_pair_epi_index(db: Session, case_ids: set[str]) -> dict[tuple[str, str], dict]:
+    if len(case_ids) < 2:
+        return {}
+
+    location_rows = db.execute(text("""
+        SELECT cle.case_id::text AS case_id,
+               COALESCE(cle.location_id::text, '') AS location_id,
+               COALESCE(LOWER(l.location_type), '') AS location_type,
+               COALESCE(LOWER(e.exposure_type), '') AS exposure_type,
+               COALESCE(LOWER(e.exposure_context), '') AS exposure_context,
+               cle.arrived_at,
+               cle.departed_at
+        FROM case_location_events cle
+        LEFT JOIN locations l ON l.location_id = cle.location_id
+        LEFT JOIN exposures e ON e.exposure_id = cle.exposure_id
+    """)).mappings().all()
+
+    contact_rows = db.execute(text("""
+        SELECT case_id::text AS case_id,
+               contact_id::text AS contact_id
+        FROM case_contact_links
+    """)).mappings().all()
+
+    by_case_locations: dict[str, list[dict]] = defaultdict(list)
+    for row in location_rows:
+        case_id = str(row.get("case_id") or "")
+        if case_id in case_ids:
+            by_case_locations[case_id].append(dict(row))
+
+    by_case_contacts: dict[str, set[str]] = defaultdict(set)
+    for row in contact_rows:
+        case_id = str(row.get("case_id") or "")
+        contact_id = str(row.get("contact_id") or "")
+        if case_id in case_ids and contact_id:
+            by_case_contacts[case_id].add(contact_id)
+
+    pair_index: dict[tuple[str, str], dict] = {}
+    for case_a, case_b in combinations(sorted(case_ids), 2):
+        shared_domains: set[str] = set()
+        supports: list[str] = []
+        direct_observation = False
+
+        left_locs = by_case_locations.get(case_a, [])
+        right_locs = by_case_locations.get(case_b, [])
+        shared_locations = 0
+
+        for left in left_locs:
+            for right in right_locs:
+                if left.get("location_id") and left.get("location_id") == right.get("location_id"):
+                    shared_locations += 1
+                    direct_observation = True
+                    domain = _infer_epi_domain(
+                        str(left.get("location_type") or right.get("location_type") or ""),
+                        str(left.get("exposure_type") or right.get("exposure_type") or ""),
+                        str(left.get("exposure_context") or right.get("exposure_context") or ""),
+                    )
+                    shared_domains.add(domain)
+
+        shared_contacts = by_case_contacts.get(case_a, set()) & by_case_contacts.get(case_b, set())
+        if shared_contacts:
+            direct_observation = True
+            shared_domains.add("social_exposure")
+
+        if shared_locations > 0:
+            supports.append(f"shared_locations:{shared_locations}")
+        if shared_contacts:
+            supports.append(f"shared_contacts:{len(shared_contacts)}")
+
+        pair_index[_pair_key(case_a, case_b)] = {
+            "domains": sorted(domain for domain in shared_domains if domain != "unknown"),
+            "supports": supports,
+            "direct_observation": direct_observation,
+            "shared_location_count": shared_locations,
+            "shared_contact_count": len(shared_contacts),
+        }
+
+    return pair_index
+
+
+def _score_label(score: int) -> str:
+    if score >= 5:
+        return "strong epi support"
+    if score >= 3:
+        return "moderate epi support"
+    if score >= 1:
+        return "weak epi support"
+    if score < 0:
+        return "contradictory"
+    return "unknown"
+
+
+def _build_case_pair_evidence_payload(
+    rows: list,
+    pair_epi_index: dict[tuple[str, str], dict],
+    *,
+    snp_strong_threshold: int,
+    snp_moderate_threshold: int,
+    temporal_window_days: int,
+    max_pairs: int,
+) -> dict:
+    rows_by_id = {str(r["case_id"]): r for r in rows if r.get("case_id")}
+    ordered_case_ids = sorted(rows_by_id.keys(), key=lambda cid: str(rows_by_id[cid].get("specimen_date") or "9999-12-31"))
+
+    pairs: list[dict] = []
+    support_summary = defaultdict(int)
+
+    for case_a, case_b in combinations(ordered_case_ids, 2):
+        if len(pairs) >= max_pairs:
+            break
+
+        left = rows_by_id[case_a]
+        right = rows_by_id[case_b]
+        missing_evidence: list[str] = []
+        supporting_evidence: list[str] = []
+        contradictory_evidence: list[str] = []
+
+        seq_a = str(left.get("sequence") or "")
+        seq_b = str(right.get("sequence") or "")
+        snp_validation = validated_snp_distance(seq_a, seq_b) if seq_a and seq_b else None
+        snp_distance = snp_validation.distance if snp_validation else None
+
+        lineage_a = str(left.get("lineage") or "")
+        lineage_b = str(right.get("lineage") or "")
+        same_lineage = bool(lineage_a and lineage_b and lineage_a == lineage_b)
+
+        if snp_distance is None:
+            genomic_support = "unknown"
+            missing_evidence.append("missing_sequence")
+        elif snp_distance <= snp_strong_threshold:
+            genomic_support = "strong epi support"
+            supporting_evidence.append(f"low_snp_distance:{snp_distance}")
+        elif snp_distance <= snp_moderate_threshold:
+            genomic_support = "moderate epi support"
+            supporting_evidence.append(f"moderate_snp_distance:{snp_distance}")
+        elif snp_distance <= 20:
+            genomic_support = "weak epi support"
+            supporting_evidence.append(f"elevated_snp_distance:{snp_distance}")
+        else:
+            genomic_support = "contradictory"
+            contradictory_evidence.append(f"high_snp_distance:{snp_distance}")
+
+        if lineage_a and lineage_b:
+            if same_lineage:
+                supporting_evidence.append("same_lineage")
+            else:
+                contradictory_evidence.append("lineage_mismatch")
+        else:
+            missing_evidence.append("missing_lineage")
+
+        specimen_a = left.get("specimen_date")
+        specimen_b = right.get("specimen_date")
+        temporal_delta_days = None
+        if specimen_a and specimen_b:
+            temporal_delta_days = abs((specimen_b - specimen_a).days)
+            temporal_plausible = temporal_delta_days <= temporal_window_days
+            if temporal_plausible:
+                supporting_evidence.append(f"temporal_overlap_within_{temporal_window_days}d")
+            else:
+                contradictory_evidence.append(f"temporal_gap_exceeds_{temporal_window_days}d")
+        else:
+            temporal_plausible = None
+            missing_evidence.append("missing_specimen_date")
+
+        region_a = str(left.get("region") or "Unknown")
+        region_b = str(right.get("region") or "Unknown")
+        same_region = region_a == region_b and region_a != "Unknown"
+        if same_region:
+            supporting_evidence.append("same_geographic_region")
+
+        epi = pair_epi_index.get(_pair_key(case_a, case_b), {})
+        epi_domains = epi.get("domains") or []
+        supporting_evidence.extend(epi.get("supports") or [])
+
+        epi_score = 0
+        if epi.get("shared_contact_count", 0) > 0:
+            epi_score += 3
+        if epi.get("shared_location_count", 0) > 0:
+            epi_score += 2
+        if same_region:
+            epi_score += 1
+        if temporal_plausible is True:
+            epi_score += 1
+        if temporal_plausible is False:
+            epi_score -= 1
+
+        epi_support = _score_label(epi_score)
+        if not epi_domains and not same_region:
+            missing_evidence.append("no_recorded_epi_link")
+
+        resistant_a = _resistant_drug_set(left.get("predicted_drug_resistance"))
+        resistant_b = _resistant_drug_set(right.get("predicted_drug_resistance"))
+        if resistant_a or resistant_b:
+            if resistant_a == resistant_b:
+                resistance_concordance = "concordant"
+                supporting_evidence.append("resistance_profile_concordant")
+            elif resistant_a & resistant_b:
+                resistance_concordance = "partially_concordant"
+                supporting_evidence.append("resistance_profile_partial_overlap")
+            else:
+                resistance_concordance = "discordant"
+                contradictory_evidence.append("resistance_profile_discordant")
+        else:
+            resistance_concordance = "unknown"
+            missing_evidence.append("missing_resistance_profile")
+
+        basis_parts = []
+        if genomic_support != "unknown":
+            basis_parts.append("genomic")
+        if epi_support != "unknown":
+            basis_parts.append("epi")
+        evidence_basis = "+".join(basis_parts) if basis_parts else "insufficient"
+
+        observation_mode = "directly_observed" if epi.get("direct_observation") else "inferred"
+
+        overall_score = 0
+        score_map = {
+            "strong epi support": 3,
+            "moderate epi support": 2,
+            "weak epi support": 1,
+            "contradictory": -3,
+            "unknown": 0,
+        }
+        overall_score += score_map.get(genomic_support, 0)
+        overall_score += score_map.get(epi_support, 0)
+        if resistance_concordance == "concordant":
+            overall_score += 1
+        elif resistance_concordance == "discordant":
+            overall_score -= 1
+
+        if overall_score >= 5:
+            overall_interpretation = "strong support, needs reviewer confirmation"
+        elif overall_score >= 3:
+            overall_interpretation = "moderate support, needs reviewer confirmation"
+        elif overall_score >= 1:
+            overall_interpretation = "weak support, review with caution"
+        elif contradictory_evidence:
+            overall_interpretation = "contradictory evidence"
+        else:
+            overall_interpretation = "insufficient evidence"
+
+        support_summary[overall_interpretation] += 1
+
+        pairs.append(
+            {
+                "case_a": case_a,
+                "case_b": case_b,
+                "pair": f"{case_a[:8]} -> {case_b[:8]}",
+                "genomic_plausibility": {
+                    "support": genomic_support,
+                    "snp_distance": snp_distance,
+                    "snp_validation_status": snp_validation.status if snp_validation else "missing_sequence",
+                    "same_lineage": same_lineage,
+                    "lineage_a": lineage_a or None,
+                    "lineage_b": lineage_b or None,
+                    "resistance_profile": resistance_concordance,
+                },
+                "temporal_plausibility": {
+                    "window_days": temporal_window_days,
+                    "delta_days": temporal_delta_days,
+                    "plausible": temporal_plausible,
+                    "specimen_date_a": str(specimen_a) if specimen_a else None,
+                    "specimen_date_b": str(specimen_b) if specimen_b else None,
+                },
+                "epidemiological_support": {
+                    "support": epi_support,
+                    "domains": epi_domains,
+                    "same_region": same_region,
+                    "shared_location_count": int(epi.get("shared_location_count") or 0),
+                    "shared_contact_count": int(epi.get("shared_contact_count") or 0),
+                },
+                "evidence": {
+                    "supports": sorted(set(supporting_evidence)),
+                    "missing": sorted(set(missing_evidence)),
+                    "contradicts": sorted(set(contradictory_evidence)),
+                    "basis": evidence_basis,
+                    "observation_mode": observation_mode,
+                },
+                "overall_interpretation": overall_interpretation,
+                "reviewer_classification": None,
+            }
+        )
+
+    return {
+        "pair_count": len(pairs),
+        "support_summary": dict(support_summary),
+        "pairs": pairs,
+        "reviewer_classification_options": list(REVIEW_CLASSIFICATIONS),
+    }
+
+
+@router.get("/case-pair-evidence")
+def case_pair_evidence(
+    cluster_id: str | None = Query(None),
+    max_cases: int = Query(40, ge=2, le=120),
+    max_pairs: int = Query(250, ge=1, le=2000),
+    snp_strong_threshold: int = Query(5, ge=0, le=100),
+    snp_moderate_threshold: int = Query(12, ge=1, le=200),
+    temporal_window_days: int = Query(45, ge=1, le=365),
+    db: Session = Depends(get_db),
+):
+    """Build structured transmission-link evidence for case pairs."""
+    rows = _case_rows(db)
+    if cluster_id:
+        cid = _normalise_uuid(cluster_id)
+        rows = [r for r in rows if str(r.get("cluster_id") or "") == cid]
+
+    rows.sort(key=lambda r: str(r.get("specimen_date") or "9999-12-31"))
+    rows = rows[:max_cases]
+
+    case_ids = {str(r.get("case_id")) for r in rows if r.get("case_id")}
+    pair_epi_index = _build_pair_epi_index(db, case_ids)
+    payload = _build_case_pair_evidence_payload(
+        rows,
+        pair_epi_index,
+        snp_strong_threshold=snp_strong_threshold,
+        snp_moderate_threshold=snp_moderate_threshold,
+        temporal_window_days=temporal_window_days,
+        max_pairs=max_pairs,
+    )
+
+    pair_keys = {_pair_key(str(p["case_a"]), str(p["case_b"])) for p in payload.get("pairs", [])}
+    reviews = _latest_pair_review_map(db, pair_keys)
+    reviewed_count = 0
+    for pair in payload.get("pairs", []):
+        review = reviews.get(_pair_key(str(pair["case_a"]), str(pair["case_b"])))
+        if review:
+            pair["reviewer_classification"] = review
+            reviewed_count += 1
+
+    payload["parameters"] = {
+        "cluster_id": cluster_id,
+        "max_cases": max_cases,
+        "max_pairs": max_pairs,
+        "snp_strong_threshold": snp_strong_threshold,
+        "snp_moderate_threshold": snp_moderate_threshold,
+        "temporal_window_days": temporal_window_days,
+    }
+    payload["case_count"] = len(rows)
+    payload["reviewed_pair_count"] = reviewed_count
+    payload["generated_at"] = datetime.utcnow().isoformat() + "Z"
+    payload["notes"] = [
+        "Heuristic evidence synthesis for reviewer support; not a validated transmission model.",
+        "SNP distance is supportive context only and not proof of direct transmission.",
+    ]
+    payload.update(_validation_notice())
+    return payload
+
+
+@router.post("/case-pair-review")
+def upsert_case_pair_review(
+    payload: CasePairReviewUpsert,
+    db: Session = Depends(get_db),
+    user: AuthenticatedUser = Depends(require_roles("analyst")),
+):
+    """Create or update reviewer classification for a case-pair."""
+    left = _normalise_uuid(payload.case_a)
+    right = _normalise_uuid(payload.case_b)
+    if left == right:
+        raise HTTPException(status_code=422, detail="case_a and case_b must be different cases")
+
+    case_a, case_b = _pair_key(left, right)
+    cluster_id = _normalise_uuid(payload.cluster_id) if payload.cluster_id else None
+    reviewer = (payload.reviewer or user.subject).strip()
+
+    db.execute(text("""
+        INSERT INTO case_pair_reviews (
+            case_a,
+            case_b,
+            reviewer_classification,
+            reviewer,
+            notes,
+            source_cluster_id,
+            reviewed_at
+        )
+        VALUES (
+            CAST(:case_a AS UUID),
+            CAST(:case_b AS UUID),
+            :classification,
+            :reviewer,
+            :notes,
+            CAST(:cluster_id AS UUID),
+            NOW()
+        )
+        ON CONFLICT (case_a, case_b)
+        DO UPDATE SET
+            reviewer_classification = EXCLUDED.reviewer_classification,
+            reviewer = EXCLUDED.reviewer,
+            notes = EXCLUDED.notes,
+            source_cluster_id = EXCLUDED.source_cluster_id,
+            reviewed_at = NOW()
+    """), {
+        "case_a": case_a,
+        "case_b": case_b,
+        "classification": payload.reviewer_classification,
+        "reviewer": reviewer,
+        "notes": payload.notes,
+        "cluster_id": cluster_id,
+    })
+    db.commit()
+
+    return {
+        "case_a": case_a,
+        "case_b": case_b,
+        "reviewer_classification": payload.reviewer_classification,
+        "reviewer": reviewer,
+        "notes": payload.notes,
+        "cluster_id": cluster_id,
+        "updated_at": datetime.utcnow().isoformat() + "Z",
+    }
+
+
+@router.get("/case-pair-reviews")
+def list_case_pair_reviews(
+    cluster_id: str | None = Query(None),
+    case_id: str | None = Query(None),
+    limit: int = Query(200, ge=1, le=2000),
+    db: Session = Depends(get_db),
+):
+    """List saved reviewer classifications for case-pairs."""
+    where = []
+    params: dict[str, object] = {"limit": limit}
+
+    if cluster_id:
+        where.append("source_cluster_id = CAST(:cluster_id AS UUID)")
+        params["cluster_id"] = _normalise_uuid(cluster_id)
+    if case_id:
+        norm_case = _normalise_uuid(case_id)
+        where.append("(case_a = CAST(:case_id AS UUID) OR case_b = CAST(:case_id AS UUID))")
+        params["case_id"] = norm_case
+
+    where_clause = f"WHERE {' AND '.join(where)}" if where else ""
+    sql = f"""
+        SELECT case_a::text AS case_a,
+               case_b::text AS case_b,
+               reviewer_classification,
+               reviewer,
+               notes,
+               source_cluster_id::text AS cluster_id,
+               reviewed_at
+        FROM case_pair_reviews
+        {where_clause}
+        ORDER BY reviewed_at DESC
+        LIMIT :limit
+    """
+    rows = db.execute(text(sql), params).mappings().all()
+
+    return {
+        "total": len(rows),
+        "reviews": [
+            {
+                "case_a": str(r.get("case_a") or ""),
+                "case_b": str(r.get("case_b") or ""),
+                "pair": f"{str(r.get('case_a') or '')[:8]} -> {str(r.get('case_b') or '')[:8]}",
+                "reviewer_classification": str(r.get("reviewer_classification") or ""),
+                "reviewer": str(r.get("reviewer") or ""),
+                "notes": r.get("notes"),
+                "cluster_id": str(r.get("cluster_id") or "") or None,
+                "reviewed_at": r.get("reviewed_at").isoformat() if r.get("reviewed_at") else None,
+            }
+            for r in rows
+        ],
+        "reviewer_classification_options": list(REVIEW_CLASSIFICATIONS),
+    }
+
+
+@router.get("/cluster-why/{cluster_id}")
+def cluster_why_it_matters(
+    cluster_id: str,
+    recent_days: int = Query(90, ge=7, le=365),
+    resistance_drug_keyword: str = Query("rifamp", min_length=3, max_length=30),
+    db: Session = Depends(get_db),
+):
+    """Explain why a cluster is prioritised, with explicit evidence bullets."""
+    cid = _normalise_uuid(cluster_id)
+    rows = [r for r in _case_rows(db) if str(r.get("cluster_id") or "") == cid]
+    if not rows:
+        raise HTTPException(status_code=404, detail="Cluster not found or has no cases")
+
+    case_ids = {str(r.get("case_id")) for r in rows if r.get("case_id")}
+    pair_epi_index = _build_pair_epi_index(db, case_ids)
+    payload = _cluster_priority_reasons(
+        rows,
+        pair_epi_index,
+        cid,
+        recent_days=recent_days,
+        resistance_drug_keyword=resistance_drug_keyword,
+    )
+
+    payload["summary"] = "This cluster is prioritised because: " + "; ".join(payload["reasons"])
+    payload["generated_at"] = datetime.utcnow().isoformat() + "Z"
+    payload.update(_validation_notice())
+    return payload
 
 
 @router.get("/snp-matrix")

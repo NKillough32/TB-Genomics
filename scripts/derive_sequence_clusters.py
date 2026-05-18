@@ -87,7 +87,7 @@ def main() -> None:
                   f"Clustering will be limited to first {max_sequences} samples. "
                   f"To process all, set SEQ_CLUSTER_MAX_SEQUENCES to 0 or higher value.")
             samples = samples[:max_sequences]
-        ]
+
 
         # Replace current cluster assignment with sequence-derived clusters.
         # cluster_investigations holds a direct FK to clusters, and TRUNCATE
@@ -297,4 +297,6 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
 

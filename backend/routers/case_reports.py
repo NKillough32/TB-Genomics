@@ -7,6 +7,8 @@ from sqlalchemy.orm import Session
 from backend.auth import AuthenticatedUser, require_roles
 from backend.data_safety import enforce_operational_dataset
 from backend.routers import cases
+from backend.routers import outbreak_html_builder
+from backend.routers import outbreak_pdf_builder
 
 
 router = APIRouter(prefix="/cases", tags=["cases"])
@@ -76,17 +78,17 @@ def resistance_validation_status(db: Session = Depends(cases.get_db)):
 def outbreak_report_html(db: Session = Depends(cases.get_db)):
     """Generate and return the short publication-friendly static HTML outbreak report."""
     enforce_operational_dataset(db, "cases/outbreak-report.html")
-    return HTMLResponse(content=cases._build_outbreak_report_html(db, full=False))
+    return HTMLResponse(content=outbreak_html_builder._build_outbreak_report_html(db, full=False))
 
 
 @router.get("/outbreak-report.full.html", response_class=HTMLResponse)
 def outbreak_report_full_html(db: Session = Depends(cases.get_db)):
     """Generate and return the full static HTML outbreak report alongside the short version."""
     enforce_operational_dataset(db, "cases/outbreak-report.full.html")
-    return HTMLResponse(content=cases._build_outbreak_report_html(db, full=True))
+    return HTMLResponse(content=outbreak_html_builder._build_outbreak_report_html(db, full=True))
 
 
 @router.get("/outbreak-report")
 def outbreak_report(db: Session = Depends(cases.get_db)):
     """Generate and return a PDF outbreak investigation report."""
-    return cases.outbreak_report(db)
+    return outbreak_pdf_builder.outbreak_report(db)

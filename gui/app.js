@@ -1243,6 +1243,116 @@ async function loadGenomicVsEpiView(){
 	}
 }
 
+function _agreementBand(value, warnThreshold, failThreshold){
+	if(value===null || value===undefined) return 'unknown';
+	if(value < failThreshold) return 'fail';
+	if(value < warnThreshold) return 'warn';
+	return 'pass';
+}
+
+function _safePct(value){
+	if(value===null || value===undefined || Number.isNaN(Number(value))) return 'n/a';
+	return `${(Number(value)*100).toFixed(1)}%`;
+}
+
+async function loadCalibrationView(){
+	const view=document.getElementById('analyticsPrimaryView');
+	view.textContent='Loading calibration dashboard...';
+	try{
+		const cid=_analyticsClusterId();
+		const p=_analyticsParams();
+		const base=`${API}/analytics/case-pair-calibration?max_cases=120&max_pairs=1500&snp_strong_threshold=5&snp_moderate_threshold=${encodeURIComponent(p.snpThreshold)}&temporal_window_days=${encodeURIComponent(p.epiWindowDays)}`;
+		const url=cid?`${base}&cluster_id=${encodeURIComponent(cid)}`:base;
+		const d=await fetch(url).then(r=>r.json());
+
+		const summary=d.summary||{};
+		const exact=summary.exact_agreement;
+		const binary=summary.binary_agreement;
+		const exactBand=_agreementBand(exact, 0.7, 0.5);
+		const binaryBand=_agreementBand(binary, 0.8, 0.65);
+		const exactStatus=exactBand==='pass'?'ready':(exactBand==='warn'?'warning':'failed');
+		const binaryStatus=binaryBand==='pass'?'ready':(binaryBand==='warn'?'warning':'failed');
+
+		let html='<h4>Calibration Dashboard: Model vs Reviewer</h4>';
+		html+=`<p class="hint">Coverage reflects the fraction of model-generated pairs that have reviewer classifications. Use this to track calibration and drift over time.</p>`;
+		html+=`<div class="kpi-strip">
+			Model pairs: ${escapeHtml(d.model_pair_count??0)} |
+			Reviewed pairs: ${escapeHtml(d.reviewed_pair_count??0)} |
+			Coverage: ${escapeHtml(_safePct(d.coverage))} |
+			Exact agreement: ${escapeHtml(_safePct(exact))} ${renderStatusPill(exactStatus)} |
+			Binary agreement: ${escapeHtml(_safePct(binary))} ${renderStatusPill(binaryStatus)}
+		</div>`;
+
+		if(exactBand==='fail' || binaryBand==='fail'){
+			html+=`<p class="hint" style="color:#9a3412;"><strong>Alert:</strong> Agreement has dropped below expected thresholds. Review recent contradictory pairs and re-check interpretation rules.</p>`;
+		}else if(exactBand==='warn' || binaryBand==='warn'){
+			html+=`<p class="hint" style="color:#92400e;"><strong>Watch:</strong> Agreement is moderate. Consider focused reviewer reconciliation and threshold review.</p>`;
+		}else{
+			html+=`<p class="hint" style="color:#166534;"><strong>Stable:</strong> Agreement is within expected range for current heuristics.</p>`;
+		}
+
+		const timeline=d.review_volume_by_month||[];
+		if(timeline.length){
+			html+='<h5>Reviewer volume trend</h5>';
+			html+=_sparkline(timeline, 'count');
+		}
+
+		const byLabel=summary.by_label||{};
+		const labels=Object.keys(byLabel);
+		html+='<h5>Agreement by reviewer label</h5>';
+		if(!labels.length){
+			html+='<p class="hint">No reviewed pairs available for calibration yet.</p>';
+		}else{
+			html+='<table class="data-table"><thead><tr><th>Reviewer label</th><th>Pairs</th><th>Exact matches</th><th>Exact agreement</th></tr></thead><tbody>';
+			for(const label of labels){
+				const row=byLabel[label]||{};
+				html+=`<tr><td>${escapeHtml(label)}</td><td>${escapeHtml(row.count??0)}</td><td>${escapeHtml(row.exact_matches??0)}</td><td>${escapeHtml(_safePct(row.exact_agreement))}</td></tr>`;
+			}
+			html+='</tbody></table>';
+		}
+
+		const confusion=summary.confusion||{};
+		const allCols=new Set(d.reviewer_classification_options||[]);
+		for(const reviewerLabel of Object.keys(confusion)){
+			for(const modelLabel of Object.keys(confusion[reviewerLabel]||{})) allCols.add(modelLabel);
+		}
+		const colLabels=Array.from(allCols);
+		html+='<h5>Confusion matrix (reviewer rows, model columns)</h5>';
+		if(!Object.keys(confusion).length){
+			html+='<p class="hint">Confusion matrix will appear once reviewer labels are saved.</p>';
+		}else{
+			html+='<div class="analytics-table-wrap"><table class="data-table"><thead><tr><th>Reviewer \ Model</th>';
+			for(const col of colLabels) html+=`<th>${escapeHtml(col)}</th>`;
+			html+='</tr></thead><tbody>';
+			for(const reviewerLabel of Object.keys(confusion)){
+				html+=`<tr><th>${escapeHtml(reviewerLabel)}</th>`;
+				for(const col of colLabels){
+					html+=`<td>${escapeHtml((confusion[reviewerLabel]||{})[col]??0)}</td>`;
+				}
+				html+='</tr>';
+			}
+			html+='</tbody></table></div>';
+		}
+
+		html+='<h5>Recent reviewed comparisons</h5>';
+		html+='<table class="data-table"><thead><tr><th>Pair</th><th>Model</th><th>Reviewer</th><th>Match</th><th>Reviewed by</th><th>Reviewed at</th></tr></thead><tbody>';
+		for(const item of (d.comparisons||[]).slice(0,30)){
+			html+=`<tr><td>${escapeHtml(item.pair||'')}</td><td>${escapeHtml(item.model_label||'')}</td><td>${escapeHtml(item.reviewer_label||'')}</td><td>${item.match?'Y':'N'}</td><td>${escapeHtml(item.reviewer||'')}</td><td>${escapeHtml((item.reviewed_at||'').replace('T',' ').replace('Z',' UTC'))}</td></tr>`;
+		}
+		if(!(d.comparisons||[]).length){
+			html+='<tr><td colspan="6">No reviewed pair comparisons available.</td></tr>';
+		}
+		html+='</tbody></table>';
+
+		if(Array.isArray(d.notes)&&d.notes.length){
+			html+=`<p class="hint">${escapeHtml(d.notes.join(' '))}</p>`;
+		}
+		view.innerHTML=html;
+	}catch(e){
+		view.textContent='Failed to load calibration dashboard: '+e;
+	}
+}
+
 function exportClusterDossier(format){
 	const cid=_analyticsClusterId();
 	if(!cid){ alert('Enter a cluster UUID first.'); return; }

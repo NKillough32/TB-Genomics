@@ -62,5 +62,69 @@
       "overall_interpretation": "contradictory evidence",
       "basis": "genomic+epi"
     }
+  },
+  {
+    "name": "imported_related_cases",
+    "rows": [
+      {
+        "case_id": "30000000-0000-0000-0000-000000000001",
+        "specimen_date": "2026-01-01",
+        "region": "Northern",
+        "cluster_id": "33333333-3333-3333-3333-333333333333",
+        "lineage": "L3",
+        "predicted_drug_resistance": {"rifampicin": "susceptible"},
+        "sequence": "ACGTACGTACGT"
+      },
+      {
+        "case_id": "30000000-0000-0000-0000-000000000002",
+        "specimen_date": "2026-01-20",
+        "region": "Southern",
+        "cluster_id": "33333333-3333-3333-3333-333333333333",
+        "lineage": "L3",
+        "predicted_drug_resistance": {"rifampicin": "susceptible"},
+        "sequence": "ACGTACGTACGA"
+      }
+    ],
+    "pair_epi_index": {},
+    "expected": {
+      "overall_interpretation": "moderate support, needs reviewer confirmation",
+      "basis": "genomic+epi"
+    }
+  },
+  {
+    "name": "shared_workplace_exposure",
+    "rows": [
+      {
+        "case_id": "40000000-0000-0000-0000-000000000001",
+        "specimen_date": "2026-02-01",
+        "region": "Belfast",
+        "cluster_id": "44444444-4444-4444-4444-444444444444",
+        "lineage": "L4",
+        "predicted_drug_resistance": {"isoniazid": "susceptible"},
+        "sequence": "ACGTACGT"
+      },
+      {
+        "case_id": "40000000-0000-0000-0000-000000000002",
+        "specimen_date": "2026-02-10",
+        "region": "Belfast",
+        "cluster_id": "44444444-4444-4444-4444-444444444444",
+        "lineage": "L4",
+        "predicted_drug_resistance": {"isoniazid": "susceptible"},
+        "sequence": "ACGTACGC"
+      }
+    ],
+    "pair_epi_index": {
+      "40000000-0000-0000-0000-000000000001|40000000-0000-0000-0000-000000000002": {
+        "domains": ["congregate_setting"],
+        "supports": ["shared_locations:1"],
+        "direct_observation": true,
+        "shared_location_count": 1,
+        "shared_contact_count": 0
+      }
+    },
+    "expected": {
+      "overall_interpretation": "strong support, needs reviewer confirmation",
+      "basis": "genomic+epi"
+    }
   }
 ]

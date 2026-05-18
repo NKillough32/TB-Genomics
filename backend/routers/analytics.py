@@ -343,6 +343,72 @@ def _score_label(score: int) -> str:
     return "unknown"
 
 
+def _model_to_reviewer_classification(overall_interpretation: str) -> str:
+    value = str(overall_interpretation or "").strip().lower()
+    if value.startswith("strong support"):
+        return "probable transmission"
+    if value.startswith("moderate support"):
+        return "possible transmission"
+    if value.startswith("weak support"):
+        return "possible transmission"
+    if value.startswith("contradictory"):
+        return "unlikely transmission"
+    return "insufficient evidence"
+
+
+def _calibration_summary(comparisons: list[dict]) -> dict:
+    reviewed = len(comparisons)
+    if reviewed == 0:
+        return {
+            "reviewed_pairs": 0,
+            "exact_agreement": None,
+            "binary_agreement": None,
+            "by_label": {},
+            "confusion": {},
+        }
+
+    supportive = {"confirmed transmission", "probable transmission", "possible transmission"}
+    exact_matches = 0
+    binary_matches = 0
+    by_label = defaultdict(lambda: {"count": 0, "exact_matches": 0})
+    confusion = defaultdict(lambda: defaultdict(int))
+
+    for row in comparisons:
+        model_label = str(row.get("model_label") or "insufficient evidence")
+        reviewer_label = str(row.get("reviewer_label") or "insufficient evidence")
+        exact = model_label == reviewer_label
+        if exact:
+            exact_matches += 1
+
+        model_supportive = model_label in supportive
+        reviewer_supportive = reviewer_label in supportive
+        if model_supportive == reviewer_supportive:
+            binary_matches += 1
+
+        by_label[reviewer_label]["count"] += 1
+        if exact:
+            by_label[reviewer_label]["exact_matches"] += 1
+        confusion[reviewer_label][model_label] += 1
+
+    return {
+        "reviewed_pairs": reviewed,
+        "exact_agreement": round(exact_matches / reviewed, 4),
+        "binary_agreement": round(binary_matches / reviewed, 4),
+        "by_label": {
+            label: {
+                "count": stats["count"],
+                "exact_matches": stats["exact_matches"],
+                "exact_agreement": round(stats["exact_matches"] / stats["count"], 4) if stats["count"] else None,
+            }
+            for label, stats in sorted(by_label.items())
+        },
+        "confusion": {
+            reviewer_label: dict(sorted(predictions.items()))
+            for reviewer_label, predictions in sorted(confusion.items())
+        },
+    }
+
+
 def _build_case_pair_evidence_payload(
     rows: list,
     pair_epi_index: dict[tuple[str, str], dict],
@@ -744,6 +810,97 @@ def cluster_why_it_matters(
     payload["generated_at"] = datetime.utcnow().isoformat() + "Z"
     payload.update(_validation_notice())
     return payload
+
+
+@router.get("/case-pair-calibration")
+def case_pair_calibration(
+    cluster_id: str | None = Query(None),
+    max_cases: int = Query(80, ge=2, le=300),
+    max_pairs: int = Query(1000, ge=1, le=10000),
+    snp_strong_threshold: int = Query(5, ge=0, le=100),
+    snp_moderate_threshold: int = Query(12, ge=1, le=200),
+    temporal_window_days: int = Query(45, ge=1, le=365),
+    db: Session = Depends(get_db),
+):
+    """Compare model pair interpretations with reviewer classifications."""
+    rows = _case_rows(db)
+    if cluster_id:
+        cid = _normalise_uuid(cluster_id)
+        rows = [r for r in rows if str(r.get("cluster_id") or "") == cid]
+
+    rows.sort(key=lambda r: str(r.get("specimen_date") or "9999-12-31"))
+    rows = rows[:max_cases]
+    case_ids = {str(r.get("case_id")) for r in rows if r.get("case_id")}
+    pair_epi_index = _build_pair_epi_index(db, case_ids)
+    evidence_payload = _build_case_pair_evidence_payload(
+        rows,
+        pair_epi_index,
+        snp_strong_threshold=snp_strong_threshold,
+        snp_moderate_threshold=snp_moderate_threshold,
+        temporal_window_days=temporal_window_days,
+        max_pairs=max_pairs,
+    )
+
+    pairs = evidence_payload.get("pairs") or []
+    pair_keys = {_pair_key(str(p.get("case_a") or ""), str(p.get("case_b") or "")) for p in pairs}
+    reviews = _latest_pair_review_map(db, pair_keys)
+
+    comparisons = []
+    for pair in pairs:
+        key = _pair_key(str(pair.get("case_a") or ""), str(pair.get("case_b") or ""))
+        review = reviews.get(key)
+        if not review:
+            continue
+        model_label = _model_to_reviewer_classification(str(pair.get("overall_interpretation") or ""))
+        reviewer_label = str(review.get("classification") or "").strip().lower()
+        comparisons.append(
+            {
+                "pair": pair.get("pair"),
+                "case_a": pair.get("case_a"),
+                "case_b": pair.get("case_b"),
+                "model_interpretation": pair.get("overall_interpretation"),
+                "model_label": model_label,
+                "reviewer_label": reviewer_label,
+                "match": model_label == reviewer_label,
+                "reviewer": review.get("reviewer"),
+                "reviewed_at": review.get("reviewed_at"),
+            }
+        )
+
+    timeline_counts = defaultdict(int)
+    for item in comparisons:
+        ts = str(item.get("reviewed_at") or "")
+        month = ts[:7] if len(ts) >= 7 else "unknown"
+        timeline_counts[month] += 1
+
+    summary = _calibration_summary(comparisons)
+
+    return {
+        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "parameters": {
+            "cluster_id": cluster_id,
+            "max_cases": max_cases,
+            "max_pairs": max_pairs,
+            "snp_strong_threshold": snp_strong_threshold,
+            "snp_moderate_threshold": snp_moderate_threshold,
+            "temporal_window_days": temporal_window_days,
+        },
+        "model_pair_count": len(pairs),
+        "reviewed_pair_count": len(comparisons),
+        "coverage": round(len(comparisons) / len(pairs), 4) if pairs else None,
+        "summary": summary,
+        "review_volume_by_month": [
+            {"month": month, "count": count}
+            for month, count in sorted(timeline_counts.items())
+        ],
+        "comparisons": comparisons[:200],
+        "reviewer_classification_options": list(REVIEW_CLASSIFICATIONS),
+        "notes": [
+            "Model labels are mapped from heuristic interpretations and require calibration before operational claims.",
+            "Agreement values are descriptive quality metrics, not external validation evidence.",
+        ],
+        **_validation_notice(),
+    }
 
 
 @router.get("/snp-matrix")

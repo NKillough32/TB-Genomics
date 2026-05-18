@@ -97,3 +97,81 @@ def test_cluster_priority_reasons_include_recent_and_resistance_signals(monkeypa
     assert payload["metrics"]["congregate_pairs"] == 1
     assert payload["metrics"]["resistant_cases"] == 1
     assert payload["metrics"]["high_confidence_edges"] == 1
+
+
+def test_calibration_summary_reports_exact_and_binary_agreement():
+    comparisons = [
+        {"model_label": "probable transmission", "reviewer_label": "probable transmission"},
+        {"model_label": "possible transmission", "reviewer_label": "confirmed transmission"},
+        {"model_label": "unlikely transmission", "reviewer_label": "unlikely transmission"},
+        {"model_label": "insufficient evidence", "reviewer_label": "possible transmission"},
+    ]
+
+    summary = analytics._calibration_summary(comparisons)
+
+    assert summary["reviewed_pairs"] == 4
+    assert summary["exact_agreement"] == 0.5
+    assert summary["binary_agreement"] == 0.75
+    assert summary["by_label"]["unlikely transmission"]["exact_agreement"] == 1.0
+
+
+def test_case_pair_calibration_endpoint_compares_model_and_reviewer_labels(monkeypatch):
+    rows = [
+        {
+            "case_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            "specimen_date": date(2026, 1, 1),
+            "region": "Belfast",
+            "cluster_id": "11111111-1111-1111-1111-111111111111",
+            "lineage": "L4",
+            "predicted_drug_resistance": {"rifampicin": "susceptible"},
+            "qc_status": "pass",
+            "contamination_flag": False,
+            "sequence": "ACGTACGT",
+        },
+        {
+            "case_id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+            "specimen_date": date(2026, 1, 4),
+            "region": "Belfast",
+            "cluster_id": "11111111-1111-1111-1111-111111111111",
+            "lineage": "L4",
+            "predicted_drug_resistance": {"rifampicin": "susceptible"},
+            "qc_status": "pass",
+            "contamination_flag": False,
+            "sequence": "ACGTACGA",
+        },
+    ]
+
+    monkeypatch.setattr(analytics, "_case_rows", lambda db: rows)
+    monkeypatch.setattr(analytics, "_build_pair_epi_index", lambda db, case_ids: {})
+    monkeypatch.setattr(
+        analytics,
+        "_latest_pair_review_map",
+        lambda db, pair_keys: {
+            analytics._pair_key(rows[0]["case_id"], rows[1]["case_id"]): {
+                "classification": "possible transmission",
+                "reviewer": "reviewer-a",
+                "notes": None,
+                "reviewed_at": "2026-05-01T00:00:00Z",
+                "cluster_id": "11111111-1111-1111-1111-111111111111",
+            }
+        },
+    )
+
+    payload = analytics.case_pair_calibration(
+        cluster_id=None,
+        max_cases=10,
+        max_pairs=10,
+        snp_strong_threshold=5,
+        snp_moderate_threshold=12,
+        temporal_window_days=45,
+        db=object(),
+    )
+
+    assert payload["model_pair_count"] == 1
+    assert payload["reviewed_pair_count"] == 1
+    assert payload["summary"]["reviewed_pairs"] == 1
+    assert payload["comparisons"][0]["reviewer_label"] == "possible transmission"
+    assert payload["comparisons"][0]["model_label"] in {
+        "probable transmission",
+        "possible transmission",
+    }

@@ -234,3 +234,9 @@ CREATE TABLE IF NOT EXISTS case_pair_reviews (
 CREATE INDEX IF NOT EXISTS ix_case_pair_reviews_cluster ON case_pair_reviews (source_cluster_id);
 CREATE INDEX IF NOT EXISTS ix_case_pair_reviews_reviewed_at ON case_pair_reviews (reviewed_at DESC);
 
+-- Additional hot-query path indexes for synthesis and reporting
+CREATE INDEX IF NOT EXISTS ix_case_clusters_cluster ON case_clusters (cluster_id);
+CREATE INDEX IF NOT EXISTS ix_audit_log_action ON audit_log (action);
+CREATE INDEX IF NOT EXISTS ix_audit_log_timestamp ON audit_log (timestamp DESC);
+CREATE INDEX IF NOT EXISTS ix_analysis_provenance_sample ON analysis_provenance (sample_id);
+

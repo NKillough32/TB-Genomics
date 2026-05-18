@@ -342,6 +342,27 @@ def confidence_gates(db: Session) -> list[dict[str, Any]]:
                 details={"mcmc_late_drift_fraction": summary.get("mcmc_late_drift_fraction")},
             )
         )
+
+        # Alpha column ESS (ancestry parameter effective sample size)
+        alpha_ess_min = summary.get("alpha_mcmc_effective_sample_size_min")
+        if alpha_ess_min is not None:
+            try:
+                ess_val = float(alpha_ess_min)
+                gates.append(
+                    _gate(
+                        "mcmc_alpha_ess",
+                        "MCMC ancestry ESS",
+                        "pass" if ess_val >= 100 else "warn",
+                        f"Minimum per-case ancestry ESS is {ess_val:.0f}.",
+                        interpretation_blocking=ess_val < 50,
+                        details={
+                            "alpha_ess_min": alpha_ess_min,
+                            "alpha_ess_mean": summary.get("alpha_mcmc_effective_sample_size_mean"),
+                        },
+                    )
+                )
+            except (TypeError, ValueError):
+                pass
     else:
         gates.append(
             _gate(

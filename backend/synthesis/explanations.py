@@ -21,6 +21,11 @@ _FLAG_ACTIONS = {
     "rapidly_growing_cluster": "Escalate contact tracing and increase cluster monitoring frequency.",
     "missing_sequence_or_qc_data": "Request missing sequencing/QC completion before final sign-off.",
     "low_confidence_outbreaker_edge": "Treat inferred direction cautiously and seek supporting evidence.",
+    "lineage_discordance": "Verify lineage calls for both cases; discordant lineages are a strong counter-indication for direct transmission.",
+    "resistance_profile_discordance": "Review drug resistance mutations for both cases; inconsistent profiles reduce transmission probability.",
+    "resistance_profile_partial_overlap": "Resistance profiles partially overlap; consider whether resistance was acquired within the chain.",
+    "temporally_implausible_directionality": "Source specimen postdates target — review dates and assess whether direction of transmission is reliable.",
+    "low_sequence_coverage_for_pair": "One or both sequences have low depth or coverage; SNP-based evidence should be treated with caution.",
 }
 
 
@@ -35,6 +40,8 @@ def interpretation_text(category: str, flags: list[str]) -> str:
 
 def recommended_actions(category: str, flags: list[str]) -> list[str]:
     actions: list[str] = []
+    # Flags that are informational only and should not generate actions
+    informational_flags = {"lineage_concordance", "resistance_profile_concordance"}
 
     if category in {"strong_support", "moderate_support"}:
         actions.append("Prioritise this pair for targeted contact tracing review.")
@@ -44,6 +51,8 @@ def recommended_actions(category: str, flags: list[str]) -> list[str]:
         actions.append("Hold final interpretation until missing data are resolved.")
 
     for flag in flags:
+        if flag in informational_flags:
+            continue  # Skip informational flags
         action = _FLAG_ACTIONS.get(flag)
         if action and action not in actions:
             actions.append(action)

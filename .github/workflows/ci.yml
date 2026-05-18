@@ -31,16 +31,40 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           versions = Path("migrations/versions")
-          required = ["0001_baseline.py", "0002_epidemiology_tables.py"]
+          required = [
+              "0001_baseline.py",
+              "0002_epidemiology_tables.py",
+              "0003_case_pair_reviews.py",
+              "0004_case_clinical_fields.py",
+              "0005_entered_in_error_columns.py",
+              "0006_add_performance_indexes.py",
+          ]
           missing = [name for name in required if not (versions / name).exists()]
           if missing:
               raise SystemExit(f"Missing migration files: {missing}")
-          text = (versions / "0002_epidemiology_tables.py").read_text()
-          if 'down_revision: Union[str, Sequence[str], None] = "0001_baseline"' not in text:
+          
+          # Verify migration chain integrity
+          text_0002 = (versions / "0002_epidemiology_tables.py").read_text()
+          if 'down_revision: Union[str, Sequence[str], None] = "0001_baseline"' not in text_0002:
               raise SystemExit("0002_epidemiology_tables.py is not linked to 0001_baseline")
+          
+          # Verify epidemiology tables created
           for table in ["contacts", "locations", "exposures", "case_location_events", "case_contact_links"]:
-              if f"CREATE TABLE IF NOT EXISTS {table}" not in text:
+              if f"CREATE TABLE IF NOT EXISTS {table}" not in text_0002:
                   raise SystemExit(f"0002_epidemiology_tables.py does not create {table}")
+          
+          # Verify each subsequent migration links to previous one
+          migrations = [
+              ("0003_case_pair_reviews.py", "0002_epidemiology_tables"),
+              ("0004_case_clinical_fields.py", "0003_case_pair_reviews"),
+              ("0005_entered_in_error_columns.py", "0004_case_clinical_fields"),
+              ("0006_add_performance_indexes.py", "0005_entered_in_error_columns"),
+          ]
+          for migration_file, prev_migration in migrations:
+              text = (versions / migration_file).read_text()
+              if f'down_revision: Union[str, Sequence[str], None] = "{prev_migration}"' not in text:
+                  raise SystemExit(f"{migration_file} is not properly linked to {prev_migration}")
+          
           PY
 
       - name: Compile Python sources

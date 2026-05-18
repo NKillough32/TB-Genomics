@@ -51,6 +51,7 @@ def main() -> None:
     threshold = int(os.getenv("SEQ_CLUSTER_MAX_DISTANCE", "25"))
     min_cluster_size = int(os.getenv("SEQ_CLUSTER_MIN_SIZE", "2"))
     alert_min_cluster_size = int(os.getenv("TB_CLUSTER_ALERT_MIN_CASES", "5"))
+    max_sequences = int(os.getenv("SEQ_CLUSTER_MAX_SEQUENCES", "0"))  # 0 = no limit
 
     db = SessionLocal()
     try:
@@ -78,6 +79,14 @@ def main() -> None:
             }
             for row in rows
             if row.get("sequence")
+        ]
+
+        # Scale guard: limit pairwise comparisons to avoid timeouts
+        if max_sequences > 0 and len(samples) > max_sequences:
+            print(f"WARNING: {len(samples)} sequences loaded but SEQ_CLUSTER_MAX_SEQUENCES={max_sequences}. "
+                  f"Clustering will be limited to first {max_sequences} samples. "
+                  f"To process all, set SEQ_CLUSTER_MAX_SEQUENCES to 0 or higher value.")
+            samples = samples[:max_sequences]
         ]
 
         # Replace current cluster assignment with sequence-derived clusters.
@@ -140,6 +149,16 @@ def main() -> None:
             for case_id in sample_map.keys()
         }
 
+        def _snp_distance_bin(dist: int) -> str:
+            """Bin SNP distance into categorical ranges."""
+            if dist <= 5:
+                return "0-5"
+            if dist <= 12:
+                return "6-12"
+            if dist <= 25:
+                return "13-25"
+            return ">25"
+
         pairwise_links = 0
         pairwise_comparable_sites: list[int] = []
         link_pair_comparable_sites: list[int] = []
@@ -149,7 +168,7 @@ def main() -> None:
                 sample_map[a_id]["sequence"], sample_map[b_id]["sequence"]
             )
             pairwise_comparable_sites.append(comparable_sites)
-            key = str(dist)
+            key = _snp_distance_bin(dist)
             snp_distance_histogram[key] = snp_distance_histogram.get(key, 0) + 1
             if dist <= threshold:
                 uf.union(a_id, b_id)

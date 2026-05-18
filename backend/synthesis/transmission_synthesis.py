@@ -116,6 +116,20 @@ def _resistant_drug_set(value: Any) -> set[str]:
     return set()
 
 
+def _major_lineage(lineage_str: str) -> str:
+    """Extract major lineage (L1–L9 or Bovis/Caprae) from TBProfiler sublineage string.
+    
+    Examples:
+        "lineage4.3.4.2" -> "l4"
+        "L4" -> "l4"
+        "Bovis" -> "bovis"
+        "l4.2.1" -> "l4"
+    """
+    val = (lineage_str or "").strip().lower()
+    val = val.replace("lineage", "l")
+    return val.split(".")[0]  # Split on first dot to isolate major lineage
+
+
 def _resistance_profile_concordance(source_profile: Any, target_profile: Any) -> str:
     src = _resistant_drug_set(source_profile)
     tgt = _resistant_drug_set(target_profile)
@@ -300,8 +314,8 @@ def build_transmission_synthesis(
             else None
         )
 
-        lineage_source = str(src.get("lineage") or "").strip().lower()
-        lineage_target = str(tgt.get("lineage") or "").strip().lower()
+        lineage_source = _major_lineage(str(src.get("lineage") or ""))
+        lineage_target = _major_lineage(str(tgt.get("lineage") or ""))
         if lineage_source and lineage_target:
             lineage_concordance = "concordant" if lineage_source == lineage_target else "discordant"
         else:
@@ -355,15 +369,13 @@ def build_transmission_synthesis(
 
         if lineage_concordance == "discordant":
             p_flags.append("lineage_discordance")
-        elif lineage_concordance == "concordant":
-            p_flags.append("lineage_concordance")
+        # Note: lineage_concordance is informational; not added to flags (no action needed)
 
         if resistance_concordance == "discordant":
             p_flags.append("resistance_profile_discordance")
-        elif resistance_concordance == "concordant":
-            p_flags.append("resistance_profile_concordance")
         elif resistance_concordance == "partial_overlap":
             p_flags.append("resistance_profile_partial_overlap")
+        # Note: resistance_profile_concordance is informational; not added to flags
 
         if temporal_delta_days is not None and temporal_delta_days < -cfg.temporal_backfill_tolerance_days:
             p_flags.append("temporally_implausible_direction")

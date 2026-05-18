@@ -18,18 +18,23 @@ def _decode_pair_index(raw: dict) -> dict:
     return decoded
 
 
+def _scenario_rows(scenario: dict) -> list[dict]:
+    rows = []
+    for row in scenario["rows"]:
+        parsed = dict(row)
+        parsed["specimen_date"] = _parse_date(row.get("specimen_date"))
+        parsed.setdefault("qc_status", "pass")
+        parsed.setdefault("contamination_flag", False)
+        rows.append(parsed)
+    return rows
+
+
 def test_case_pair_benchmark_scenarios_produce_expected_interpretations():
     with open("tests/benchmarks/case_pair_scenarios.json", "r", encoding="utf-8") as handle:
         scenarios = json.load(handle)
 
     for scenario in scenarios:
-        rows = []
-        for row in scenario["rows"]:
-            parsed = dict(row)
-            parsed["specimen_date"] = _parse_date(row.get("specimen_date"))
-            parsed.setdefault("qc_status", "pass")
-            parsed.setdefault("contamination_flag", False)
-            rows.append(parsed)
+        rows = _scenario_rows(scenario)
 
         payload = analytics._build_case_pair_evidence_payload(
             rows,
@@ -112,7 +117,50 @@ def test_calibration_summary_reports_exact_and_binary_agreement():
     assert summary["reviewed_pairs"] == 4
     assert summary["exact_agreement"] == 0.5
     assert summary["binary_agreement"] == 0.75
+    assert summary["binary_kappa"] == 0.5
     assert summary["by_label"]["unlikely transmission"]["exact_agreement"] == 1.0
+
+
+def test_validation_benchmark_suite_agreement_against_expected_reviewer_labels():
+    with open("tests/benchmarks/case_pair_scenarios.json", "r", encoding="utf-8") as handle:
+        scenarios = json.load(handle)
+
+    scenario_groups = {str(s.get("scenario_group") or "") for s in scenarios}
+    assert "known linked pairs" in scenario_groups
+    assert "known non-linked pairs" in scenario_groups
+    assert "household transmission" in scenario_groups
+    assert "workplace/congregate exposure" in scenario_groups
+    assert "false genomic cluster" in scenario_groups
+    assert "high SNP contradiction" in scenario_groups
+    assert "missing epi data scenario" in scenario_groups
+
+    comparisons = []
+    for scenario in scenarios:
+        rows = _scenario_rows(scenario)
+        payload = analytics._build_case_pair_evidence_payload(
+            rows,
+            _decode_pair_index(scenario.get("pair_epi_index") or {}),
+            snp_strong_threshold=5,
+            snp_moderate_threshold=12,
+            temporal_window_days=45,
+            max_pairs=20,
+        )
+        pair = payload["pairs"][0]
+        model_label = analytics._model_to_reviewer_classification(pair["overall_interpretation"])
+        expected_reviewer = str((scenario.get("expected") or {}).get("reviewer_classification") or "").strip().lower()
+        comparisons.append(
+            {
+                "model_label": model_label,
+                "reviewer_label": expected_reviewer,
+            }
+        )
+
+    summary = analytics._calibration_summary(comparisons)
+    assert summary["reviewed_pairs"] == len(scenarios)
+    assert summary["exact_agreement"] is not None
+    assert summary["binary_agreement"] is not None
+    assert summary["binary_kappa"] is not None
+    assert summary["binary_agreement"] >= 0.8
 
 
 def test_case_pair_calibration_endpoint_compares_model_and_reviewer_labels(monkeypatch):

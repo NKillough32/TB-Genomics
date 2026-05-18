@@ -1,4 +1,4 @@
-import json
+﻿import json
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 from itertools import combinations
@@ -805,6 +805,7 @@ def _calibration_summary(comparisons: list[dict]) -> dict:
             "reviewed_pairs": 0,
             "exact_agreement": None,
             "binary_agreement": None,
+            "binary_kappa": None,
             "by_label": {},
             "confusion": {},
         }
@@ -812,6 +813,8 @@ def _calibration_summary(comparisons: list[dict]) -> dict:
     supportive = {"confirmed transmission", "probable transmission", "possible transmission"}
     exact_matches = 0
     binary_matches = 0
+    model_supportive_count = 0
+    reviewer_supportive_count = 0
     by_label = defaultdict(lambda: {"count": 0, "exact_matches": 0})
     confusion = defaultdict(lambda: defaultdict(int))
 
@@ -824,6 +827,10 @@ def _calibration_summary(comparisons: list[dict]) -> dict:
 
         model_supportive = model_label in supportive
         reviewer_supportive = reviewer_label in supportive
+        if model_supportive:
+            model_supportive_count += 1
+        if reviewer_supportive:
+            reviewer_supportive_count += 1
         if model_supportive == reviewer_supportive:
             binary_matches += 1
 
@@ -832,10 +839,23 @@ def _calibration_summary(comparisons: list[dict]) -> dict:
             by_label[reviewer_label]["exact_matches"] += 1
         confusion[reviewer_label][model_label] += 1
 
+    observed = binary_matches / reviewed
+    p_model_supportive = model_supportive_count / reviewed
+    p_reviewer_supportive = reviewer_supportive_count / reviewed
+    expected = (
+        (p_model_supportive * p_reviewer_supportive)
+        + ((1.0 - p_model_supportive) * (1.0 - p_reviewer_supportive))
+    )
+    if expected >= 0.9999:
+        binary_kappa = None
+    else:
+        binary_kappa = round((observed - expected) / (1.0 - expected), 4)
+
     return {
         "reviewed_pairs": reviewed,
         "exact_agreement": round(exact_matches / reviewed, 4),
         "binary_agreement": round(binary_matches / reviewed, 4),
+        "binary_kappa": binary_kappa,
         "by_label": {
             label: {
                 "count": stats["count"],
@@ -1379,6 +1399,32 @@ def upsert_case_pair_review(
         "notes": payload.notes,
         "cluster_id": cluster_id,
     })
+
+    db.execute(
+        text(
+            """
+            INSERT INTO audit_log (action, user_id, details, timestamp)
+            VALUES (
+                :action,
+                :user_id,
+                CAST(:details AS JSONB),
+                NOW()
+            )
+            """
+        ),
+        {
+            "action": "case_pair_review_upserted",
+            "user_id": reviewer,
+            "details": json.dumps(
+                {
+                    "case_a": case_a,
+                    "case_b": case_b,
+                    "reviewer_classification": payload.reviewer_classification,
+                    "cluster_id": cluster_id,
+                }
+            ),
+        },
+    )
     db.commit()
 
     return {

@@ -1,6 +1,7 @@
 [
   {
-    "name": "known_outbreak_pair",
+    "name": "known_linked_pair",
+    "scenario_group": "known linked pairs",
     "rows": [
       {
         "case_id": "10000000-0000-0000-0000-000000000001",
@@ -23,20 +24,22 @@
     ],
     "pair_epi_index": {
       "10000000-0000-0000-0000-000000000001|10000000-0000-0000-0000-000000000002": {
-        "domains": ["congregate_setting"],
-        "supports": ["shared_locations:1"],
+        "domains": ["household"],
+        "supports": ["shared_contacts:1", "shared_locations:1"],
         "direct_observation": true,
         "shared_location_count": 1,
-        "shared_contact_count": 0
+        "shared_contact_count": 1
       }
     },
     "expected": {
       "overall_interpretation": "strong support, needs reviewer confirmation",
-      "basis": "genomic+epi"
+      "basis": "genomic+epi",
+      "reviewer_classification": "probable transmission"
     }
   },
   {
-    "name": "false_cluster_pair",
+    "name": "known_non_linked_pair",
+    "scenario_group": "known non-linked pairs",
     "rows": [
       {
         "case_id": "20000000-0000-0000-0000-000000000001",
@@ -49,7 +52,7 @@
       },
       {
         "case_id": "20000000-0000-0000-0000-000000000002",
-        "specimen_date": "2026-06-01",
+        "specimen_date": "2026-08-01",
         "region": "B",
         "cluster_id": "22222222-2222-2222-2222-222222222222",
         "lineage": "L4",
@@ -60,16 +63,18 @@
     "pair_epi_index": {},
     "expected": {
       "overall_interpretation": "contradictory evidence",
-      "basis": "genomic+epi"
+      "basis": "genomic+epi",
+      "reviewer_classification": "unlikely transmission"
     }
   },
   {
-    "name": "imported_related_cases",
+    "name": "household_transmission",
+    "scenario_group": "household transmission",
     "rows": [
       {
         "case_id": "30000000-0000-0000-0000-000000000001",
-        "specimen_date": "2026-01-01",
-        "region": "Northern",
+        "specimen_date": "2026-02-10",
+        "region": "Derry",
         "cluster_id": "33333333-3333-3333-3333-333333333333",
         "lineage": "L3",
         "predicted_drug_resistance": {"rifampicin": "susceptible"},
@@ -77,26 +82,36 @@
       },
       {
         "case_id": "30000000-0000-0000-0000-000000000002",
-        "specimen_date": "2026-01-20",
-        "region": "Southern",
+        "specimen_date": "2026-02-16",
+        "region": "Derry",
         "cluster_id": "33333333-3333-3333-3333-333333333333",
         "lineage": "L3",
         "predicted_drug_resistance": {"rifampicin": "susceptible"},
         "sequence": "ACGTACGTACGA"
       }
     ],
-    "pair_epi_index": {},
+    "pair_epi_index": {
+      "30000000-0000-0000-0000-000000000001|30000000-0000-0000-0000-000000000002": {
+        "domains": ["household"],
+        "supports": ["shared_contacts:2", "shared_locations:1"],
+        "direct_observation": true,
+        "shared_location_count": 1,
+        "shared_contact_count": 2
+      }
+    },
     "expected": {
-      "overall_interpretation": "moderate support, needs reviewer confirmation",
-      "basis": "genomic+epi"
+      "overall_interpretation": "strong support, needs reviewer confirmation",
+      "basis": "genomic+epi",
+      "reviewer_classification": "confirmed transmission"
     }
   },
   {
-    "name": "shared_workplace_exposure",
+    "name": "workplace_congregate_exposure",
+    "scenario_group": "workplace/congregate exposure",
     "rows": [
       {
         "case_id": "40000000-0000-0000-0000-000000000001",
-        "specimen_date": "2026-02-01",
+        "specimen_date": "2026-03-01",
         "region": "Belfast",
         "cluster_id": "44444444-4444-4444-4444-444444444444",
         "lineage": "L4",
@@ -105,7 +120,7 @@
       },
       {
         "case_id": "40000000-0000-0000-0000-000000000002",
-        "specimen_date": "2026-02-10",
+        "specimen_date": "2026-03-11",
         "region": "Belfast",
         "cluster_id": "44444444-4444-4444-4444-444444444444",
         "lineage": "L4",
@@ -124,7 +139,106 @@
     },
     "expected": {
       "overall_interpretation": "strong support, needs reviewer confirmation",
-      "basis": "genomic+epi"
+      "basis": "genomic+epi",
+      "reviewer_classification": "probable transmission"
+    }
+  },
+  {
+    "name": "false_genomic_cluster",
+    "scenario_group": "false genomic cluster",
+    "rows": [
+      {
+        "case_id": "50000000-0000-0000-0000-000000000001",
+        "specimen_date": "2026-01-01",
+        "region": "North",
+        "cluster_id": "55555555-5555-5555-5555-555555555555",
+        "lineage": "L2",
+        "predicted_drug_resistance": {"rifampicin": "resistant"},
+        "sequence": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      },
+      {
+        "case_id": "50000000-0000-0000-0000-000000000002",
+        "specimen_date": "2026-06-21",
+        "region": "South",
+        "cluster_id": "55555555-5555-5555-5555-555555555555",
+        "lineage": "L4",
+        "predicted_drug_resistance": {"isoniazid": "resistant"},
+        "sequence": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTT"
+      }
+    ],
+    "pair_epi_index": {},
+    "expected": {
+      "overall_interpretation": "contradictory evidence",
+      "basis": "genomic+epi",
+      "reviewer_classification": "unlikely transmission"
+    }
+  },
+  {
+    "name": "high_snp_contradiction",
+    "scenario_group": "high SNP contradiction",
+    "rows": [
+      {
+        "case_id": "60000000-0000-0000-0000-000000000001",
+        "specimen_date": "2026-04-01",
+        "region": "Belfast",
+        "cluster_id": "66666666-6666-6666-6666-666666666666",
+        "lineage": "L4",
+        "predicted_drug_resistance": {"isoniazid": "susceptible"},
+        "sequence": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      },
+      {
+        "case_id": "60000000-0000-0000-0000-000000000002",
+        "specimen_date": "2026-04-05",
+        "region": "Belfast",
+        "cluster_id": "66666666-6666-6666-6666-666666666666",
+        "lineage": "L4",
+        "predicted_drug_resistance": {"isoniazid": "susceptible"},
+        "sequence": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTT"
+      }
+    ],
+    "pair_epi_index": {
+      "60000000-0000-0000-0000-000000000001|60000000-0000-0000-0000-000000000002": {
+        "domains": ["congregate_setting"],
+        "supports": ["shared_locations:1", "shared_contacts:1"],
+        "direct_observation": true,
+        "shared_location_count": 1,
+        "shared_contact_count": 1
+      }
+    },
+    "expected": {
+      "overall_interpretation": "contradictory evidence",
+      "basis": "genomic+epi",
+      "reviewer_classification": "unlikely transmission"
+    }
+  },
+  {
+    "name": "missing_epi_data",
+    "scenario_group": "missing epi data scenario",
+    "rows": [
+      {
+        "case_id": "70000000-0000-0000-0000-000000000001",
+        "specimen_date": null,
+        "region": "Unknown",
+        "cluster_id": "77777777-7777-7777-7777-777777777777",
+        "lineage": "",
+        "predicted_drug_resistance": {},
+        "sequence": ""
+      },
+      {
+        "case_id": "70000000-0000-0000-0000-000000000002",
+        "specimen_date": null,
+        "region": "Unknown",
+        "cluster_id": "77777777-7777-7777-7777-777777777777",
+        "lineage": "",
+        "predicted_drug_resistance": {},
+        "sequence": ""
+      }
+    ],
+    "pair_epi_index": {},
+    "expected": {
+      "overall_interpretation": "insufficient evidence",
+      "basis": "insufficient",
+      "reviewer_classification": "insufficient evidence"
     }
   }
 ]

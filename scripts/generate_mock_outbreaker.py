@@ -31,7 +31,7 @@ def generate_mock_graphics():
         ax.grid(True, alpha=0.3)
         fig.savefig('exports/outbreaker_trace.png', dpi=100, bbox_inches='tight')
         plt.close()
-        print("✓ Mock trace plot generated")
+        print("[OK] Mock trace plot generated")
         
         # Generate mock histogram
         fig, axes = plt.subplots(2, 2, figsize=(12, 8))
@@ -67,10 +67,10 @@ def generate_mock_graphics():
         fig.tight_layout()
         fig.savefig('exports/outbreaker_hist.png', dpi=100, bbox_inches='tight')
         plt.close()
-        print("✓ Mock histogram generated")
+        print("[OK] Mock histogram generated")
         
     except ImportError:
-        print("⚠ matplotlib not available - skipping graphics generation")
+        print("[WARN] matplotlib not available - skipping graphics generation")
 
 
 def generate_transmission_tree():
@@ -120,7 +120,7 @@ def generate_transmission_tree():
             db.close()
         
         if not clusters:
-            print("⚠ No cluster data found - using synthetic transmission tree")
+            print("[WARN] No cluster data found - using synthetic transmission tree")
             clusters = {}
         
         # Create network graph
@@ -218,10 +218,10 @@ def generate_transmission_tree():
         fig.tight_layout()
         fig.savefig('exports/outbreaker_tree.png', dpi=100, bbox_inches='tight')
         plt.close()
-        print("✓ Transmission tree generated with probabilities")
+        print("[OK] Transmission tree generated with probabilities")
         
     except Exception as e:
-        print(f"⚠ Could not generate transmission tree: {e}")
+        print(f"[WARN] Could not generate transmission tree: {e}")
 
 
 def generate_mock_summary():
@@ -245,7 +245,7 @@ def generate_mock_summary():
     
     with open("exports/outbreaker_summary.json", "w") as f:
         json.dump(summary, f, indent=2)
-    print("✓ Mock summary generated")
+    print("[OK] Mock summary generated")
 
 
 if __name__ == "__main__":
@@ -253,4 +253,5 @@ if __name__ == "__main__":
     generate_mock_graphics()
     generate_transmission_tree()
     generate_mock_summary()
-    print("\n✅ Mock report complete - graphics available for demo")
+    print("\n[OK] Mock report complete - graphics available for demo")
+

@@ -444,3 +444,4 @@ def build_cluster_risk_summary(db: Session, *, config: SynthesisConfig | None = 
             "This synthesis output is heuristic and non-validated. Scores require calibration before use.",
         ),
     }
+

@@ -522,3 +522,4 @@ def test_update_case_contact_link_updates_editable_fields():
 
     assert updated.link_type == "household_contact"
     assert updated.confidence == "medium"
+

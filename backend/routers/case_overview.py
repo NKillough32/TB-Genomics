@@ -394,3 +394,4 @@ def audit_trail(limit: int = 50, db: Session = Depends(get_db)):
             for row in rows
         ],
     }
+

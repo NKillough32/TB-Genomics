@@ -43,7 +43,7 @@ from backend.database import SessionLocal
 
 
 def _json_default(obj: object) -> object:
-    """JSON serialization fallback — converts Decimal to float."""
+    """JSON serialization fallback - converts Decimal to float."""
     if isinstance(obj, Decimal):
         return float(obj)
     raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
@@ -1116,7 +1116,7 @@ def _extract_mykrobe_results(result_json: Path) -> dict[str, Any]:
     sample_key = next(iter(payload), None) if isinstance(payload, dict) else None
     sample_data = payload.get(sample_key, {}) if sample_key else {}
 
-    # Lineage: payload[sample]["phylogenetics"]["lineage"] → dict of {lineage_name: {percent_coverage, ...}}
+    # Lineage: payload[sample]["phylogenetics"]["lineage"] -> dict of {lineage_name: {percent_coverage, ...}}
     phylo = sample_data.get("phylogenetics", {})
     lineage_dict = phylo.get("lineage", {})
     if lineage_dict:
@@ -1126,7 +1126,7 @@ def _extract_mykrobe_results(result_json: Path) -> dict[str, Any]:
     else:
         lineage_value = None
 
-    # DR susceptibility: payload[sample]["susceptibility"] → {Drug: {predict: "S"/"R"/"N"}}
+    # DR susceptibility: payload[sample]["susceptibility"] -> {Drug: {predict: "S"/"R"/"N"}}
     susceptibility = sample_data.get("susceptibility", {})
     dr_payload: dict[str, str] | None = None
     if susceptibility:
@@ -1749,7 +1749,7 @@ def main() -> None:
     if tbprofiler_run["status"] == "completed" and tbprofiler_run["output_jsons"]:
         pass  # imported below after mykrobe, so tbprofiler overwrites as authoritative
 
-    # Run mykrobe via WSL in parallel with tb-profiler — always when available and FASTA inputs exist.
+    # Run mykrobe via WSL in parallel with tb-profiler - always when available and FASTA inputs exist.
     if (
         wsl_fallback_enabled
         and fasta_inputs
@@ -1891,3 +1891,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

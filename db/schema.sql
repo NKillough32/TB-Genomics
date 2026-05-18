@@ -82,7 +82,7 @@ CREATE TABLE audit_log (
   timestamp TIMESTAMP
 );
 
--- ─── Pipeline validation sign-offs ────────────────────────────────────────────
+-- --- Pipeline validation sign-offs --------------------------------------------
 -- Records formal reviewer sign-offs for pipeline validation steps.
 -- Each row is an immutable record; the latest row per pipeline determines current status.
 CREATE TABLE IF NOT EXISTS pipeline_validation_signoffs (
@@ -95,7 +95,7 @@ CREATE TABLE IF NOT EXISTS pipeline_validation_signoffs (
   signed_off_at     TIMESTAMP DEFAULT NOW()
 );
 
--- ─── Cluster Investigation Centre ─────────────────────────────────────────────
+-- --- Cluster Investigation Centre ---------------------------------------------
 -- One row per cluster under active or completed investigation.
 CREATE TABLE IF NOT EXISTS cluster_investigations (
   investigation_id  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -209,3 +209,4 @@ CREATE TABLE IF NOT EXISTS case_pair_reviews (
 
 CREATE INDEX IF NOT EXISTS ix_case_pair_reviews_cluster ON case_pair_reviews (source_cluster_id);
 CREATE INDEX IF NOT EXISTS ix_case_pair_reviews_reviewed_at ON case_pair_reviews (reviewed_at DESC);
+

@@ -460,3 +460,4 @@ def update_case_contact_link(
     db.commit()
     db.refresh(link)
     return link
+

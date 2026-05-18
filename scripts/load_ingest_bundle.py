@@ -47,7 +47,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 # ---------------------------------------------------------------------------
-# DB connection — reuses the application's SessionLocal factory.
+# DB connection - reuses the application's SessionLocal factory.
 # ---------------------------------------------------------------------------
 # Add project root to sys.path so backend imports work when this script is
 # executed directly from the project root.
@@ -141,7 +141,7 @@ def _parse_fasta(path: Path) -> Iterator[Tuple[str, str]]:
 
 
 # ---------------------------------------------------------------------------
-# Loaders — one function per table
+# Loaders - one function per table
 # ---------------------------------------------------------------------------
 
 class IngestResult:
@@ -349,7 +349,7 @@ def _load_fasta(db: Any, fasta_path: Path, dry_run: bool) -> IngestResult:
     result = IngestResult("consensus_sequences (dna.fasta)")
     for seq_id, sequence in _parse_fasta(fasta_path):
         if not UUID_RE.match(seq_id):
-            result.errors.append(f"FASTA header '{seq_id}' is not a UUID — skipped")
+            result.errors.append(f"FASTA header '{seq_id}' is not a UUID - skipped")
             continue
         try:
             if not dry_run:
@@ -419,68 +419,68 @@ def load_bundle(
             db.commit()
             logger.info("Truncation complete")
 
-        # ── cases.csv (required) ───────────────────────────────────────────
+        # -- cases.csv (required) -------------------------------------------
         cases_path = bundle_dir / "cases.csv"
         if not cases_path.exists():
             print(f"ERROR: cases.csv not found in {bundle_dir}")
             sys.exit(1)
         _, case_rows = _load_csv(cases_path)
-        logger.info("Loading cases.csv (%d rows)…", len(case_rows))
+        logger.info("Loading cases.csv (%d rows)...", len(case_rows))
         r = _load_cases(db, case_rows, dry_run)
         results.append(r)
         if r.errors:
             logger.warning("%d errors in cases.csv (first: %s)", len(r.errors), r.errors[0])
 
-        # ── sequencing_runs.csv (optional) ────────────────────────────────
+        # -- sequencing_runs.csv (optional) --------------------------------
         runs_path = bundle_dir / "sequencing_runs.csv"
         if runs_path.exists():
             _, run_rows = _load_csv(runs_path)
-            logger.info("Loading sequencing_runs.csv (%d rows)…", len(run_rows))
+            logger.info("Loading sequencing_runs.csv (%d rows)...", len(run_rows))
             results.append(_load_sequencing_runs(db, run_rows, dry_run))
         else:
-            logger.info("sequencing_runs.csv not found — skipping")
+            logger.info("sequencing_runs.csv not found - skipping")
 
-        # ── tb_interpretation.csv (optional) ─────────────────────────────
+        # -- tb_interpretation.csv (optional) -----------------------------
         interp_path = bundle_dir / "tb_interpretation.csv"
         if interp_path.exists():
             _, interp_rows = _load_csv(interp_path)
-            logger.info("Loading tb_interpretation.csv (%d rows)…", len(interp_rows))
+            logger.info("Loading tb_interpretation.csv (%d rows)...", len(interp_rows))
             results.append(_load_tb_interpretation(db, interp_rows, dry_run))
         else:
-            logger.info("tb_interpretation.csv not found — skipping")
+            logger.info("tb_interpretation.csv not found - skipping")
 
-        # ── sample_qc_metrics.csv (optional) ─────────────────────────────
+        # -- sample_qc_metrics.csv (optional) -----------------------------
         qc_path = bundle_dir / "sample_qc_metrics.csv"
         if qc_path.exists():
             _, qc_rows = _load_csv(qc_path)
-            logger.info("Loading sample_qc_metrics.csv (%d rows)…", len(qc_rows))
+            logger.info("Loading sample_qc_metrics.csv (%d rows)...", len(qc_rows))
             results.append(_load_sample_qc_metrics(db, qc_rows, dry_run))
         else:
-            logger.info("sample_qc_metrics.csv not found — skipping")
+            logger.info("sample_qc_metrics.csv not found - skipping")
 
-        # ── analysis_provenance.csv (optional) ───────────────────────────
+        # -- analysis_provenance.csv (optional) ---------------------------
         prov_path = bundle_dir / "analysis_provenance.csv"
         if prov_path.exists():
             _, prov_rows = _load_csv(prov_path)
-            logger.info("Loading analysis_provenance.csv (%d rows)…", len(prov_rows))
+            logger.info("Loading analysis_provenance.csv (%d rows)...", len(prov_rows))
             results.append(_load_analysis_provenance(db, prov_rows, dry_run))
         else:
-            logger.info("analysis_provenance.csv not found — skipping")
+            logger.info("analysis_provenance.csv not found - skipping")
 
-        # ── dna.fasta (optional) ─────────────────────────────────────────
+        # -- dna.fasta (optional) -----------------------------------------
         fasta_path = bundle_dir / "dna.fasta"
         if fasta_path.exists():
-            logger.info("Loading dna.fasta…")
+            logger.info("Loading dna.fasta...")
             results.append(_load_fasta(db, fasta_path, dry_run))
         else:
-            logger.info("dna.fasta not found — skipping")
+            logger.info("dna.fasta not found - skipping")
 
         if not dry_run:
             _record_audit(db, bundle_dir, results)
             db.commit()
             logger.info("Committed to database")
         else:
-            logger.info("DRY RUN — no changes written")
+            logger.info("DRY RUN - no changes written")
 
     except Exception:
         db.rollback()
@@ -515,7 +515,7 @@ def main() -> None:
     parser.add_argument(
         "--confirm-reset",
         action="store_true",
-        help="Required alongside --reset — prevents accidental truncation",
+        help="Required alongside --reset - prevents accidental truncation",
     )
     parser.add_argument(
         "--log-level",
@@ -550,7 +550,7 @@ def main() -> None:
 
     total_inserted = 0
     total_errors = 0
-    print("\n── Ingest summary ──────────────────────────────────────")
+    print("\n-- Ingest summary --------------------------------------")
     for r in results:
         status = "OK" if not r.errors else "WARN"
         print(f"  [{status}] {r.table}: {r.inserted} rows processed, {len(r.errors)} errors")
@@ -568,3 +568,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

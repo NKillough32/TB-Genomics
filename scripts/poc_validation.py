@@ -38,7 +38,7 @@ class PoC_Validator:
                     "elapsed_ms": int(elapsed * 1000),
                 })
                 self.results["summary"]["passed"] += 1
-                print(f"✓ {name} ({elapsed:.2f}s)")
+                print(f"[OK] {name} ({elapsed:.2f}s)")
                 return response
             else:
                 self.results["tests"].append({
@@ -48,7 +48,7 @@ class PoC_Validator:
                     "got": response.status_code,
                 })
                 self.results["summary"]["failed"] += 1
-                print(f"✗ {name} (expected {expected_status}, got {response.status_code})")
+                print(f"X {name} (expected {expected_status}, got {response.status_code})")
                 return None
         except Exception as e:
             self.results["tests"].append({
@@ -57,7 +57,7 @@ class PoC_Validator:
                 "error": str(e),
             })
             self.results["summary"]["failed"] += 1
-            print(f"✗ {name} (error: {e})")
+            print(f"X {name} (error: {e})")
             return None
         finally:
             self.results["summary"]["total"] += 1
@@ -75,7 +75,7 @@ class PoC_Validator:
             lambda: requests.get(f"{API_BASE}/"),
         )
         if not resp:
-            print("❌ Backend unreachable. Start backend with: python -m uvicorn backend.app:app --host 0.0.0.0")
+            print("[X] Backend unreachable. Start backend with: python -m uvicorn backend.app:app --host 0.0.0.0")
             return False
 
         # Step 2: Seed synthetic data
@@ -89,8 +89,8 @@ class PoC_Validator:
         )
         if resp:
             data = resp.json()
-            print(f"   → {data['cases_inserted']} cases inserted")
-            print(f"   → {data['clusters_inserted']} clusters created")
+            print(f"   -> {data['cases_inserted']} cases inserted")
+            print(f"   -> {data['clusters_inserted']} clusters created")
 
         # Step 3: Check case listing
         print("\n[3/6] Data Retrieval")
@@ -100,7 +100,7 @@ class PoC_Validator:
         )
         if resp:
             cases = resp.json()
-            print(f"   → Retrieved {len(cases)} cases")
+            print(f"   -> Retrieved {len(cases)} cases")
 
         # Step 4: Check case summary
         print("\n[4/6] Analysis Summary")
@@ -110,10 +110,10 @@ class PoC_Validator:
         )
         if resp:
             summary = resp.json()
-            print(f"   → Total cases: {summary['total_cases']}")
-            print(f"   → Clustered: {summary['clustered_cases']}")
-            print(f"   → Unclustered: {summary['unclustered_cases']}")
-            print(f"   → Open clusters: {summary['open_clusters']}")
+            print(f"   -> Total cases: {summary['total_cases']}")
+            print(f"   -> Clustered: {summary['clustered_cases']}")
+            print(f"   -> Unclustered: {summary['unclustered_cases']}")
+            print(f"   -> Open clusters: {summary['open_clusters']}")
 
         # Step 5: Run clustering job
         print("\n[5/6] Workflow Execution")
@@ -126,7 +126,7 @@ class PoC_Validator:
             if "job_id" in job_data:
                 job_id = job_data["job_id"]
                 self.job_ids.append(job_id)
-                print(f"   → Job ID: {job_id}")
+                print(f"   -> Job ID: {job_id}")
                 
                 # Poll job status
                 start = time.time()
@@ -135,10 +135,10 @@ class PoC_Validator:
                     if status_resp.status_code == 200:
                         job_status = status_resp.json()
                         if job_status["status"] == "completed":
-                            print(f"   → Clustering completed")
+                            print(f"   -> Clustering completed")
                             break
                         elif job_status["status"] == "failed":
-                            print(f"   → Clustering failed")
+                            print(f"   -> Clustering failed")
                             break
                     time.sleep(1)
 
@@ -150,9 +150,9 @@ class PoC_Validator:
         )
         if resp:
             audit = resp.json()
-            print(f"   → {audit['total_entries']} audit entries found")
+            print(f"   -> {audit['total_entries']} audit entries found")
             for entry in audit["entries"][:3]:
-                print(f"      • {entry['timestamp']}: {entry['action']} (user: {entry['user']})")
+                print(f"      - {entry['timestamp']}: {entry['action']} (user: {entry['user']})")
 
         return True
 
@@ -176,7 +176,7 @@ class PoC_Validator:
         report_path = Path("exports/poc_validation_report.json")
         with open(report_path, "w") as f:
             json.dump(self.results, f, indent=2)
-        print(f"\n✅ Report saved to {report_path}")
+        print(f"\n[OK] Report saved to {report_path}")
 
         return self.results["summary"]["failed"] == 0
 
@@ -193,9 +193,10 @@ def main():
             validator.generate_report()
             sys.exit(1)
     except KeyboardInterrupt:
-        print("\n\n❌ Validation interrupted by user")
+        print("\n\n[X] Validation interrupted by user")
         sys.exit(1)
 
 
 if __name__ == "__main__":
     main()
+

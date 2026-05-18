@@ -136,3 +136,4 @@ def test_transmission_synthesis_reports_validation_and_calibration(monkeypatch):
     assert payload["pairs"][0]["sequence_cluster_match"] is True
     assert payload["pairs"][0]["epi_support"] == "temporal_and_geographic"
     assert payload["warning"].startswith("This synthesis output is heuristic")
+

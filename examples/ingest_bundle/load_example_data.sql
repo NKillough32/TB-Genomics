@@ -19,3 +19,4 @@ BEGIN;
 \copy analysis_provenance(sample_id, pipeline_name, pipeline_version, reference_genome, software_versions, parameters, generated_at) FROM './examples/ingest_bundle/analysis_provenance.csv' DELIMITER ',' CSV HEADER;
 
 COMMIT;
+

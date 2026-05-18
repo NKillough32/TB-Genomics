@@ -45,3 +45,4 @@ jobs:
 
       - name: Compile Python sources
         run: python -m compileall backend scripts migrations
+

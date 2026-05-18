@@ -154,3 +154,4 @@ def test_ingest_file_rejects_unsafe_zip_paths():
         )
 
     assert getattr(exc.value, "status_code", None) == 400
+

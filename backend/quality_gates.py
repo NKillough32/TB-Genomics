@@ -452,3 +452,4 @@ def build_workflow_status(db: Session) -> dict[str, Any]:
         "gates": gates,
         "stages": stages,
     }
+

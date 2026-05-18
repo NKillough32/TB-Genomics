@@ -5,7 +5,7 @@ This script reads source CSVs from the NI TB / WGS pipeline (column names and
 formats unknown until the system is accessible) and maps them to the standard
 ingest bundle shape expected by load_ingest_bundle.py.
 
-Configuration is driven entirely by ni_column_map.json — no Python code changes
+Configuration is driven entirely by ni_column_map.json - no Python code changes
 are needed for column renames, value remaps, or static defaults.
 
 Usage (from project root, venv active):
@@ -50,7 +50,7 @@ def _stable_uuid(value: str) -> str:
     This ensures that the same lab sample ID always produces the same
     pseudonymised_case_id, so re-runs of this script are idempotent.
 
-    The namespace UUID is arbitrary but fixed — change it only if you need
+    The namespace UUID is arbitrary but fixed - change it only if you need
     to regenerate all IDs from scratch.
     """
     namespace = uuid.UUID("6ba7b810-9dad-11d1-80b4-00c04fd430c8")  # URL namespace
@@ -68,7 +68,7 @@ def _parse_date(value: str) -> Optional[str]:
             return datetime.strptime(v, fmt).date().isoformat()
         except ValueError:
             continue
-    logger.warning("Could not parse date value '%s' — leaving blank", value)
+    logger.warning("Could not parse date value '%s' - leaving blank", value)
     return None
 
 
@@ -92,7 +92,7 @@ def _apply_mapping(
 
     source_col = mapping.get("source_column", "")
 
-    # Collect raw value — try exact match, then case-insensitive match
+    # Collect raw value - try exact match, then case-insensitive match
     raw = source_row.get(source_col)
     if raw is None:
         # Case-insensitive column lookup
@@ -130,7 +130,7 @@ def _transform_csv(
 ) -> List[Dict[str, Optional[str]]]:
     """Read source CSV, apply column mapping, return list of output rows."""
     if not source_path.exists():
-        logger.warning("Source file not found: %s — skipping", source_path)
+        logger.warning("Source file not found: %s - skipping", source_path)
         return []
 
     with source_path.open(encoding="utf-8-sig", newline="") as fh:
@@ -145,7 +145,7 @@ def _transform_csv(
         output_rows.append(out)
 
     if dry_run and output_rows:
-        print(f"\n  Preview of {source_path.name} → (first {preview_rows} rows):")
+        print(f"\n  Preview of {source_path.name} -> (first {preview_rows} rows):")
         print("  " + ",".join(output_columns))
         for row in output_rows[:preview_rows]:
             vals = [str(row.get(c) or "") for c in output_columns]
@@ -226,7 +226,7 @@ def list_columns(config: Dict[str, Any]) -> None:
             reader = csv.DictReader(fh)
             _ = next(iter(reader), None)  # advance to populate fieldnames
             cols = list(reader.fieldnames or [])
-        print(f"\n  [{table}] {path} — {len(cols)} columns:")
+        print(f"\n  [{table}] {path} - {len(cols)} columns:")
         for c in cols:
             print(f"    {c}")
 
@@ -283,7 +283,7 @@ def run(args: argparse.Namespace) -> None:
     totals: Dict[str, int] = {}
     fasta_header_map: Dict[str, str] = {}
 
-    # ── cases ──────────────────────────────────────────────────────────────
+    # -- cases --------------------------------------------------------------
     cases_src = Path(source_files.get("cases", ""))
     if source_files.get("cases"):
         logger.info("Processing cases...")
@@ -298,9 +298,9 @@ def run(args: argparse.Namespace) -> None:
         if not args.dry_run and rows:
             n = _write_csv(rows, CASES_COLS, out_dir / "cases.csv")
             totals["cases.csv"] = n
-            logger.info("  → Wrote %d rows to cases.csv", n)
+            logger.info("  -> Wrote %d rows to cases.csv", n)
 
-    # ── sequencing_runs ────────────────────────────────────────────────────
+    # -- sequencing_runs ----------------------------------------------------
     runs_src = source_files.get("sequencing_runs", "")
     if runs_src:
         logger.info("Processing sequencing_runs...")
@@ -308,9 +308,9 @@ def run(args: argparse.Namespace) -> None:
         if not args.dry_run and rows:
             n = _write_csv(rows, RUNS_COLS, out_dir / "sequencing_runs.csv")
             totals["sequencing_runs.csv"] = n
-            logger.info("  → Wrote %d rows to sequencing_runs.csv", n)
+            logger.info("  -> Wrote %d rows to sequencing_runs.csv", n)
 
-    # ── tb_interpretation ──────────────────────────────────────────────────
+    # -- tb_interpretation --------------------------------------------------
     interp_src = source_files.get("tb_interpretation", "")
     if interp_src:
         logger.info("Processing tb_interpretation...")
@@ -318,9 +318,9 @@ def run(args: argparse.Namespace) -> None:
         if not args.dry_run and rows:
             n = _write_csv(rows, INTERP_COLS, out_dir / "tb_interpretation.csv")
             totals["tb_interpretation.csv"] = n
-            logger.info("  → Wrote %d rows to tb_interpretation.csv", n)
+            logger.info("  -> Wrote %d rows to tb_interpretation.csv", n)
 
-    # ── sample_qc_metrics ─────────────────────────────────────────────────
+    # -- sample_qc_metrics -------------------------------------------------
     qc_src = source_files.get("sample_qc_metrics", "")
     if qc_src:
         logger.info("Processing sample_qc_metrics...")
@@ -328,9 +328,9 @@ def run(args: argparse.Namespace) -> None:
         if not args.dry_run and rows:
             n = _write_csv(rows, QC_COLS, out_dir / "sample_qc_metrics.csv")
             totals["sample_qc_metrics.csv"] = n
-            logger.info("  → Wrote %d rows to sample_qc_metrics.csv", n)
+            logger.info("  -> Wrote %d rows to sample_qc_metrics.csv", n)
 
-    # ── analysis_provenance ───────────────────────────────────────────────
+    # -- analysis_provenance -----------------------------------------------
     prov_src = source_files.get("analysis_provenance", "")
     if prov_src:
         logger.info("Processing analysis_provenance...")
@@ -338,16 +338,16 @@ def run(args: argparse.Namespace) -> None:
         if not args.dry_run and rows:
             n = _write_csv(rows, PROV_COLS, out_dir / "analysis_provenance.csv")
             totals["analysis_provenance.csv"] = n
-            logger.info("  → Wrote %d rows to analysis_provenance.csv", n)
+            logger.info("  -> Wrote %d rows to analysis_provenance.csv", n)
 
-    # ── FASTA ─────────────────────────────────────────────────────────────
+    # -- FASTA -------------------------------------------------------------
     fasta_src = source_files.get("fasta", "")
     if fasta_src and not args.dry_run:
         logger.info("Preparing FASTA...")
         _rewrite_fasta_headers(Path(fasta_src), out_dir, fasta_header_map)
 
     if not args.dry_run:
-        print("\n── Output summary ──────────────────────────────────────")
+        print("\n-- Output summary --------------------------------------")
         for fname, count in totals.items():
             print(f"  {fname}: {count} rows")
         print(f"\nBundle written to: {out_dir}")
@@ -355,7 +355,7 @@ def run(args: argparse.Namespace) -> None:
         print(f"  1. python scripts/validate_ingest_files.py --dir {out_dir}")
         print(f"  2. python scripts/load_ingest_bundle.py --dir {out_dir}")
     else:
-        print("\nDry run complete — no files written.")
+        print("\nDry run complete - no files written.")
 
 
 def main() -> None:
@@ -402,3 +402,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

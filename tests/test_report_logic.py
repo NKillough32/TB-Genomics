@@ -35,3 +35,4 @@ def test_snp_supported_pair_can_be_moderate_confidence():
         )
         == "Moderate confidence"
     )
+

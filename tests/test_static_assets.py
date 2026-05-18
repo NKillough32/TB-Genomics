@@ -24,3 +24,4 @@ def test_gui_onclick_handlers_are_defined():
     }
 
     assert handlers - defined == set()
+

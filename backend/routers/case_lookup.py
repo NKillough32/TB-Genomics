@@ -171,3 +171,4 @@ def get_case_history(case_id: str, db: Session = Depends(get_db)):
         "observation_span_days": span_days,
         "history": case_history,
     }
+

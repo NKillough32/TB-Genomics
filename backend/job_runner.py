@@ -218,7 +218,7 @@ def run_pipeline():
                 child_id = run_job(step)
                 if child_id is None:
                     JOBS[pipeline_id]["status"] = "failed"
-                    lf.write(f"Step {step} is not allowed — aborting pipeline.\n")
+                    lf.write(f"Step {step} is not allowed - aborting pipeline.\n")
                     _log_to_audit("pipeline_failed", "system", {"pipeline_id": pipeline_id, "failed_step": step})
                     return
 
@@ -231,7 +231,7 @@ def run_pipeline():
 
                 if JOBS.get(child_id, {}).get("status") == "failed":
                     JOBS[pipeline_id]["status"] = "failed"
-                    lf.write(f"Step {step} failed — aborting pipeline.\n")
+                    lf.write(f"Step {step} failed - aborting pipeline.\n")
                     _log_to_audit("pipeline_failed", "system", {"pipeline_id": pipeline_id, "failed_step": step})
                     return
 
@@ -243,3 +243,4 @@ def run_pipeline():
 
     threading.Thread(target=_task).start()
     return pipeline_id
+

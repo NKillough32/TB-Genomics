@@ -28,7 +28,7 @@ In plain terms, it helps answer:
 - **Database schema**: defines how case, cluster, QC, sequencing run, and provenance data are stored.
 - **GUI**: gives teams a simple web view of cases, jobs, and outputs.
 - **Scripts**: run clustering, outbreaker, lineage/DR, and ingest pipeline utilities.
-- **Ingest pipeline**: three-step workflow (prepare → validate → load) for transforming NI programme exports into the platform database.
+- **Ingest pipeline**: three-step workflow (prepare -> validate -> load) for transforming NI programme exports into the platform database.
 - **Governance docs**: explain setup and secure integration (for example Azure VM ingestion).
 
 ## What users get from it
@@ -94,7 +94,7 @@ When NI sequencing export files are available, a three-step ingest pipeline load
 
 1. **Prepare**: `prepare_ni_data.py` maps NI-format CSVs and FASTA files into the standard bundle format using a JSON column mapping config (`ni_column_map.json`).
 2. **Validate**: `validate_ingest_files.py` checks the bundle for schema compliance before loading.
-3. **Load**: `load_ingest_bundle.py` inserts the prepared data into the database. All inserts are idempotent — safe to re-run without creating duplicates.
+3. **Load**: `load_ingest_bundle.py` inserts the prepared data into the database. All inserts are idempotent - safe to re-run without creating duplicates.
 
 Before using real NI data, the database must contain no synthetic seed events. Check `GET /cases/data-safety` and confirm `operational_safe = true`.
 
@@ -110,7 +110,7 @@ This means you can automate data flow from sequencing infrastructure into report
 - It does not provide direct patient care decisions.
 - It depends on data quality and completeness from upstream systems.
 - It is a surveillance and operational intelligence tool, not a full LIMS.
-- Drug resistance results from TBProfiler and Mykrobe are genomic predictions only — all must be confirmed by phenotypic DST before clinical use.
+- Drug resistance results from TBProfiler and Mykrobe are genomic predictions only - all must be confirmed by phenotypic DST before clinical use.
 - The current summary layer is not a validated transmission model.
 - Sequence support is based on precomputed sequence-cluster assignments, not a full validated SNP alignment pipeline.
 - Epidemiological support still uses timing and geography as a proxy, so contact and exposure fields would improve it.
@@ -163,3 +163,4 @@ The important point is this:
 - Commands such as `psql -f .\db\schema.sql` must be run from PowerShell, not from inside `psql`.
 
 If you see `role "tb" already exists` or `database "tb_surveillance" already exists`, that usually just means setup was already done earlier.
+

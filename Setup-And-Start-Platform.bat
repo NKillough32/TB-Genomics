@@ -55,3 +55,4 @@ start "" "http://localhost:8081"
 echo.
 echo [DONE] If backend fails, check database setup and DATABASE_URL.
 endlocal
+

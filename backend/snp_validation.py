@@ -59,3 +59,4 @@ def validated_snp_distance(seq_a: str, seq_b: str) -> SnpDistanceValidation:
         length_delta=length_delta,
         status=status,
     )
+

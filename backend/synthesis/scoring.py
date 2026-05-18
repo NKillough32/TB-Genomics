@@ -124,3 +124,4 @@ def serialise_parameters(values: dict[str, Any]) -> dict[str, Any]:
         "rapid_growth_case_threshold": int(values["rapid_growth_case_threshold"]),
         "wide_date_spread_days": int(values["wide_date_spread_days"]),
     }
+

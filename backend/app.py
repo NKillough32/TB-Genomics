@@ -65,3 +65,4 @@ app.include_router(reports.router, dependencies=[Depends(require_roles("viewer")
 @app.get("/")
 def root():
     return {"status": "running"}
+

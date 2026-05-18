@@ -48,3 +48,4 @@ echo.
 echo [DONE] Platform started in DEMO MODE.
 echo Remember to use Start-Platform.bat for operational mode.
 endlocal
+

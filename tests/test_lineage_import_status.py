@@ -70,3 +70,4 @@ def test_resistance_validation_keeps_expected_gene_not_validated():
     assert record["mapping_status"] == "expected_gene"
     assert record["report_status"] == "not_validated"
     assert record["clinical_status"] == "requires_phenotypic_dst_confirmation"
+

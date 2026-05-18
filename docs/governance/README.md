@@ -24,3 +24,4 @@ Plain-language use note:
 
 Pilot milestone:
 - See `docs/governance/PILOT_READY_INTERNAL_DEMONSTRATOR.md` for the short-term internal demonstrator target, operating rules, and remaining production gaps.
+

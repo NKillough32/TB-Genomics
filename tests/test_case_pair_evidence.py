@@ -232,3 +232,4 @@ def test_pair_triage_queue_prioritises_unreviewed_high_confidence_pairs(monkeypa
     assert top["review_status"] == "unreviewed"
     assert top["priority_score"] >= 3
     assert "unreviewed" in top["reasons"]
+

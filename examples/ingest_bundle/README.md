@@ -73,20 +73,20 @@ loads it through the same loader used by the command-line ingest pipeline. Set
 
 For NI live data, use the full ingest pipeline instead:
 
-1. **Prepare** — map NI export columns to bundle format:
+1. **Prepare** - map NI export columns to bundle format:
 
    ```powershell
    python scripts/prepare_ni_data.py --config scripts/ni_column_map.json --list-columns
    python scripts/prepare_ni_data.py --config scripts/ni_column_map.json --out path/to/bundle
    ```
 
-2. **Validate** — check bundle compliance before loading:
+2. **Validate** - check bundle compliance before loading:
 
    ```powershell
    python scripts/validate_ingest_files.py --dir path/to/bundle
    ```
 
-3. **Load** — idempotent DB insert (safe to re-run):
+3. **Load** - idempotent DB insert (safe to re-run):
 
    ```powershell
    python scripts/load_ingest_bundle.py --dir path/to/bundle --dry-run
@@ -103,3 +103,4 @@ Use `--reset --confirm-reset` with `load_ingest_bundle.py` to truncate all table
 - The newer synthesis and investigation views depend on this data being linked well, because missing links lead to weaker review support.
 - In the GUI, case-specific epidemiology evidence is recorded in Step 6, the Cluster Investigation Centre.
 - Step 11 is only a reusable reference library for exposure types, contacts, and locations; it does not assign those records to cases.
+

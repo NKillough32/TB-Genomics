@@ -547,3 +547,4 @@ def actionable_surveillance_report_html(
     with open(_export_path("actionable_surveillance_report.html"), "w", encoding="utf-8") as handle:
         handle.write(html)
     return HTMLResponse(content=html)
+

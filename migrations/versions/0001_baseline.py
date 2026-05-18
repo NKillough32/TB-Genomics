@@ -148,3 +148,4 @@ def downgrade() -> None:
     op.execute("DROP TABLE IF EXISTS consensus_sequences CASCADE")
     op.execute("DROP TABLE IF EXISTS tb_interpretation CASCADE")
     op.execute("DROP TABLE IF EXISTS cases CASCADE")
+

@@ -218,3 +218,4 @@ class CasePairReview(Base):
     notes = Column(String)
     source_cluster_id = Column(UUID(as_uuid=True), ForeignKey("clusters.cluster_id"))
     reviewed_at = Column(TIMESTAMP)
+

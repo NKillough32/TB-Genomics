@@ -274,7 +274,7 @@ def seed_synthetic_dataset(
                     },
                 )
 
-                # Synthetic QC metrics — realistic distributions for WGS TB samples.
+                # Synthetic QC metrics - realistic distributions for WGS TB samples.
                 mean_depth = round(random.uniform(60.0, 280.0), 1)
                 coverage_breadth = round(random.uniform(92.0, 99.8), 2)
                 ambiguous_pct = round(random.uniform(0.0, 3.5), 2)
@@ -335,7 +335,7 @@ def seed_synthetic_dataset(
             },
         )
 
-        # ── Seed sequencing_runs ────────────────────────────────────────────
+        # -- Seed sequencing_runs --------------------------------------------
         run_id = f"RUN-{today.strftime('%Y%m%d')}-SYNTHETIC"
         db.execute(
             text(
@@ -357,7 +357,7 @@ def seed_synthetic_dataset(
             },
         )
 
-        # ── Seed analysis_provenance ────────────────────────────────────────
+        # -- Seed analysis_provenance ----------------------------------------
         db.execute(
             text(
                 "INSERT INTO analysis_provenance "
@@ -393,7 +393,7 @@ def seed_synthetic_dataset(
             },
         )
 
-        # ── Seed per-case audit_log entries (sample of actions) ────────────
+        # -- Seed per-case audit_log entries (sample of actions) ------------
         audit_actions = [
             ("case_ingested", "WGS sequence received and ingested"),
             ("qc_reviewed", "QC metrics reviewed by bioinformatician"),
@@ -451,3 +451,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

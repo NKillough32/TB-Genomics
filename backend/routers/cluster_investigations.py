@@ -2,9 +2,9 @@
 Cluster Investigation Centre router.
 
 Workflow:
-  cluster detected → risk score computed → assigned to reviewer
-  → epi fields reviewed → actions recorded → decision signed off
-  → report generated
+  cluster detected -> risk score computed -> assigned to reviewer
+  -> epi fields reviewed -> actions recorded -> decision signed off
+  -> report generated
 """
 
 import html as html_lib
@@ -38,7 +38,7 @@ def _validation_notice() -> dict:
     }
 
 
-# ── DB helpers ─────────────────────────────────────────────────────────────────
+# -- DB helpers -----------------------------------------------------------------
 
 def get_db():
     db = SessionLocal()
@@ -82,7 +82,7 @@ def _fetch_investigation(db: Session, cluster_id: str):
     """), {"cid": cluster_id}).mappings().first()
 
 
-# ── Risk scoring ───────────────────────────────────────────────────────────────
+# -- Risk scoring ---------------------------------------------------------------
 
 def _risk_band(score: float) -> str:
     if score >= 66:
@@ -204,7 +204,7 @@ def _format_resistance_profile(value) -> str:
     return "none"
 
 
-# ── Upsert investigation row ────────────────────────────────────────────────────
+# -- Upsert investigation row ----------------------------------------------------
 
 def _upsert_investigation(db: Session, cluster_id: str) -> str:
     """Ensure an investigation row exists; recompute risk score on every call."""
@@ -230,7 +230,7 @@ def _upsert_investigation(db: Session, cluster_id: str) -> str:
     return cluster_id
 
 
-# ── Pydantic models ─────────────────────────────────────────────────────────────
+# -- Pydantic models -------------------------------------------------------------
 
 class AssignRequest(BaseModel):
     assigned_to: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
@@ -267,7 +267,7 @@ class SignOffRequest(BaseModel):
     notes: str | None = None
 
 
-# ── Routes ──────────────────────────────────────────────────────────────────────
+# -- Routes ----------------------------------------------------------------------
 
 @router.get("")
 def list_investigations(db: Session = Depends(get_db)):
@@ -548,7 +548,7 @@ def generate_report(cluster_id: str, db: Session = Depends(get_db)):
         "low": "#15803d",
     }.get(risk["band"], "#374151")
 
-    # ── Member rows ─────────────────────────────────────────────────────────────
+    # -- Member rows -------------------------------------------------------------
     member_rows = ""
     for m in members:
         dr = _format_resistance_profile(m["predicted_drug_resistance"])
@@ -560,7 +560,7 @@ def generate_report(cluster_id: str, db: Session = Depends(get_db)):
             f"<td>{h(dr)}</td></tr>\n"
         )
 
-    # ── Action rows ──────────────────────────────────────────────────────────────
+    # -- Action rows --------------------------------------------------------------
     action_rows = ""
     for a in actions:
         action_rows += (
@@ -572,7 +572,7 @@ def generate_report(cluster_id: str, db: Session = Depends(get_db)):
     if not action_rows:
         action_rows = "<tr><td colspan='4'>No actions recorded</td></tr>\n"
 
-    # ── Risk component table ─────────────────────────────────────────────────────
+    # -- Risk component table -----------------------------------------------------
     component_rows = "".join(
         f"<tr><td>{h(k.replace('_', ' ').title())}</td><td>{h(str(v))}</td></tr>\n"
         for k, v in risk["components"].items()
@@ -592,7 +592,7 @@ def generate_report(cluster_id: str, db: Session = Depends(get_db)):
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<title>Cluster Investigation Report — {h(cluster_id[:8])}</title>
+<title>Cluster Investigation Report - {h(cluster_id[:8])}</title>
 <style>
   body{{font-family:system-ui,sans-serif;margin:0;padding:2rem;color:#111;background:#f9fafb;}}
   header{{background:#1e3a5f;color:#fff;padding:1.5rem 2rem;border-radius:8px;margin-bottom:1.5rem;}}
@@ -675,3 +675,4 @@ def generate_report(cluster_id: str, db: Session = Depends(get_db)):
 </html>"""
 
     return HTMLResponse(content=html_out)
+

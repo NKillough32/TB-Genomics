@@ -677,7 +677,7 @@ footer {
 	}
 }
 
-/* ── KPI Banner ─────────────────────────────────────────────────────────── */
+/* -- KPI Banner ----------------------------------------------------------- */
 .kpi-banner-card {
 	min-width: 0;
 	background: linear-gradient(135deg, #eef8f6 0%, #e6f0fb 100%);
@@ -728,7 +728,7 @@ footer {
 	overflow-wrap: anywhere;
 }
 
-/* ── Pipeline button ────────────────────────────────────────────────────── */
+/* -- Pipeline button ------------------------------------------------------ */
 .btn-primary {
 	background: #1a5c4a;
 	color: #fff;
@@ -748,7 +748,7 @@ footer {
 .individual-steps summary { cursor: pointer; color: #4a6a7a; font-size: 0.85rem; }
 .individual-steps-inner { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.5rem; }
 
-/* ── ZIP export button ──────────────────────────────────────────────────── */
+/* -- ZIP export button ---------------------------------------------------- */
 .btn-export-zip {
 	background: #2a5080;
 	color: #fff;
@@ -1500,3 +1500,4 @@ footer {
 		width: 100%;
 	}
 }
+

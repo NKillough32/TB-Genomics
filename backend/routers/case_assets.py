@@ -28,3 +28,4 @@ def get_outbreaker_image(filename: str):
         return FileResponse(path, media_type="image/png")
 
     return {"error": "Image not found"}
+

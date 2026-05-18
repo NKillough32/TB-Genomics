@@ -104,7 +104,7 @@ toc_items = [
 ]
 
 for item in toc_items:
-    story.append(Paragraph(f"• {item}", styles['Normal']))
+    story.append(Paragraph(f"- {item}", styles['Normal']))
 
 story.append(PageBreak())
 
@@ -298,7 +298,7 @@ story.append(Paragraph("For real operational use, leave these variables unset.",
 story.append(Paragraph("<b>Step 6.1: Using the Web Interface</b>", styles['Heading3']))
 story.append(Spacer(1, 0.1*inch))
 story.append(Paragraph("In the browser on http://localhost:8081:", step_style))
-story.append(Paragraph("1. Navigate to <b>Step 2 — Upload data</b>", step_style))
+story.append(Paragraph("1. Navigate to <b>Step 2 - Upload data</b>", step_style))
 story.append(Paragraph("2. Set <b>Cases: 250</b> (or desired number)", step_style))
 story.append(Paragraph("3. Set <b>Seed: 42</b> (for reproducible results)", step_style))
 story.append(Paragraph("4. Check <b>Reset existing synthetic data first</b>", step_style))
@@ -308,11 +308,11 @@ story.append(Paragraph("6. Wait for confirmation message", step_style))
 story.append(Spacer(1, 0.2*inch))
 story.append(Paragraph("<b>What Happens:</b>", styles['Heading3']))
 story.append(Paragraph(
-    "• The system fetches current TB incidence data from the World Bank API<br/>"
-    "• 250 realistic synthetic TB cases are generated using country-weighted distribution<br/>"
-    "• Each case is assigned lineage, resistance profile, and location<br/>"
-    "• Cases are organized into 4-6 outbreak clusters<br/>"
-    "• All data is pseudonymised and stored in the database",
+    "- The system fetches current TB incidence data from the World Bank API<br/>"
+    "- 250 realistic synthetic TB cases are generated using country-weighted distribution<br/>"
+    "- Each case is assigned lineage, resistance profile, and location<br/>"
+    "- Cases are organized into 4-6 outbreak clusters<br/>"
+    "- All data is pseudonymised and stored in the database",
     step_style
 ))
 
@@ -324,7 +324,7 @@ story.append(Spacer(1, 0.15*inch))
 
 story.append(Paragraph("<b>Step 7.1: Run Clustering Analysis</b>", styles['Heading3']))
 story.append(Spacer(1, 0.1*inch))
-story.append(Paragraph("In <b>Step 3 — Run analysis</b>:", step_style))
+story.append(Paragraph("In <b>Step 3 - Run analysis</b>:", step_style))
 story.append(Paragraph("1. Click <b>Run clustering</b>", step_style))
 story.append(Paragraph("2. A progress bar will appear and update as the job runs", step_style))
 story.append(Paragraph("3. When complete, status shows <b>Completed</b>", step_style))
@@ -336,7 +336,7 @@ story.append(Paragraph(
 story.append(Spacer(1, 0.2*inch))
 story.append(Paragraph("<b>Step 7.2: Generate Outbreaker2 Inputs</b>", styles['Heading3']))
 story.append(Spacer(1, 0.1*inch))
-story.append(Paragraph("In <b>Step 3 — Run analysis</b>:", step_style))
+story.append(Paragraph("In <b>Step 3 - Run analysis</b>:", step_style))
 story.append(Paragraph("1. Click <b>Generate outbreaker2 inputs</b>", step_style))
 story.append(Paragraph("2. Wait for completion", step_style))
 story.append(Paragraph(
@@ -347,7 +347,7 @@ story.append(Paragraph(
 story.append(Spacer(1, 0.2*inch))
 story.append(Paragraph("<b>Step 7.3: Run Outbreaker2 Analysis</b>", styles['Heading3']))
 story.append(Spacer(1, 0.1*inch))
-story.append(Paragraph("In <b>Step 3 — Run analysis</b>:", step_style))
+story.append(Paragraph("In <b>Step 3 - Run analysis</b>:", step_style))
 story.append(Paragraph("1. Click <b>Run outbreaker2</b>", step_style))
 story.append(Paragraph("2. This may take 30-60 seconds", step_style))
 story.append(Paragraph("3. Status will show when analysis completes", step_style))
@@ -376,27 +376,27 @@ story.append(Paragraph(
 ))
 story.append(Paragraph("<b>What the synthesis layer gives you:</b>", styles['Heading3']))
 story.append(Paragraph(
-    "• <b>Transmission confidence:</b> High, moderate, low, or insufficient evidence<br/>"
-    "• <b>Contradiction flags:</b> Warnings for mismatched genomic, timing, geography, or resistance signals<br/>"
-    "• <b>Priority score:</b> A ranked review score that helps staff focus on the most important clusters or pairs first<br/>"
-    "• <b>Recommended review actions:</b> A short list of next steps for the investigation team",
+    "- <b>Transmission confidence:</b> High, moderate, low, or insufficient evidence<br/>"
+    "- <b>Contradiction flags:</b> Warnings for mismatched genomic, timing, geography, or resistance signals<br/>"
+    "- <b>Priority score:</b> A ranked review score that helps staff focus on the most important clusters or pairs first<br/>"
+    "- <b>Recommended review actions:</b> A short list of next steps for the investigation team",
     step_style
 ))
 story.append(Paragraph("<b>Common flags you may see:</b>", styles['Heading3']))
 story.append(Paragraph(
-    "• High posterior link but large genomic distance<br/>"
-    "• Low genomic support with no clear epidemiological or geographic link<br/>"
-    "• Missing sequence or QC data<br/>"
-    "• Wide date spread inside a single cluster<br/>"
-    "• Cluster spans multiple regions<br/>"
-    "• Resistance signal appears inside the cluster",
+    "- High posterior link but large genomic distance<br/>"
+    "- Low genomic support with no clear epidemiological or geographic link<br/>"
+    "- Missing sequence or QC data<br/>"
+    "- Wide date spread inside a single cluster<br/>"
+    "- Cluster spans multiple regions<br/>"
+    "- Resistance signal appears inside the cluster",
     step_style
 ))
 
 story.append(Spacer(1, 0.2*inch))
 story.append(Paragraph("<b>Step 8.2: View Case Summary</b>", styles['Heading3']))
 story.append(Spacer(1, 0.1*inch))
-story.append(Paragraph("In <b>Step 4 — Results</b>:", step_style))
+story.append(Paragraph("In <b>Step 4 - Results</b>:", step_style))
 story.append(Paragraph("1. Click <b>View cases</b>", step_style))
 story.append(Paragraph("2. A raw JSON view of all cases is displayed", step_style))
 story.append(Paragraph("Include fields: case ID, specimen date, region, lineage, resistance profile", step_style))
@@ -404,14 +404,14 @@ story.append(Paragraph("Include fields: case ID, specimen date, region, lineage,
 story.append(Spacer(1, 0.2*inch))
 story.append(Paragraph("<b>Step 8.3: View Outbreak Analysis Plots</b>", styles['Heading3']))
 story.append(Spacer(1, 0.1*inch))
-story.append(Paragraph("In <b>Step 4 — Results</b>:", step_style))
+story.append(Paragraph("In <b>Step 4 - Results</b>:", step_style))
 story.append(Paragraph("1. Click <b>View outbreaker2 summary</b>", step_style))
 story.append(Paragraph("2. The results panel displays:", step_style))
 story.append(Paragraph(
-    "• <b>Case Summary:</b> Total cases, clustered cases, unclustered cases<br/>"
-    "• <b>Outbreak Analysis:</b> MCMC analysis status and likelihood statistics<br/>"
-    "• <b>Transmission Network Insights:</b> Node count, high-confidence links, and ranked priority spreaders<br/>"
-    "• <b>Diagnostic Plots:</b><br/>"
+    "- <b>Case Summary:</b> Total cases, clustered cases, unclustered cases<br/>"
+    "- <b>Outbreak Analysis:</b> MCMC analysis status and likelihood statistics<br/>"
+    "- <b>Transmission Network Insights:</b> Node count, high-confidence links, and ranked priority spreaders<br/>"
+    "- <b>Diagnostic Plots:</b><br/>"
     "&nbsp;&nbsp;- <b>MCMC Trace:</b> Shows convergence of likelihood estimate<br/>"
     "&nbsp;&nbsp;- <b>Posterior Distributions:</b> 4-panel histogram of key parameters<br/>"
     "&nbsp;&nbsp;- <b>Transmission Tree:</b> Network diagram showing inferred transmission chains<br/>"
@@ -423,7 +423,7 @@ story.append(Paragraph(
 story.append(Spacer(1, 0.2*inch))
 story.append(Paragraph("<b>Step 8.4: Download the Outbreak Report PDF</b>", styles['Heading3']))
 story.append(Spacer(1, 0.1*inch))
-story.append(Paragraph("In <b>Step 4 — Results</b>:", step_style))
+story.append(Paragraph("In <b>Step 4 - Results</b>:", step_style))
 story.append(Paragraph("1. Click <b>Download outbreak report (PDF)</b>", step_style))
 story.append(Paragraph("2. Open the generated report", step_style))
 story.append(Paragraph("3. The updated report preserves image aspect ratios so plots are not stretched or squashed", step_style))
@@ -431,7 +431,7 @@ story.append(Paragraph("3. The updated report preserves image aspect ratios so p
 story.append(Spacer(1, 0.2*inch))
 story.append(Paragraph("<b>Step 8.5: View Governance & Audit Trail</b>", styles['Heading3']))
 story.append(Spacer(1, 0.1*inch))
-story.append(Paragraph("In <b>Step 5 — Governance & Compliance</b>:", step_style))
+story.append(Paragraph("In <b>Step 5 - Governance & Compliance</b>:", step_style))
 story.append(Paragraph("1. Click <b>View audit trail</b>", step_style))
 story.append(Paragraph("2. A detailed log of all system actions is displayed with timestamps", step_style))
 story.append(Paragraph(
@@ -463,8 +463,8 @@ issues = [
 ]
 
 for issue, solution in issues:
-    story.append(Paragraph(f"<b>❌ {issue}</b>", styles['Heading3']))
-    story.append(Paragraph(f"✓ {solution}", step_style))
+    story.append(Paragraph(f"<b>[X] {issue}</b>", styles['Heading3']))
+    story.append(Paragraph(f"[OK] {solution}", step_style))
     story.append(Spacer(1, 0.15*inch))
 
 story.append(PageBreak())
@@ -475,26 +475,27 @@ story.append(Spacer(1, 0.15*inch))
 
 story.append(Paragraph("<b>After PoC Validation:</b>", styles['Heading3']))
 story.append(Paragraph(
-    "• Deploy to test environment<br/>"
-    "• Connect to real TB genomic data sources<br/>"
-    "• Review synthesis-layer thresholds with public health and laboratory leads<br/>"
-    "• Configure authentication (LDAP/AD integration)<br/>"
-    "• Set up database backup and recovery procedures<br/>"
-    "• Deploy Outbreaker2 R package on analysis servers<br/>"
-    "• Implement production monitoring and logging",
+    "- Deploy to test environment<br/>"
+    "- Connect to real TB genomic data sources<br/>"
+    "- Review synthesis-layer thresholds with public health and laboratory leads<br/>"
+    "- Configure authentication (LDAP/AD integration)<br/>"
+    "- Set up database backup and recovery procedures<br/>"
+    "- Deploy Outbreaker2 R package on analysis servers<br/>"
+    "- Implement production monitoring and logging",
     step_style
 ))
 
 story.append(Spacer(1, 0.3*inch))
 story.append(Paragraph("<b>Support Resources:</b>", styles['Heading3']))
 story.append(Paragraph(
-    "• FastAPI Documentation: https://fastapi.tiangolo.com<br/>"
-    "• Outbreaker2 Package: https://www.repidemicsconsortium.org/outbreaker2<br/>"
-    "• PostgreSQL Documentation: https://www.postgresql.org/docs",
+    "- FastAPI Documentation: https://fastapi.tiangolo.com<br/>"
+    "- Outbreaker2 Package: https://www.repidemicsconsortium.org/outbreaker2<br/>"
+    "- PostgreSQL Documentation: https://www.postgresql.org/docs",
     step_style
 ))
 
 # Build PDF
 doc.build(story)
-print(f"✓ PDF generated successfully: {pdf_path}")
+print(f"[OK] PDF generated successfully: {pdf_path}")
 print(f"  Location: {__file__.rsplit(chr(92), 1)[0]}\\{pdf_path}")
+

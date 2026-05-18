@@ -153,3 +153,4 @@ def seed_synthetic(
     return seed_synthetic_dataset(
         case_count=case_count, reset=reset, seed=seed, countries=country_list
     )
+

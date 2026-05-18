@@ -317,14 +317,14 @@ def _resistant_drug_set(predicted_dr: object) -> set[str]:
     return resistant
 
 
-# ─── Infectiousness helpers ────────────────────────────────────────────────────
+# --- Infectiousness helpers ----------------------------------------------------
 
 def _compute_infectious_period(row: dict) -> dict:
     """Estimate the likely infectious window for a TB case.
 
     Uses clinical fields when available; falls back to a specimen-date proxy.
     TB is typically infectious from ~4 weeks before symptom onset and becomes
-    non-infectious ~2–3 weeks after effective treatment starts.
+    non-infectious ~2-3 weeks after effective treatment starts.
     """
     symptom_onset = row.get("symptom_onset_date")
     treatment_start = row.get("treatment_start_date")
@@ -498,19 +498,19 @@ def _build_evidence_card(
     """
     signals: list[dict] = []
 
-    # ── Genomic: SNP distance ──────────────────────────────────────────────────
+    # -- Genomic: SNP distance --------------------------------------------------
     if snp_distance is None:
         signals.append({"signal": "SNP distance", "value": "No sequence available", "direction": "missing"})
     elif snp_distance <= snp_strong_threshold:
-        signals.append({"signal": "SNP distance", "value": f"{snp_distance} SNPs (≤{snp_strong_threshold} — strong linkage)", "direction": "supports"})
+        signals.append({"signal": "SNP distance", "value": f"{snp_distance} SNPs (<={snp_strong_threshold} - strong linkage)", "direction": "supports"})
     elif snp_distance <= snp_moderate_threshold:
-        signals.append({"signal": "SNP distance", "value": f"{snp_distance} SNPs (moderate range ≤{snp_moderate_threshold})", "direction": "supports"})
+        signals.append({"signal": "SNP distance", "value": f"{snp_distance} SNPs (moderate range <={snp_moderate_threshold})", "direction": "supports"})
     elif snp_distance <= 20:
-        signals.append({"signal": "SNP distance", "value": f"{snp_distance} SNPs (elevated — weak linkage)", "direction": "weak"})
+        signals.append({"signal": "SNP distance", "value": f"{snp_distance} SNPs (elevated - weak linkage)", "direction": "weak"})
     else:
         signals.append({"signal": "SNP distance", "value": f"{snp_distance} SNPs (exceeds linkage threshold)", "direction": "contradicts"})
 
-    # ── Genomic: Lineage ───────────────────────────────────────────────────────
+    # -- Genomic: Lineage -------------------------------------------------------
     if lineage_a and lineage_b:
         if same_lineage:
             signals.append({"signal": "Lineage", "value": f"Matched ({lineage_a})", "direction": "supports"})
@@ -519,7 +519,7 @@ def _build_evidence_card(
     else:
         signals.append({"signal": "Lineage", "value": "Lineage data incomplete", "direction": "missing"})
 
-    # ── Genomic: Resistance profile ────────────────────────────────────────────
+    # -- Genomic: Resistance profile --------------------------------------------
     if resistance_concordance == "concordant":
         signals.append({"signal": "Resistance profile", "value": "Concordant", "direction": "supports"})
     elif resistance_concordance == "partially_concordant":
@@ -529,13 +529,13 @@ def _build_evidence_card(
     else:
         signals.append({"signal": "Resistance profile", "value": "No resistance data", "direction": "missing"})
 
-    # ── Epidemiological: Geography ─────────────────────────────────────────────
+    # -- Epidemiological: Geography ---------------------------------------------
     if same_region:
         signals.append({"signal": "Geography", "value": f"Same region ({region_a})", "direction": "supports"})
     else:
         signals.append({"signal": "Geography", "value": f"Different regions ({region_a} / {region_b})", "direction": "neutral"})
 
-    # ── Epidemiological: Temporal overlap ──────────────────────────────────────
+    # -- Epidemiological: Temporal overlap --------------------------------------
     if temporal_delta_days is not None:
         if temporal_plausible:
             signals.append({"signal": "Time overlap", "value": f"{temporal_delta_days} days between specimens (within {temporal_window_days}d window)", "direction": "supports"})
@@ -544,7 +544,7 @@ def _build_evidence_card(
     else:
         signals.append({"signal": "Time overlap", "value": "Specimen dates missing", "direction": "missing"})
 
-    # ── Clinical: Infectious period overlap ────────────────────────────────────
+    # -- Clinical: Infectious period overlap ------------------------------------
     infectious_overlap = _infectious_period_overlap(row_a, row_b)
     if not infectious_overlap["available"]:
         signals.append({"signal": "Infectious period", "value": "Clinical data insufficient to estimate", "direction": "missing"})
@@ -553,21 +553,21 @@ def _build_evidence_card(
     else:
         signals.append({"signal": "Infectious period", "value": f"Estimated windows do not overlap ({infectious_overlap['basis_a']} / {infectious_overlap['basis_b']})", "direction": "contradicts"})
 
-    # ── Epidemiological: Shared exposure ───────────────────────────────────────
+    # -- Epidemiological: Shared exposure ---------------------------------------
     if epi_shared_locations > 0:
         domains_str = ", ".join(epi_domains) if epi_domains else "unclassified setting"
-        signals.append({"signal": "Exposure overlap", "value": f"{epi_shared_locations} shared location(s) — {domains_str}", "direction": "supports"})
+        signals.append({"signal": "Exposure overlap", "value": f"{epi_shared_locations} shared location(s) - {domains_str}", "direction": "supports"})
     else:
         signals.append({"signal": "Exposure overlap", "value": "No shared location events recorded", "direction": "missing"})
 
-    # ── Epidemiological: Contact evidence ──────────────────────────────────────
+    # -- Epidemiological: Contact evidence --------------------------------------
     if epi_shared_contacts > 0:
         directness = "direct" if epi_shared_contacts >= 2 else "indirect"
-        signals.append({"signal": "Contact evidence", "value": f"{epi_shared_contacts} shared contact(s) — {directness}", "direction": "supports"})
+        signals.append({"signal": "Contact evidence", "value": f"{epi_shared_contacts} shared contact(s) - {directness}", "direction": "supports"})
     else:
         signals.append({"signal": "Contact evidence", "value": "No shared contacts recorded", "direction": "missing"})
 
-    # ── Clinical: Infectiousness ───────────────────────────────────────────────
+    # -- Clinical: Infectiousness -----------------------------------------------
     weight_a = _infectiousness_weight(row_a)
     weight_b = _infectiousness_weight(row_b)
     desc_a = _infectiousness_description(row_a)
@@ -584,13 +584,13 @@ def _build_evidence_card(
     else:
         signals.append({"signal": "Infectiousness", "value": "Clinical infectiousness data not available", "direction": "missing"})
 
-    # ── Contradictions summary ─────────────────────────────────────────────────
+    # -- Contradictions summary -------------------------------------------------
     if contradictory_evidence:
         signals.append({"signal": "Contradictions", "value": "; ".join(sorted(set(contradictory_evidence))), "direction": "contradicts"})
     else:
         signals.append({"signal": "Contradictions", "value": "None identified", "direction": "neutral"})
 
-    # ── Confidence label ───────────────────────────────────────────────────────
+    # -- Confidence label -------------------------------------------------------
     strong_threshold = int(confidence_thresholds.get("strong", 5))
     moderate_threshold = int(confidence_thresholds.get("moderate", 3))
     weak_threshold = int(confidence_thresholds.get("weak", 1))
@@ -609,7 +609,7 @@ def _build_evidence_card(
     supporting_count = sum(1 for s in signals if s["direction"] == "supports")
     contradicting_count = sum(1 for s in signals if s["direction"] == "contradicts")
 
-    # ── Natural language interpretation ───────────────────────────────────────
+    # -- Natural language interpretation ---------------------------------------
     intro_map = {
         "strong": "Strong genomic and epidemiological support for recent transmission.",
         "moderate": "Moderate genomic and epidemiological support for recent transmission.",
@@ -2219,3 +2219,4 @@ def cluster_risk_summary(
         wide_date_spread_days=wide_date_spread_days,
     )
     return build_cluster_risk_summary(db=db, config=cfg)
+

@@ -147,3 +147,4 @@ def require_roles(*roles: str):
         )
 
     return dependency
+

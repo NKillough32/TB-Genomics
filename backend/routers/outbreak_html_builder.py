@@ -37,14 +37,14 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
     generated_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
     today = _dt.date.today()
 
-    # ── Basic DB counts ────────────────────────────────────────────────────────
+    # -- Basic DB counts --------------------------------------------------------
     total_cases = db.execute(text("SELECT COUNT(*) FROM cases")).scalar() or 0
     clustered_cases = db.execute(text("SELECT COUNT(DISTINCT sample_id) FROM case_clusters")).scalar() or 0
     open_clusters = db.execute(
         text("SELECT COUNT(*) FROM clusters WHERE investigation_status = 'open'")
     ).scalar() or 0
 
-    # ── Load export JSON artifacts ─────────────────────────────────────────────
+    # -- Load export JSON artifacts ---------------------------------------------
     summary_data = _load_export_json("outbreaker_summary.json")
     transmission_data = _load_export_json("transmission_network.json")
     lineage_dr_data = _load_export_json("lineage_dr_validation.json")
@@ -181,7 +181,7 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
     except Exception as exc:
         kpi_data = {"warning": str(exc)}
 
-    # ── Weekly trends ──────────────────────────────────────────────────────────
+    # -- Weekly trends ----------------------------------------------------------
     qc_table_exists = db.execute(
         text("SELECT to_regclass('public.sample_qc_metrics') IS NOT NULL")
     ).scalar()
@@ -220,7 +220,7 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
     except Exception:
         weekly_trends = []
 
-    # ── Case-level detail query ────────────────────────────────────────────────
+    # -- Case-level detail query ------------------------------------------------
     case_rows = []
     try:
         case_rows = db.execute(text("""
@@ -247,7 +247,7 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
     }
     pairwise_snp_matrix = _pairwise_matrix(sequence_by_case)
 
-    # ── QC status counts ───────────────────────────────────────────────────────
+    # -- QC status counts -------------------------------------------------------
     qc_status_counts = {"pass": 0, "fail": 0, "not_reported": 0, "contamination": 0}
     for r in case_rows:
         st = str(r.get("qc_status") or "not_reported").lower()
@@ -264,7 +264,7 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
         if str(r.get("qc_status") or "").lower() not in ("pass", "passed") or bool(r.get("contamination_flag"))
     )
 
-    # ── Transmission edge data ─────────────────────────────────────────────────
+    # -- Transmission edge data -------------------------------------------------
     transmission_edges = (transmission_data or {}).get("edges") or (transmission_data or {}).get("transmission_edges") or []
     best_incoming: dict = {}
     best_outgoing: dict = {}
@@ -312,7 +312,7 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
     pairwise_links_le_12 = sum(1 for d in pairwise_snp_matrix.values() if d <= 12)
     sequence_pair_set = {pair for pair, d in pairwise_snp_matrix.items() if d <= 12}
 
-    # ── Cluster action priority (from DB) ─────────────────────────────────────
+    # -- Cluster action priority (from DB) -------------------------------------
     cluster_action_rows = []
     try:
         cluster_action_rows = db.execute(text("""
@@ -332,7 +332,7 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
     except Exception:
         cluster_action_rows = []
 
-    # ── Cluster epidemiology ───────────────────────────────────────────────────
+    # -- Cluster epidemiology ---------------------------------------------------
     cluster_epi_rows = []
     try:
         cluster_epi_rows = db.execute(text("""
@@ -360,7 +360,7 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
     except Exception:
         cluster_epi_rows = []
 
-    # ── Mutation validation rows ───────────────────────────────────────────────
+    # -- Mutation validation rows -----------------------------------------------
     mutation_rows_raw = []
     try:
         mutation_rows_raw = db.execute(text("""
@@ -372,7 +372,7 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
     except Exception:
         mutation_rows_raw = []
 
-    # ── Run-level QC ───────────────────────────────────────────────────────────
+    # -- Run-level QC -----------------------------------------------------------
     run_qc_rows_db = []
     if qc_table_exists:
         try:
@@ -388,7 +388,7 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
         except Exception:
             run_qc_rows_db = []
 
-    # ── Reproducibility / pipeline metadata variables ─────────────────────────
+    # -- Reproducibility / pipeline metadata variables -------------------------
     # Pull from DB tables first, fall back to JSON artifact values.
     _seq_run_row: dict = {}
     try:
@@ -446,7 +446,7 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
     gen_time_sd    = str(_params.get("gen_time_sd") or _params.get("generation_time_sd") or "")
     sampling_prob  = str(_params.get("sampling_prob") or _params.get("pi") or "")
 
-    # ── Pipeline validation sign-off ───────────────────────────────────────────
+    # -- Pipeline validation sign-off -------------------------------------------
     _signoff = _get_latest_signoff(db)
     if _signoff and _signoff.get("decision") == "approved":
         _pipeline_valid_badge = (
@@ -465,8 +465,8 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
 
     _resist_cat_html = _safe_html(resist_cat or 'Not recorded &#8212; required')
 
-    # ── Resistance blocking card (dynamic based on sign-off) ───────────────────
-    # Shared sign-off form — appended to the card in both states.
+    # -- Resistance blocking card (dynamic based on sign-off) -------------------
+    # Shared sign-off form - appended to the card in both states.
     _signoff_form_html = (
         '<div id="signoff-panel" style="margin-top:.9rem;padding:.8rem 1rem;'
         'background:rgba(0,0,0,.03);border-radius:6px;border:1px solid rgba(0,0,0,.1)">'
@@ -585,7 +585,7 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
             f'</div>'
         )
 
-    # ── Reproduce metadata gate ────────────────────────────────────────────────
+    # -- Reproduce metadata gate ------------------------------------------------
     # Uses the already-resolved DB variables so the DB is the source of truth.
     required_repro_metadata = [
         ("Reference genome", ref_genome),
@@ -598,23 +598,23 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
     missing_repro = [label for label, v in required_repro_metadata if v is None or (isinstance(v, str) and not v.strip())]
     circulation_ok = not missing_repro
 
-    # ── Lineage epi summary ────────────────────────────────────────────────────
+    # -- Lineage epi summary ----------------------------------------------------
     analysis_summary = _lineage_analysis_summary(db)
     analysis_epi_summary = _lineage_epi_summary(db)
 
-    # ── Graphics ───────────────────────────────────────────────────────────────
-    # Metadata for each known figure: stem → (title, interpretive caption)
+    # -- Graphics ---------------------------------------------------------------
+    # Metadata for each known figure: stem -> (title, interpretive caption)
     _FIGURE_META: dict[str, tuple[str, str]] = {
         "outbreaker_trace": (
             "MCMC Log-Likelihood Trace",
             "Inspect for convergence: a stable horizontal band indicates good chain mixing. "
-            "Visible drift, cycles, or sudden jumps suggest poor convergence — "
+            "Visible drift, cycles, or sudden jumps suggest poor convergence - "
             "treat all model output as exploratory until convergence is confirmed.",
         ),
         "outbreaker_hist": (
             "MCMC Log-Likelihood Distribution",
             "A near-normal, unimodal histogram indicates the sampler explored the posterior well. "
-            "Multi-modal or heavily skewed distributions suggest the chain has not converged — "
+            "Multi-modal or heavily skewed distributions suggest the chain has not converged - "
             "model-prioritised transmission links should be interpreted with caution.",
         ),
         "outbreaker_tree": (
@@ -622,14 +622,14 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
             "Arrows show the most probable who-infected-whom direction from outbreaker2 posterior "
             "marginal modes. Edge colour and width show posterior support; the embedded legend maps "
             "support bands and cluster colours. These are probabilistic hypotheses, not confirmed routes. "
-            "Validate each link with pairwise SNP distance ≤12 and epidemiological corroboration "
+            "Validate each link with pairwise SNP distance <=12 and epidemiological corroboration "
             "before operational action.",
         ),
         "outbreaker_phylo": (
             "Hierarchical Clustering Dendrogram (SNP Distance)",
             "Cases joined at a low branch height share recent common ancestry. "
             "Visible compact sub-trees correspond to transmission clusters. "
-            "Branch heights are proportional to pairwise SNP distance — "
+            "Branch heights are proportional to pairwise SNP distance - "
             "cases below the 12-SNP threshold are likely directly linked.",
         ),
         "outbreaker_resistance": (
@@ -642,7 +642,7 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
     }
 
     # Load all PNGs into a dict keyed by stem for contextual placement
-    figures_by_stem: dict[str, str] = {}  # stem → base64 data URI
+    figures_by_stem: dict[str, str] = {}  # stem -> base64 data URI
     for image_path in sorted(Path(_export_path()).glob("outbreaker_*.png")):
         uri = _image_data_uri(str(image_path))
         if uri:
@@ -681,7 +681,7 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
     else:
         graphics_html = []
 
-    # ── Pair categorisation ────────────────────────────────────────────────────
+    # -- Pair categorisation ----------------------------------------------------
     genomic_pairs = []
     model_only_pairs = []
     qc_resolution_pairs = []
@@ -721,7 +721,7 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
         else:
             model_only_pairs.append(record)
 
-    # ── Discordant pairs ───────────────────────────────────────────────────────
+    # -- Discordant pairs -------------------------------------------------------
     discordant_pairs = []
     for pair in sequence_pair_set.union(set(outbreaker_pair_prob.keys())):
         in_seq = pair in sequence_pair_set
@@ -744,7 +744,7 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
             "out_result": "linked" if in_out else "not_linked",
         })
 
-    # ── Generate appendix CSVs from live data (no separate PDF run required) ──
+    # -- Generate appendix CSVs from live data (no separate PDF run required) --
     _case_action_csv = [[
         "Case", "Cluster", "Pairwise SNP?", "NN SNP", "Likely link",
         "Posterior", "Tier", "QC", "Warning", "Recommended action",
@@ -785,13 +785,13 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
             _act = "Repeat/verify sequence before action."
         elif _lp is None:
             _warn = "Outbreaker-only link: requires genomic validation."
-            _act = "Model-prioritised exposure review — confirm with pairwise SNP and epidemiology before action."
+            _act = "Model-prioritised exposure review - confirm with pairwise SNP and epidemiology before action."
         elif _lp <= 12:
             _warn = "Pairwise SNP supports cluster linkage, but epidemiology must still corroborate the direction."
             _act = "Confirm with pairwise SNP and epidemiology before operational action."
         else:
             _warn = "Pairwise SNP distance is too high for direct transmission interpretation."
-            _act = "Model-prioritised exposure review — confirm with pairwise SNP and epidemiology before action."
+            _act = "Model-prioritised exposure review - confirm with pairwise SNP and epidemiology before action."
         _case_action_csv.append([
             _short_case_id(_cid),
             _short_case_id(_clid) if _clid else "none",
@@ -819,22 +819,22 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
         ])
     _write_csv_rows(_export_path("appendix_b_full_discordance_review.csv"), _disc_csv)
 
-    # ── Action CSV rows (for load) ─────────────────────────────────────────────
+    # -- Action CSV rows (for load) ---------------------------------------------
     row_limit = None if full else 25
     action_rows_csv = _load_export_csv("appendix_a_case_level_actions.csv", limit=row_limit)
     discordance_rows_csv = _load_export_csv("appendix_b_full_discordance_review.csv", limit=row_limit)
 
-    # ── Key nodes & edges from network JSON ────────────────────────────────────
+    # -- Key nodes & edges from network JSON ------------------------------------
     key_nodes = (transmission_data or {}).get("key_nodes") or []
     network_edges = (transmission_data or {}).get("edges") or (transmission_data or {}).get("transmission_edges") or []
 
-    # ── Report metadata ────────────────────────────────────────────────────────
+    # -- Report metadata --------------------------------------------------------
     report_label = "Full HTML" if full else "Short HTML"
     report_filename = "outbreaker_investigation_report_full.html" if full else "outbreaker_investigation_report.html"
 
-    # ─────────────────────────────────────────────────────────────────────────
+    # -------------------------------------------------------------------------
     # Helper: render badge chip HTML
-    # ─────────────────────────────────────────────────────────────────────────
+    # -------------------------------------------------------------------------
     def _badge(text: str) -> str:
         cls = {
             "SNP-linked": "badge-green",
@@ -893,9 +893,9 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
                 f"<div class='tbl-wrap'><table><thead><tr><th>Pair</th><th>Posterior</th><th>SNP dist</th>"
                 f"<th>QC src/rec</th><th>Flag</th></tr></thead><tbody>{rows}</tbody></table></div>")
 
-    # ─────────────────────────────────────────────────────────────────────────
+    # -------------------------------------------------------------------------
     # Computed summary values
-    # ─────────────────────────────────────────────────────────────────────────
+    # -------------------------------------------------------------------------
     summary_total = int((kpi_data or {}).get("eligible_cases", total_cases))
     summary_sequenced = int((kpi_data or {}).get("sequenced_cases", len(sequence_by_case)))
     seq_pct = (kpi_data or {}).get("sequenced_pct")
@@ -920,9 +920,9 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
         if str(r.get("investigation_status") or "").lower() == "open" and int(r.get("priority_score") or 0) > 10
     )
 
-    # ─────────────────────────────────────────────────────────────────────────
+    # -------------------------------------------------------------------------
     # CSS
-    # ─────────────────────────────────────────────────────────────────────────
+    # -------------------------------------------------------------------------
     css = """
 :root{
   --navy:#1d3557;--steel:#457b9d;--sky:#a8c8e1;--cloud:#eef4f9;
@@ -934,7 +934,7 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:var(--bg);color:var(--ink);font-family:system-ui,Arial,sans-serif;line-height:1.5;display:flex;flex-direction:column;min-height:100vh}
 
-/* ── Header ── */
+/* -- Header -- */
 header{background:linear-gradient(135deg,var(--navy) 0%,#254f78 100%);color:#fff;padding:1.6rem 2rem}
 header h1{font-size:1.6rem;font-weight:700;letter-spacing:-.02em}
 header p{color:#c8ddf0;font-size:.9rem;margin-top:.25rem}
@@ -943,10 +943,10 @@ header p{color:#c8ddf0;font-size:.9rem;margin-top:.25rem}
 .status-review{background:#f4a261;color:#1c2b3a}
 .status-ready{background:#16a34a;color:#fff}
 
-/* ── Layout ── */
+/* -- Layout -- */
 .layout{display:flex;flex:1;align-items:flex-start}
 
-/* ── Sidebar TOC ── */
+/* -- Sidebar TOC -- */
 nav.sidebar{width:var(--sidebar);flex-shrink:0;position:sticky;top:0;max-height:100vh;overflow-y:auto;
   background:var(--navy);color:#c8ddf0;padding:1rem .75rem;font-size:.82rem;scrollbar-width:thin}
 nav.sidebar h3{font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:#7fa8c8;margin:.9rem 0 .3rem .2rem}
@@ -954,21 +954,21 @@ nav.sidebar a{display:block;padding:.28rem .5rem;border-radius:5px;color:#c8ddf0
 nav.sidebar a:hover,nav.sidebar a.active{background:rgba(255,255,255,.12);color:#fff}
 nav.sidebar .sub{padding-left:1rem;font-size:.78rem}
 
-/* ── Main content ── */
+/* -- Main content -- */
 main{flex:1;min-width:0;padding:1.4rem 1.6rem 3rem;max-width:1100px}
 
-/* ── Cards ── */
+/* -- Cards -- */
 .card{background:var(--card);border:1px solid var(--rule);border-radius:12px;box-shadow:0 4px 14px rgba(21,38,64,.06);margin:1rem 0;padding:1.25rem 1.4rem;scroll-margin-top:1rem}
 .card-note{background:var(--teal-bg);border-color:var(--teal)}
 .card-warn{background:var(--amber-bg);border-color:var(--amber)}
 .card-alert{background:var(--alert-bg);border-color:var(--alert)}
 
-/* ── Section headings ── */
+/* -- Section headings -- */
 h2{font-size:1.18rem;font-weight:700;color:var(--navy);border-bottom:2px solid var(--rule);padding-bottom:.35rem;margin-bottom:.9rem}
 h3{font-size:.98rem;font-weight:700;color:var(--steel);margin:1rem 0 .45rem}
 h4{font-size:.88rem;font-weight:600;color:var(--muted);margin:.8rem 0 .35rem}
 
-/* ── Metric dashboard grid ── */
+/* -- Metric dashboard grid -- */
 .metrics-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.7rem;margin:.75rem 0}
 .metric{background:var(--cloud);border:1px solid var(--rule);border-radius:10px;padding:.8rem .9rem;position:relative;overflow:hidden}
 .metric::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--teal);border-radius:4px 0 0 4px}
@@ -977,12 +977,12 @@ h4{font-size:.88rem;font-weight:600;color:var(--muted);margin:.8rem 0 .35rem}
 .metric-value{font-size:1.5rem;font-weight:700;color:var(--navy);line-height:1.2;margin:.15rem 0}
 .metric-sub{font-size:.73rem;color:var(--muted)}
 
-/* ── Progress bar ── */
+/* -- Progress bar -- */
 .prog-wrap{position:relative;background:#e2eaf3;border-radius:20px;height:14px;overflow:hidden;min-width:80px}
 .prog-bar{height:100%;border-radius:20px;transition:width .3s}
 .prog-label{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:.68rem;font-weight:600;color:var(--ink)}
 
-/* ── Badges ── */
+/* -- Badges -- */
 .badge{display:inline-block;padding:.15rem .5rem;border-radius:12px;font-size:.73rem;font-weight:600;white-space:nowrap}
 .badge-green{background:var(--green-bg);color:var(--green);border:1px solid #86efac}
 .badge-amber{background:var(--amber-bg);color:#c2410c;border:1px solid #fed7aa}
@@ -990,7 +990,7 @@ h4{font-size:.88rem;font-weight:600;color:var(--muted);margin:.8rem 0 .35rem}
 .badge-orange{background:#fff7ed;color:#c2410c;border:1px solid #fdba74}
 .badge-grey{background:#f1f5f9;color:#475569;border:1px solid #cbd5e1}
 
-/* ── Tables ── */
+/* -- Tables -- */
 .tbl-wrap{overflow-x:auto;margin:.5rem 0}
 table{width:100%;border-collapse:collapse;font-size:.83rem;min-width:400px}
 th,td{border:1px solid var(--rule);padding:.42rem .6rem;text-align:left;vertical-align:top}
@@ -999,14 +999,14 @@ tbody tr:nth-child(even){background:var(--cloud)}
 .kv-table th{width:38%;background:var(--cloud);font-weight:600;color:var(--steel)}
 .mono{font-family:monospace;font-size:.78rem}
 
-/* ── Collapsible details ── */
+/* -- Collapsible details -- */
 details{border:1px solid var(--rule);border-radius:8px;margin:.6rem 0;overflow:hidden}
 details summary{padding:.65rem 1rem;background:var(--cloud);cursor:pointer;font-weight:600;color:var(--navy);font-size:.9rem;user-select:none;list-style:none}
-details summary::before{content:'▶ ';font-size:.7rem;color:var(--steel)}
-details[open] summary::before{content:'▼ '}
+details summary::before{content:'> ';font-size:.7rem;color:var(--steel)}
+details[open] summary::before{content:'v '}
 details > div{padding:.9rem 1rem}
 
-/* ── Figures ── */
+/* -- Figures -- */
 .figures-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:1.2rem;margin:.6rem 0}
 .fig-card{border:1px solid var(--rule);border-radius:8px;background:#fff;overflow:hidden;display:flex;flex-direction:column;transition:box-shadow .2s}
 .fig-card:hover{box-shadow:0 6px 20px rgba(21,38,64,.12)}
@@ -1027,7 +1027,7 @@ details > div{padding:.9rem 1rem}
 .fig-thumb .fig-img-wrap{height:240px}
 .fig-thumb .fig-img{height:240px;object-fit:contain;padding:.35rem}
 
-/* ── Lightbox ── */
+/* -- Lightbox -- */
 dialog.lb{border:none;border-radius:14px;padding:0;max-width:96vw;max-height:96vh;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.55);background:#111}
 dialog.lb::backdrop{background:rgba(0,0,0,.82)}
 .lb-inner{position:relative;display:flex;flex-direction:column;max-height:96vh}
@@ -1040,7 +1040,7 @@ dialog.lb::backdrop{background:rgba(0,0,0,.82)}
 .lb-dl:hover{text-decoration:underline}
 @media(max-width:640px){.figures-grid{grid-template-columns:1fr}}
 
-/* ── Utilities ── */
+/* -- Utilities -- */
 .muted{color:var(--muted);font-size:.85rem}
 pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padding:1rem;overflow:auto;font-size:.78rem}
 .callout{background:var(--teal-bg);border-left:4px solid var(--teal);border-radius:0 8px 8px 0;padding:.7rem 1rem;margin:.5rem 0;font-size:.87rem}
@@ -1051,7 +1051,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
 .section-note{background:var(--cloud);border:1px solid var(--sky);border-radius:8px;padding:.65rem .9rem;margin:.5rem 0;font-size:.84rem;color:var(--ink)}
 .tag{display:inline-flex;align-items:center;gap:.25rem;background:var(--cloud);border:1px solid var(--rule);border-radius:6px;padding:.1rem .45rem;font-size:.72rem;font-weight:600;color:var(--muted);margin:.1rem}
 
-/* ── Print ── */
+/* -- Print -- */
 @media print{
   nav.sidebar{display:none}
   .layout{display:block}
@@ -1065,16 +1065,16 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
   .prog-wrap{border:1px solid var(--rule)}
 }
 
-/* ── Responsive ── */
+/* -- Responsive -- */
 @media(max-width:780px){
   nav.sidebar{display:none}
   main{padding:1rem .75rem}
 }
 """
 
-    # ─────────────────────────────────────────────────────────────────────────
+    # -------------------------------------------------------------------------
     # Denominator counts
-    # ─────────────────────────────────────────────────────────────────────────
+    # -------------------------------------------------------------------------
     denom_notified = int(total_cases)
     denom_sequenced = len(sequence_by_case)
     try:
@@ -1091,9 +1091,9 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
             _model_nodes.add(str(_e["target"]))
     denom_model_nodes = len(_model_nodes)
 
-    # ─────────────────────────────────────────────────────────────────────────
+    # -------------------------------------------------------------------------
     # Additional computed values for new sections
-    # ─────────────────────────────────────────────────────────────────────────
+    # -------------------------------------------------------------------------
 
     # Population / denominator box HTML
     denom_html = f"""
@@ -1103,7 +1103,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
   <tr><td>Notified TB cases</td><td>Human cases in surveillance extract</td><td><strong>{_safe_html(str(denom_notified))}</strong></td><td>Source: cases table</td></tr>
   <tr><td>Culture-positive / sequencing-eligible</td><td>Cases with a consensus sequence loaded</td><td><strong>{_safe_html(str(denom_culture_pos))}</strong></td><td>Source: consensus_sequences</td></tr>
   <tr><td>Sequenced samples</td><td>Cases with sequence data in this extract</td><td><strong>{_safe_html(str(denom_sequenced))}</strong></td><td></td></tr>
-  <tr><td>QC-pass genomes</td><td>Genomes passing QC — used for SNP clustering</td><td><strong>{_safe_html(str(denom_qc_pass))}</strong></td><td>Fail/contaminated excluded from inference</td></tr>
+  <tr><td>QC-pass genomes</td><td>Genomes passing QC - used for SNP clustering</td><td><strong>{_safe_html(str(denom_qc_pass))}</strong></td><td>Fail/contaminated excluded from inference</td></tr>
   <tr><td>outbreaker2 model nodes</td><td>Cases/samples included in transmission model</td><td><strong>{_safe_html(str(denom_model_nodes))}</strong></td><td>From transmission network JSON; 0 = analysis not yet run</td></tr>
 </tbody></table></div>"""
 
@@ -1113,16 +1113,16 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
   <tr><td>Genome coverage breadth</td><td>&ge;95%</td><td>PHE TB WGS SOP / standard practice</td></tr>
   <tr><td>Mean depth</td><td>&ge;30&times;</td><td>Required for confident SNP calling</td></tr>
   <tr><td>Ambiguous bases (%)</td><td>&le;5%</td><td>High missingness distorts SNP distances</td></tr>
-  <tr><td>Contamination</td><td>No mixed-lineage signal</td><td>Mixed lineage = likely contamination or co-infection — exclude pending investigation</td></tr>
+  <tr><td>Contamination</td><td>No mixed-lineage signal</td><td>Mixed lineage = likely contamination or co-infection - exclude pending investigation</td></tr>
   <tr><td>Minimum reads mapped</td><td>Platform-specific (see pipeline version)</td><td>Record in sequencing_runs table</td></tr>
   <tr><td>Exclusion rule</td><td>Any QC fail OR contamination flag = excluded from SNP clustering and outbreaker2</td><td>Conservative to avoid false transmission links</td></tr>
 </tbody></table></div>
 <div class="callout callout-warn" style="margin-top:.6rem">
   Samples with QC status <em>not reported</em> are treated as unresolved and excluded from cluster inference pending review.
-  Thresholds above are defaults — site-specific SOP values override these if recorded in the pipeline provenance.
+  Thresholds above are defaults - site-specific SOP values override these if recorded in the pipeline provenance.
 </div>"""
 
-    # Epidemiological completeness table HTML — derive from case_rows
+    # Epidemiological completeness table HTML - derive from case_rows
     epi_fields_check = [
         ("specimen_date",    "Specimen date"),
         ("geographic_region","Geographic region"),
@@ -1143,7 +1143,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
     epi_complete_html += "</tbody></table></div>"
     epi_complete_html += """
 <div class="callout callout-warn" style="margin-top:.6rem">
-  <strong>Missing epi data domains</strong> (not directly capturable from genomic pipeline — require field data completion):<br>
+  <strong>Missing epi data domains</strong> (not directly capturable from genomic pipeline - require field data completion):<br>
   Demographics (age band, sex, country of birth, time in UK),
   Clinical infectiousness (pulmonary/extrapulmonary, smear status, cavitation, cough duration),
   Exposure setting (household, workplace, hostel, prison, healthcare, congregate setting),
@@ -1156,19 +1156,19 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
     # Methods section HTML
     methods_html = f"""
 <div class="tbl-wrap"><table><thead><tr><th>Pipeline component</th><th>Tool / approach</th><th>Version / parameter</th></tr></thead><tbody>
-  <tr><td>Sequencing platform</td><td>{_safe_html(seq_platform or 'Not recorded — populate sequencing_runs.platform')}</td><td>{_safe_html(instrument or '—')}</td></tr>
-  <tr><td>Library preparation</td><td>{_safe_html(library_prep or 'Not recorded — populate analysis_provenance.parameters')}</td><td>—</td></tr>
-  <tr><td>Reference genome</td><td>{_safe_html(ref_genome or 'Not recorded — required')}</td><td>H37Rv recommended (NC_000962.3)</td></tr>
-  <tr><td>Read mapping</td><td>{_safe_html(mapping_tool or 'Not recorded')}</td><td>—</td></tr>
+  <tr><td>Sequencing platform</td><td>{_safe_html(seq_platform or 'Not recorded - populate sequencing_runs.platform')}</td><td>{_safe_html(instrument or '-')}</td></tr>
+  <tr><td>Library preparation</td><td>{_safe_html(library_prep or 'Not recorded - populate analysis_provenance.parameters')}</td><td>-</td></tr>
+  <tr><td>Reference genome</td><td>{_safe_html(ref_genome or 'Not recorded - required')}</td><td>H37Rv recommended (NC_000962.3)</td></tr>
+  <tr><td>Read mapping</td><td>{_safe_html(mapping_tool or 'Not recorded')}</td><td>-</td></tr>
   <tr><td>Variant calling</td><td>{_safe_html(variant_caller or 'Not recorded')}</td><td>Exclude PE/PPE and repetitive regions</td></tr>
   <tr><td>SNP clustering threshold</td><td>{_safe_html(snp_threshold or '12 SNPs (default)')}</td><td>NICE guideline / PHE SOP</td></tr>
-  <tr><td>Resistance catalogue</td><td>{_safe_html(resist_cat or 'Not recorded — required')}</td><td>WHO/TBProfiler/Mykrobe</td></tr>
-  <tr><td>Lineage-calling tool</td><td>{_safe_html(lineage_tool or 'Not recorded — required')}</td><td>—</td></tr>
-  <tr><td>outbreaker2 version</td><td>{_safe_html(outbreaker_ver or 'Not recorded — required')}</td><td>—</td></tr>
+  <tr><td>Resistance catalogue</td><td>{_safe_html(resist_cat or 'Not recorded - required')}</td><td>WHO/TBProfiler/Mykrobe</td></tr>
+  <tr><td>Lineage-calling tool</td><td>{_safe_html(lineage_tool or 'Not recorded - required')}</td><td>-</td></tr>
+  <tr><td>outbreaker2 version</td><td>{_safe_html(outbreaker_ver or 'Not recorded - required')}</td><td>-</td></tr>
   <tr><td>Generation time prior mean</td><td>Infectious to secondary case interval</td><td>{_safe_html(gen_time_mean or 'Not recorded')}</td></tr>
   <tr><td>Generation time prior SD</td><td></td><td>{_safe_html(gen_time_sd or 'Not recorded')}</td></tr>
-  <tr><td>Sampling probability (π)</td><td>Proportion of cases sampled</td><td>{_safe_html(sampling_prob or 'Not recorded')}</td></tr>
-  <tr><td>Random seed</td><td>Required for reproducibility</td><td>{_safe_html(random_seed or 'Not recorded — required')}</td></tr>
+    <tr><td>Sampling probability (pi)</td><td>Proportion of cases sampled</td><td>{_safe_html(sampling_prob or 'Not recorded')}</td></tr>
+  <tr><td>Random seed</td><td>Required for reproducibility</td><td>{_safe_html(random_seed or 'Not recorded - required')}</td></tr>
   <tr><td>MCMC iterations</td><td></td><td>{_safe_html(str((summary_data or {{}}).get('n_iter', (summary_data or {{}}).get('n_generations', 'n/a'))))}</td></tr>
   <tr><td>Burn-in</td><td></td><td>{_safe_html(str((summary_data or {{}}).get('burnin', 'n/a')))}</td></tr>
   <tr><td>Posterior samples</td><td></td><td>{_safe_html(str((summary_data or {{}}).get('n_samples', 'n/a')))}</td></tr>
@@ -1179,7 +1179,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
   Contact the bioinformatics lead to confirm the pipeline version and parameters used for this extract.
 </div>"""
 
-    # Transmission adjudication table — upgrade with final classification column
+    # Transmission adjudication table - upgrade with final classification column
     def _adjudication_table(records, title):
         if not records:
             return ""
@@ -1191,13 +1191,13 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
             qc   = item["qc"]
             # Derive final classification
             if flag == "SNP-linked":
-                final = "<span class='badge badge-green'>Genomically supported — escalate with epi</span>"
+                final = "<span class='badge badge-green'>Genomically supported - escalate with epi</span>"
             elif flag == "QC-unresolved":
-                final = "<span class='badge badge-red'>Hold — repeat sequencing required</span>"
+                final = "<span class='badge badge-red'>Hold - repeat sequencing required</span>"
             elif flag == "D1: SNP>12":
-                final = "<span class='badge badge-orange'>Do not escalate — SNP discordant</span>"
+                final = "<span class='badge badge-orange'>Do not escalate - SNP discordant</span>"
             else:
-                final = "<span class='badge badge-amber'>Model hypothesis — epi corroboration required</span>"
+                final = "<span class='badge badge-amber'>Model hypothesis - epi corroboration required</span>"
             rows += (f"<tr><td class='mono'>{_safe_html(item['pair'])}</td>"
                      f"<td>{_safe_html(f'{post:.3f}')}</td>"
                      f"<td>{_safe_html(snp)}</td>"
@@ -1220,13 +1220,13 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
     if snp_supported > 0:
         ph_evidence_stmt = (
             f"There are <strong>{snp_supported}</strong> genomically-supported transmission pair(s) "
-            f"(posterior ≥0.70 and SNP distance ≤12). These represent the highest-priority candidates "
+            f"(posterior >=0.70 and SNP distance <=12). These represent the highest-priority candidates "
             f"for operational action, but epidemiological corroboration is still required before field escalation."
         )
     else:
         ph_evidence_stmt = (
             "<strong>At present, there are no SNP-supported direct transmission links</strong> "
-            "(no pairs meeting both posterior ≥0.70 and SNP distance ≤12 criteria). "
+            "(no pairs meeting both posterior >=0.70 and SNP distance <=12 criteria). "
             "The outbreaker2 output identifies model-prioritised transmission hypotheses only."
         )
 
@@ -1248,15 +1248,15 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
     (1) resolving QC failures and contamination flags,
     (2) validating drug-resistance gene-drug mapping and confirming phenotypic DST,
     (3) completing epidemiological linkage data for {_safe_html(str(int(open_clusters)))} open cluster(s),
-    (4) {repro_focus}{' — <strong>circulation is currently blocked</strong>' if missing_repro else ''}.
+    (4) {repro_focus}{' - <strong>circulation is currently blocked</strong>' if missing_repro else ''}.
   </p>
   <p class="muted" style="margin-top:.4rem">This statement is automatically generated from available data.
   It must be reviewed and countersigned by the responsible public health physician before inclusion in any formal outbreak report.</p>
 </div>"""
 
-    # ─────────────────────────────────────────────────────────────────────────
+    # -------------------------------------------------------------------------
     # Build HTML sections
-    # ─────────────────────────────────────────────────────────────────────────
+    # -------------------------------------------------------------------------
 
     # 1. Status banner
     _appendices_missing = not action_rows_csv or not discordance_rows_csv
@@ -1285,13 +1285,13 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
     elif _dr_skipped_or_blocked:
         _science_limitations.append("lineage/DR validation unavailable")
     if missing_repro:
-        status_html = f'<span class="status-banner status-draft">DRAFT — {len(missing_repro)} reproducibility field(s) missing</span>'
+        status_html = f'<span class="status-banner status-draft">DRAFT - {len(missing_repro)} reproducibility field(s) missing</span>'
     elif _appendices_missing:
         status_html = '<span class="status-banner status-draft">INCOMPLETE &#8212; Appendices missing; not eligible for circulation</span>'
     elif _science_limitations:
         status_html = '<span class="status-banner status-review">ARTIFACT COMPLETE &#8212; governance/MDT review required</span>'
     else:
-        status_html = '<span class="status-banner status-ready">Governance gate passed — eligible for circulation</span>'
+        status_html = '<span class="status-banner status-ready">Governance gate passed - eligible for circulation</span>'
 
     # QC and SNP warning callouts for executive summary
     _qc_warning_html = (
@@ -1334,8 +1334,8 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
   {_metric_card("QC-pass genomes", str(denom_qc_pass), _qc_sub, alert=extract_qc_pass_pct is not None and extract_qc_pass_pct < 90)}
   {_metric_card("QC unresolved", str(qc_status_counts['fail'] + qc_status_counts['not_reported'] + qc_status_counts['contamination']), f"{qc_status_counts['pass']} passed", alert=(qc_status_counts['fail'] + qc_status_counts['contamination']) > 0)}
   {_metric_card("Open clusters", str(open_clusters), f"{high_priority_open} priority >10")}
-  {_metric_card("Model links ≥0.70", str(high_confidence_all_count), "Posterior ≥0.70 — validate with SNP+epi")}
-  {_metric_card("SNP links ≤12", str(pairwise_links_le_12), "Direct transmission candidates")}
+    {_metric_card("Model links >=0.70", str(high_confidence_all_count), "Posterior >=0.70 - validate with SNP+epi")}
+  {_metric_card("SNP links <=12", str(pairwise_links_le_12), "Direct transmission candidates")}
   {_metric_card("Model reliability", model_reliability, "MCMC convergence", alert=model_reliability=="Exploratory")}
 </div>"""
 
@@ -1354,7 +1354,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
         "No metadata blocker currently detected; retain audit sign-off"
     )
 
-    # 3. Top Actions Due Now table — with status, team, dates, escalation trigger
+    # 3. Top Actions Due Now table - with status, team, dates, escalation trigger
     top_actions_html = """
 <div class="tbl-wrap"><table>
 <thead><tr><th>#</th><th>Action</th><th>Responsible team</th><th>Due</th><th>Status</th><th>Date raised</th><th>Escalation trigger</th></tr></thead>
@@ -1363,7 +1363,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
 <tr><td>2</td><td>Validate drug-resistance pipeline gene-drug mapping; suppress unusual mappings from operational reports</td><td>Bioinformatics / Microbiology</td><td>Immediate</td><td><span class="badge badge-red">Open</span></td><td>{gen_at}</td><td>If validation fails: quarantine resistance calls until pipeline fix confirmed</td></tr>
 <tr><td>3</td><td>Confirm phenotypic DST for all genomic resistance signals before clinical use</td><td>TB Microbiology / MDT</td><td>Immediate</td><td><span class="badge badge-red">Open</span></td><td>{gen_at}</td><td>If DST unavailable: treat as MDR pending result; notify clinician</td></tr>
 <tr><td>4</td><td>Complete epidemiological data for all open clusters (demographics, setting, contacts)</td><td>TB Nurses / HPT / PHA</td><td>Next MDT</td><td><span class="badge badge-amber">In progress</span></td><td>{gen_at}</td><td>If epi incomplete at MDT: defer cluster closure; document gap</td></tr>
-<tr><td>5</td><td>Do not escalate model-only links to field investigation without SNP ≤12 + epi corroboration</td><td>HPT / TB Nurses / MDT</td><td>Ongoing</td><td><span class="badge badge-amber">Standing</span></td><td>{gen_at}</td><td>If field escalation requested: require written MDT decision and documented epi rationale</td></tr>
+<tr><td>5</td><td>Do not escalate model-only links to field investigation without SNP <=12 + epi corroboration</td><td>HPT / TB Nurses / MDT</td><td>Ongoing</td><td><span class="badge badge-amber">Standing</span></td><td>{gen_at}</td><td>If field escalation requested: require written MDT decision and documented epi rationale</td></tr>
 <tr><td>6</td><td>{repro_action}</td><td>Bioinformatics / Lab Director</td><td>Before circulation</td><td>{repro_status}</td><td>{gen_at}</td><td>{repro_trigger}</td></tr>
 <tr><td>7</td><td>MDT sign-off: document accepted/rejected/deferred for each open cluster</td><td>MDT Chair / PHA</td><td>Next MDT</td><td><span class="badge badge-amber">Pending</span></td><td>{gen_at}</td><td>If MDT not convened within 10 working days: escalate to programme lead</td></tr>
 </tbody></table></div>""".format(
@@ -1379,7 +1379,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
         ("Model reliability", model_reliability, "Treat directionality as exploratory; diagnostics may be unavailable"),
         ("Open clusters", f"{int(open_clusters)} total / {high_priority_open} priority >10", "MDT review and epi data completion for all open clusters"),
         ("Discordant model links", f"{len(discordant_pairs)} identified", "Pairwise SNP + epi adjudication required"),
-        ("MDT sign-off status", "Pending — MDT review required", "Chair to record: accepted / rejected / deferred for each open cluster"),
+        ("MDT sign-off status", "Pending - MDT review required", "Chair to record: accepted / rejected / deferred for each open cluster"),
         ("Decision log", "Not yet completed", "Document MDT decisions in case management system; date-stamp and countersign"),
         ("QC failures", f"{qc_status_counts['fail']} fail / {qc_status_counts['contamination']} contamination", "Resolve before cluster assignment and model inference"),
     ]
@@ -1399,7 +1399,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
             ("QC fail cases", str(kpi_data.get("qc_fail_cases", "n/a"))),
             ("QC pass rate", qc_bar),
             ("Contamination flags", str(kpi_data.get("contamination_flag_cases", "n/a"))),
-            ("Median days specimen→QC", str(kpi_data.get("median_days_specimen_to_qc", "n/a"))),
+            ("Median days specimen->QC", str(kpi_data.get("median_days_specimen_to_qc", "n/a"))),
         ]
         if kpi_data.get("warning"):
             kpi_kv += f'<p class="muted">Warning: {_safe_html(str(kpi_data["warning"]))}</p>'
@@ -1550,8 +1550,8 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
 <div class="metrics-grid">
   {_metric_card("QC pass", str(qc_status_counts['pass']), f"{extract_qc_pass_label} pass rate")}
   {_metric_card("QC fail", str(qc_status_counts['fail']), "Low coverage / threshold breach", alert=qc_status_counts['fail']>0)}
-  {_metric_card("Contamination", str(qc_status_counts['contamination']), "Mixed signal — exclude pending repeat", alert=qc_status_counts['contamination']>0)}
-  {_metric_card("Not reported", str(qc_status_counts['not_reported']), "QC metadata absent — treat as unresolved")}
+  {_metric_card("Contamination", str(qc_status_counts['contamination']), "Mixed signal - exclude pending repeat", alert=qc_status_counts['contamination']>0)}
+  {_metric_card("Not reported", str(qc_status_counts['not_reported']), "QC metadata absent - treat as unresolved")}
   {_metric_card("Excluded from inference", str(excluded_from_outbreaker), "QC fail or contamination", alert=excluded_from_outbreaker>0)}
 </div>"""
 
@@ -1574,7 +1574,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
                        f"</tr></thead><tbody>{run_rows_out}</tbody></table></div>"
                        "<p class='muted'>Rows highlighted red have fail rate &gt;20%. Assign run_id to enable full run-level audit.</p>")
     else:
-        run_qc_html = '<p class="muted">Run-level QC unavailable — reported_at or run_id not recorded.</p>'
+        run_qc_html = '<p class="muted">Run-level QC unavailable - reported_at or run_id not recorded.</p>'
 
     # 12. Drug-resistance mutation table
     resistance_validation_lookup = _resistance_validation_lookup(resistance_validation_data)
@@ -1685,7 +1685,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
                              f"<div class='tbl-wrap'><table><thead><tr><th>Cluster</th><th>Cases</th><th>Last case</th>"
                              f"<th>Cases 30d</th><th>Cases 60d</th><th>Cases 90d</th><th>Growth status</th>"
                              f"</tr></thead><tbody>{growth_rows}</tbody></table></div>"
-                             "<p class='muted'>Active = last case &lt;90 days; Slowing = 90–180 days; Likely inactive = &gt;180 days. Formal closure requires MDT sign-off.</p>")
+                             "<p class='muted'>Active = last case &lt;90 days; Slowing = 90-180 days; Likely inactive = &gt;180 days. Formal closure requires MDT sign-off.</p>")
     else:
         cluster_epi_html = '<p class="muted">No cluster epidemiology data available.</p>'
 
@@ -1745,7 +1745,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
         appendix_b_class = 'card card-alert'
         appendix_b_body_html = '<div class="callout callout-alert"><strong>REPORT INCOMPLETE &#8212; Appendix B is missing.</strong> No discordance data was generated. This may indicate insufficient sequencing data or no discordant model/SNP pairs in the current dataset. Ensure sequencing results are loaded and re-generate this HTML report.</div>'
 
-    # By-cluster epi-completeness table (all domains default Red — field epi not in pipeline)
+    # By-cluster epi-completeness table (all domains default Red - field epi not in pipeline)
     if cluster_action_rows:
         _cluster_epi_rows = "".join(
             f"<tr><td class='mono'>{_safe_html(str(r.get('cluster_id', ''))[:12])}</td>"
@@ -1814,7 +1814,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
     else:
         disc_computed_html = '<p class="muted">No discordant pairs identified from available outputs.</p>'
 
-    # 19. Data provenance section — full extended table
+    # 19. Data provenance section - full extended table
     _missing_badge = "<span class='badge badge-red'>Missing &#8212; required</span>"
     _optional_badge = "<span class='badge badge-grey'>Not recorded</span>"
 
@@ -1835,7 +1835,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
         ("SNP cluster threshold",     snp_threshold,  False),
         ("Generation time mean (d)",  gen_time_mean,  False),
         ("Generation time SD (d)",    gen_time_sd,    False),
-        ("Sampling probability (π)",  sampling_prob,  False),
+        ("Sampling probability (pi)",  sampling_prob,  False),
         ("Pipeline run date",         str(_seq_run_row.get("completed_at", "") or _prov_row_db.get("run_at", "") or "") or None, False),
         ("Analysis provenance date",  str(_prov_row_db.get("generated_at", "") or _prov_row_db.get("run_at", "") or "") or None, False),
     ]
@@ -1846,9 +1846,9 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
     concepts = [
         ("Whole-Genome Sequencing (WGS)", "Reads the complete ~4.4 Mb genome of M. tuberculosis. More informative than conventional typing (MIRU, spoligotyping)."),
         ("SNP", "A single base-pair difference. Closely related strains share few SNPs. Used as a genetic distance metric."),
-        ("SNP threshold for transmission", "≤12 SNPs: potentially linked (UK NICE). ≤5 SNPs: recent direct transmission likely. >50 SNPs: recent shared transmission effectively ruled out."),
-        ("Lineage", "M. tuberculosis classified into 7+ major lineages (L1–L7). Influences drug-resistance patterns and transmissibility."),
-        ("Cluster", "Cases genetically similar within the SNP threshold. Does not prove direct transmission — epidemiological linkage required to confirm routes."),
+        ("SNP threshold for transmission", "<=12 SNPs: potentially linked (UK NICE). <=5 SNPs: recent direct transmission likely. >50 SNPs: recent shared transmission effectively ruled out."),
+        ("Lineage", "M. tuberculosis classified into 7+ major lineages (L1-L7). Influences drug-resistance patterns and transmissibility."),
+        ("Cluster", "Cases genetically similar within the SNP threshold. Does not prove direct transmission - epidemiological linkage required to confirm routes."),
         ("outbreaker2", "Bayesian MCMC method combining SNP distances with collection dates to probabilistically infer who-infected-whom. Posterior probabilities are hypotheses, not proofs."),
         ("MCMC convergence", "Convergence diagnostic near 1.0 = reliable. Values >1.1 = interpret cautiously."),
         ("Drug resistance", "Genomic mutations predict resistance. MDR-TB = resistant to isoniazid + rifampicin. XDR-TB = additional resistance. Genomic DR requires phenotypic DST confirmation."),
@@ -1872,22 +1872,22 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
   <details><summary>Resistance validation</summary><div><pre>{_safe_html(json.dumps(resistance_validation_data, indent=2, default=str) if resistance_validation_data else 'No artifact found.')}</pre></div></details>
 </div>"""
 
-    # ─────────────────────────────────────────────────────────────────────────
+    # -------------------------------------------------------------------------
     # Assemble final HTML
-    # ─────────────────────────────────────────────────────────────────────────
+    # -------------------------------------------------------------------------
 
     # Build the improved pairs section using adjudication table
-    adj_genomic_html    = _adjudication_table(genomic_pairs[:20 if not full else None],    "Genomically supported (SNP ≤12, shared cluster)")
-    adj_model_html      = _adjudication_table(model_only_pairs[:20 if not full else None],  "Model-only — no pairwise SNP data")
-    adj_discordant_html = _adjudication_table(genomically_discordant[:20 if not full else None], "Genomically discordant (posterior ≥0.70, SNP >12)")
-    adj_qcunres_html    = _adjudication_table(qc_resolution_pairs[:20 if not full else None], "QC-unresolved — hold pending repeat sequencing")
+    adj_genomic_html    = _adjudication_table(genomic_pairs[:20 if not full else None],    "Genomically supported (SNP <=12, shared cluster)")
+    adj_model_html      = _adjudication_table(model_only_pairs[:20 if not full else None],  "Model-only - no pairwise SNP data")
+    adj_discordant_html = _adjudication_table(genomically_discordant[:20 if not full else None], "Genomically discordant (posterior >=0.70, SNP >12)")
+    adj_qcunres_html    = _adjudication_table(qc_resolution_pairs[:20 if not full else None], "QC-unresolved - hold pending repeat sequencing")
 
     html = f"""<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Outbreak Investigation Report — NI TB Genomic Surveillance</title>
+  <title>Outbreak Investigation Report - NI TB Genomic Surveillance</title>
   <style>{css}</style>
 </head>
 <body>
@@ -1898,7 +1898,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
 </header>
 
 <div class="layout">
-  <!-- ── Sticky sidebar nav ── -->
+  <!-- -- Sticky sidebar nav -- -->
   <nav class="sidebar" aria-label="Report sections">
     <h3>Overview</h3>
     <a href="#executive">Executive summary</a>
@@ -1926,17 +1926,17 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
     <a href="#provenance">Data provenance</a>
     <a href="#epi-completeness">Epi data completeness</a>
     <h3>Appendices</h3>
-    <a href="#appendix-a">Appendix A — Case actions</a>
-    <a href="#appendix-b">Appendix B — Discordance</a>
+    <a href="#appendix-a">Appendix A - Case actions</a>
+    <a href="#appendix-b">Appendix B - Discordance</a>
     <a href="#figures">Figures</a>
     <a href="#concepts">Key concepts</a>
     {'<a href="#raw-artifacts">Raw artifacts</a>' if full else ''}
   </nav>
 
   <main>
-    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- =================================================================== -->
     <!-- EXECUTIVE SUMMARY -->
-    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- =================================================================== -->
     <section class="card" id="executive">
       <h2>Executive summary</h2>
       {dashboard_html}
@@ -1973,16 +1973,16 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
       {denom_html}
     </section>
 
-    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- =================================================================== -->
     <!-- ANALYSIS -->
-    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- =================================================================== -->
     <section class="card" id="analysis">
       <h2>outbreaker2 analysis summary</h2>
       {analysis_html}
       {analysis_quality_warnings_html}
       <div class="section-note" style="margin-top:.7rem">
         <strong>How to interpret:</strong> Pairs with high posterior transmission probability are model-prioritised hypotheses only.
-        They should not be interpreted as direct transmission unless supported by pairwise SNP distance ≤12, QC pass status, and epidemiological corroboration.
+        They should not be interpreted as direct transmission unless supported by pairwise SNP distance <=12, QC pass status, and epidemiological corroboration.
       </div>
       <h3>MCMC diagnostics</h3>
       <div class="figures-grid">
@@ -2002,7 +2002,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
       {network_edges_html}
     </section>
 
-    <!-- MODEL-PRIORITISED PAIRS — WITH ADJUDICATION TABLE -->
+    <!-- MODEL-PRIORITISED PAIRS - WITH ADJUDICATION TABLE -->
     <section class="card" id="pairs">
       <h2>Model-prioritised transmission hypotheses</h2>
       <div class="callout callout-alert">
@@ -2027,14 +2027,14 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
     <section class="card" id="snp-summary">
       <h2>Pairwise SNP distance summary</h2>
       <div class="section-note">
-        ≤12 SNPs = operational threshold for probable recent transmission.
+        <=12 SNPs = operational threshold for probable recent transmission.
         &gt;12 SNPs = direct transmission unlikely.
         SNP unavailable = repeat sequencing required before inference.
       </div>
       <div class="tbl-wrap"><table><thead><tr><th>SNP distance category</th><th>Pairs</th><th>Operational implication</th></tr></thead><tbody>
-        <tr><td>0–5 SNPs (direct)</td><td>{_safe_html(str(sum(1 for d in pairwise_snp_matrix.values() if d<=5)))}</td><td>Immediate: probable direct transmission — contact trace; confirm epi link</td></tr>
-        <tr><td>6–12 SNPs (probable)</td><td>{_safe_html(str(sum(1 for d in pairwise_snp_matrix.values() if 6<=d<=12)))}</td><td>Priority: probable cluster; review shared setting and exposures</td></tr>
-        <tr><td>13–25 SNPs (possible shared source)</td><td>{_safe_html(str(sum(1 for d in pairwise_snp_matrix.values() if 13<=d<=25)))}</td><td>Review: possible shared source/reactivation; epi adjudication required</td></tr>
+        <tr><td>0-5 SNPs (direct)</td><td>{_safe_html(str(sum(1 for d in pairwise_snp_matrix.values() if d<=5)))}</td><td>Immediate: probable direct transmission - contact trace; confirm epi link</td></tr>
+        <tr><td>6-12 SNPs (probable)</td><td>{_safe_html(str(sum(1 for d in pairwise_snp_matrix.values() if 6<=d<=12)))}</td><td>Priority: probable cluster; review shared setting and exposures</td></tr>
+        <tr><td>13-25 SNPs (possible shared source)</td><td>{_safe_html(str(sum(1 for d in pairwise_snp_matrix.values() if 13<=d<=25)))}</td><td>Review: possible shared source/reactivation; epi adjudication required</td></tr>
         <tr><td>&gt;25 SNPs (unlikely direct)</td><td>{_safe_html(str(sum(1 for d in pairwise_snp_matrix.values() if d>25)))}</td><td>Low priority: unlikely direct recent transmission; monitor only</td></tr>
         <tr><td>SNP unavailable</td><td>{_safe_html(str(sum(1 for r in case_rows if not sequence_by_case.get(str(r.get('case_id',''))) and r.get('case_id'))))}</td><td>Hold: repeat sequencing or QC resolution required before inference</td></tr>
       </tbody></table></div>
@@ -2046,7 +2046,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
       {ph_interpretation_html}
 
       <h3>Counts and denominators in this report</h3>
-      <div class="section-note">Definitions match the denominator box above. All model-prioritised links are hypotheses only — zero SNP-supported links means no validated direct transmission candidates at this time.</div>
+      <div class="section-note">Definitions match the denominator box above. All model-prioritised links are hypotheses only - zero SNP-supported links means no validated direct transmission candidates at this time.</div>
       <div class="tbl-wrap"><table><thead><tr><th>Metric</th><th>Count</th><th>Definition</th></tr></thead><tbody>
         <tr><td>Model-prioritised links &ge;0.70</td><td>{_safe_html(str(high_confidence_all_count))}</td><td>All outbreaker2 edges with posterior probability &ge;0.70</td></tr>
         <tr><td>Discordant pairs reviewed</td><td>{_safe_html(str(len(discordant_pairs)))}</td><td>All model-linked pairs showing SNP/model discordance requiring adjudication</td></tr>
@@ -2057,9 +2057,9 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
       {disc_computed_html}
     </section>
 
-    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- =================================================================== -->
     <!-- KPIs & TRENDS -->
-    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- =================================================================== -->
     <section class="card" id="kpis">
       <h2>Programme surveillance KPIs (last 12 weeks)</h2>
       {kpi_kv}
@@ -2071,9 +2071,9 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
       {weekly_html}
     </section>
 
-    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- =================================================================== -->
     <!-- QC -->
-    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- =================================================================== -->
     <section class="card" id="qc">
       <h2>QC failure drill-down</h2>
       {qc_summary_html}
@@ -2094,9 +2094,9 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
       {run_qc_html}
     </section>
 
-    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- =================================================================== -->
     <!-- LINEAGE / DR -->
-    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- =================================================================== -->
     <section class="card" id="lineage">
       <h2>Lineage and drug-resistance summary</h2>
       {lineage_table_html}
@@ -2120,9 +2120,9 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
       {dr_table_html}
     </section>
 
-    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- =================================================================== -->
     <!-- CLUSTERS -->
-    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- =================================================================== -->
     <section class="card" id="clusters">
       <h2>Cluster epidemiology</h2>
       <p class="muted">Genomic summary + growth status for all active clusters. RR/MDR column = rifampicin-resistant / MDR-TB suspected cases.</p>
@@ -2132,13 +2132,13 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
 
     <section class="card" id="cluster-pri">
       <h2>Cluster prioritisation</h2>
-      <div class="section-note">Priority score = case count×2 + cross-region spread×3 + recency (14/30/60d = 3/2/1) + open status×3. Scores &gt;10 warrant prioritised MDT review.</div>
+    <div class="section-note">Priority score = case countx2 + cross-region spreadx3 + recency (14/30/60d = 3/2/1) + open statusx3. Scores &gt;10 warrant prioritised MDT review.</div>
       {cluster_pri_html}
     </section>
 
-    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- =================================================================== -->
     <!-- METHODS -->
-    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- =================================================================== -->
     <section class="card" id="methods">
       <h2>Method comparison &amp; secondary engines</h2>
       <h3>Cross-method clustering comparison</h3>
@@ -2175,9 +2175,9 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
       </tbody></table></div>
     </section>
 
-    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- =================================================================== -->
     <!-- APPENDICES -->
-    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- =================================================================== -->
     <section class="{appendix_a_class}" id="appendix-a">
       <h2>Appendix A &#8212; Case-level operational actions</h2>
       {appendix_a_body_html}
@@ -2224,7 +2224,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
 </div>
 
 <script>
-/* ── Mutation table: add Validation status column ── */
+/* -- Mutation table: add Validation status column -- */
 (function(){{
   var mutTable = document.querySelector('#mutations table');
   if(!mutTable) return;
@@ -2246,7 +2246,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
   }});
 }})();
 
-/* ── Active nav highlight ── */
+/* -- Active nav highlight -- */
 (function(){{
   const links = document.querySelectorAll('nav.sidebar a');
   const sections = Array.from(links).map(a => document.querySelector(a.getAttribute('href'))).filter(Boolean);
@@ -2262,7 +2262,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
   sections.forEach(s => obs.observe(s));
 }})();
 
-/* ── Lightbox ── */
+/* -- Lightbox -- */
 const _figMeta = {{
   outbreaker_trace: {{title:'MCMC Log-Likelihood Trace', dl:'outbreaker_trace.png'}},
   outbreaker_hist:  {{title:'MCMC Log-Likelihood Distribution', dl:'outbreaker_hist.png'}},
@@ -2300,5 +2300,6 @@ document.addEventListener('DOMContentLoaded', function(){{
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(html)
     return html
+
 
 

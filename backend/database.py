@@ -22,3 +22,4 @@ def init_db():
     config.set_main_option("script_location", str(project_root / "migrations"))
     config.set_main_option("sqlalchemy.url", DATABASE_URL)
     command.upgrade(config, "head")
+

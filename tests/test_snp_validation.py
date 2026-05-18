@@ -16,3 +16,4 @@ def test_validated_snp_distance_reports_length_delta():
     assert result.distance == 1
     assert result.length_delta == 1
     assert result.status == "length_mismatch"
+

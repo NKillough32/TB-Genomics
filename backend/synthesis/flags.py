@@ -80,3 +80,4 @@ def cluster_flags(
         flags.append(FLAG_MISSING_SEQUENCE_OR_QC)
 
     return flags
+

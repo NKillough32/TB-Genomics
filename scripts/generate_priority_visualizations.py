@@ -623,3 +623,4 @@ if __name__ == "__main__":
         print("Skipping transmission network generation due to TB_SKIP_PRIORITY_NETWORK=1")
     generate_phylogenetic_tree()
     generate_resistance_heatmap()
+

@@ -33,3 +33,4 @@ def test_ingest_router_imports_with_declared_dependencies():
     module = importlib.import_module("backend.routers.ingest")
     upload_routes = [route for route in module.router.routes if getattr(route, "path", None) == "/ingest/file"]
     assert upload_routes
+

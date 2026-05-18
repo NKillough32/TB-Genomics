@@ -53,3 +53,4 @@ for phrase, ctx in snippets:
         print(full_text[max(0, idx-50):idx+ctx])
     else:
         print(f"\n>> '{phrase}' NOT FOUND in PDF text")
+

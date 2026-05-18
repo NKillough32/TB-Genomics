@@ -56,3 +56,4 @@ def recommended_actions(category: str, flags: list[str]) -> list[str]:
 
 def category_display(category: str) -> str:
     return category_label(category)
+

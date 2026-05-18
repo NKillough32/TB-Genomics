@@ -22,7 +22,7 @@ def _export_path(*parts: str) -> str:
     return os.path.join(PROJECT_ROOT, "exports", *parts)
 
 
-# ── Pipeline validation sign-off helpers ──────────────────────────────────────
+# -- Pipeline validation sign-off helpers --------------------------------------
 
 def _ensure_signoff_table(db: Session) -> None:
     """Create the signoffs table if it doesn't exist yet (idempotent)."""
@@ -384,22 +384,22 @@ def _expected_genes_for_drug(drug: object) -> list[str]:
     WHO catalogue lookup or formal pipeline validation.
     """
     drug_text = str(drug or "").lower()
-    # (substring_marker, [expected_genes])  — first match wins
+    # (substring_marker, [expected_genes])  - first match wins
     mapping = [
-        # ── Rifamycins ──────────────────────────────────────────────────────
+        # -- Rifamycins ------------------------------------------------------
         ("rifabutin",        ["rpoB"]),
         ("rifapentine",      ["rpoB"]),
         ("rifamp",           ["rpoB"]),                          # rifampicin / rifampin
-        # ── Isoniazid ───────────────────────────────────────────────────────
+        # -- Isoniazid -------------------------------------------------------
         ("isoniazid",        ["katG", "inhA", "fabG1", "ahpC", "kasA"]),
-        # ── Ethionamide / Prothionamide (share inhA/fabG1 with isoniazid) ──
+        # -- Ethionamide / Prothionamide (share inhA/fabG1 with isoniazid) --
         ("prothionamide",    ["ethA", "ethR", "inhA", "fabG1", "mshA"]),
         ("ethionamide",      ["ethA", "ethR", "inhA", "fabG1", "mshA"]),
-        # ── Pyrazinamide ────────────────────────────────────────────────────
+        # -- Pyrazinamide ----------------------------------------------------
         ("pyrazinamide",     ["pncA", "rpsA", "panD"]),
-        # ── Ethambutol ──────────────────────────────────────────────────────
+        # -- Ethambutol ------------------------------------------------------
         ("ethambutol",       ["embB", "embA", "embC", "embR", "iniB"]),
-        # ── Fluoroquinolones (individual agents before generic class) ───────
+        # -- Fluoroquinolones (individual agents before generic class) -------
         ("moxifloxacin",     ["gyrA", "gyrB"]),
         ("levofloxacin",     ["gyrA", "gyrB"]),
         ("ciprofloxacin",    ["gyrA", "gyrB"]),
@@ -407,31 +407,31 @@ def _expected_genes_for_drug(drug: object) -> list[str]:
         ("gatifloxacin",     ["gyrA", "gyrB"]),
         ("fluoroquinolone",  ["gyrA", "gyrB"]),                  # generic class
         ("fluoroquin",       ["gyrA", "gyrB"]),                  # abbreviation
-        # ── Aminoglycosides / injectable second-line agents ─────────────────
+        # -- Aminoglycosides / injectable second-line agents -----------------
         ("amikacin",         ["rrs", "eis"]),
         ("kanamycin",        ["rrs", "eis"]),
         ("capreomycin",      ["rrs", "tlyA"]),
         ("streptomycin",     ["rpsL", "rrs", "gid"]),
-        # ── Bedaquiline ─────────────────────────────────────────────────────
+        # -- Bedaquiline -----------------------------------------------------
         ("bedaquiline",      ["atpE", "Rv0678", "pepQ", "mmpL5", "mmpS5"]),
-        # ── Linezolid ───────────────────────────────────────────────────────
+        # -- Linezolid -------------------------------------------------------
         ("linezolid",        ["rrl", "rplC"]),
-        # ── Clofazimine ─────────────────────────────────────────────────────
+        # -- Clofazimine -----------------------------------------------------
         ("clofazimine",      ["Rv0678", "pepQ", "mmpL5", "mmpS5"]),
-        # ── Delamanid ───────────────────────────────────────────────────────
+        # -- Delamanid -------------------------------------------------------
         ("delamanid",        ["ddn", "fgd1", "fbiA", "fbiB", "fbiC"]),
-        # ── Pretomanid ──────────────────────────────────────────────────────
+        # -- Pretomanid ------------------------------------------------------
         ("pretomanid",       ["ddn", "fgd1", "fbiA", "fbiB", "fbiC", "Rv3547"]),
-        # ── Para-aminosalicylic acid (PAS) ───────────────────────────────────
+        # -- Para-aminosalicylic acid (PAS) -----------------------------------
         ("aminosalicylic",   ["thyA", "folC", "thyX"]),
         ("para-amino",       ["thyA", "folC", "thyX"]),
-        # ── Cycloserine / Terizidone ─────────────────────────────────────────
+        # -- Cycloserine / Terizidone -----------------------------------------
         ("terizidone",       ["ald", "alr"]),
         ("cycloserine",      ["ald", "alr"]),
-        # ── Carbapenems (used in BPaL regimens) ─────────────────────────────
+        # -- Carbapenems (used in BPaL regimens) -----------------------------
         ("imipenem",         ["blaC"]),
         ("meropenem",        ["blaC"]),
-        # ── Clavam ──────────────────────────────────────────────────────────
+        # -- Clavam ----------------------------------------------------------
         ("clavulanate",      ["blaC"]),
     ]
     for marker, genes in mapping:
@@ -642,5 +642,6 @@ def _pct(numerator: int | float | None, denominator: int | float | None) -> floa
 
 def _pct_label(value: float | None) -> str:
     return f"{float(value):.1f}%" if value is not None else "n/a"
+
 
 

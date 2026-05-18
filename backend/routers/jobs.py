@@ -112,3 +112,4 @@ def download_all_exports(db: Session = Depends(get_db)):
         media_type="application/zip",
         headers={"Content-Disposition": "attachment; filename=tb_genomics_exports.zip"},
     )
+

@@ -100,3 +100,4 @@ def downgrade() -> None:
     op.execute("DROP TABLE IF EXISTS exposures CASCADE")
     op.execute("DROP TABLE IF EXISTS locations CASCADE")
     op.execute("DROP TABLE IF EXISTS contacts CASCADE")
+

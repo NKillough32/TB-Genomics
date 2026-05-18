@@ -60,3 +60,4 @@ def downgrade() -> None:
     ]
     for col in cols:
         op.execute(text(f"ALTER TABLE cases DROP COLUMN IF EXISTS {col}"))
+

@@ -1,4 +1,4 @@
-﻿
+
 let API='http://localhost:8000';const API_FALLBACK='http://127.0.0.1:8010';let activeJob=null;
 let demoModeActive=sessionStorage.getItem('tb_demo_mode_active')==='1';
 
@@ -1916,6 +1916,7 @@ async function loadRegions(){
 	}
 }
 (async()=>{try{await fetch(`${API}/`);document.getElementById('status').innerHTML='<li>[OK] Backend running</li>';}catch{document.getElementById('status').innerHTML='<li>[X] Backend unavailable</li>';}refreshDemoModeStatus();loadRegions();loadKPIBanner();loadWorkflowStatus();loadDataSafety();loadDataReadiness();loadAnalyticsClusters();loadTransmissionSynthesisOverview();loadActionableReportSummary();loadFullKpis();loadOutbreakerStatus();loadResistanceValidationStatus();})();
+
 
 
 

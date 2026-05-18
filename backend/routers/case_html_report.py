@@ -13,7 +13,7 @@ from backend.routers.cases import _export_path, get_db
 router = APIRouter(prefix="/cases", tags=["cases"])
 
 
-# ── Case-specific comprehensive HTML report ──────────────────────────────────
+# -- Case-specific comprehensive HTML report ----------------------------------
 
 @router.get("/case-report/{case_id}", response_class=HTMLResponse)
 def case_report_html(case_id: str, db: Session = Depends(get_db)):  # noqa: C901
@@ -26,7 +26,7 @@ def case_report_html(case_id: str, db: Session = Depends(get_db)):  # noqa: C901
     """
     import datetime as _dt
 
-    # ── Resolve case ──────────────────────────────────────────────────────────
+    # -- Resolve case ----------------------------------------------------------
     pattern = f"{case_id}%" if len(case_id) < 36 else case_id
     core = db.execute(text("""
         SELECT
@@ -72,7 +72,7 @@ def case_report_html(case_id: str, db: Session = Depends(get_db)):  # noqa: C901
     short_id  = full_id[:8]
     generated = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
 
-    # ── Related cases in same cluster ────────────────────────────────────────
+    # -- Related cases in same cluster ----------------------------------------
     cluster_peers: list[dict] = []
     if core["cluster_id"]:
         peer_rows = db.execute(text("""
@@ -102,7 +102,7 @@ def case_report_html(case_id: str, db: Session = Depends(get_db)):  # noqa: C901
             for r in peer_rows
         ]
 
-    # ── Regional case history timeline ───────────────────────────────────────
+    # -- Regional case history timeline ---------------------------------------
     history_rows = db.execute(text("""
         SELECT
             c.pseudonymised_case_id::text AS case_id,
@@ -133,7 +133,7 @@ def case_report_html(case_id: str, db: Session = Depends(get_db)):  # noqa: C901
         for r in history_rows
     ]
 
-    # ── Audit entries for this case ───────────────────────────────────────────
+    # -- Audit entries for this case -------------------------------------------
     audit_rows: list[dict] = []
     try:
         audit_rows = [
@@ -148,7 +148,7 @@ def case_report_html(case_id: str, db: Session = Depends(get_db)):  # noqa: C901
     except Exception:
         audit_rows = []
 
-    # ── Transmission network context ─────────────────────────────────────────
+    # -- Transmission network context -----------------------------------------
     tx_context: dict = {}
     tx_path = _export_path("transmission_network.json")
     if os.path.exists(tx_path):
@@ -176,7 +176,7 @@ def case_report_html(case_id: str, db: Session = Depends(get_db)):  # noqa: C901
         except Exception:
             tx_context = {}
 
-    # ── TBProfiler JSON artifact ──────────────────────────────────────────────
+    # -- TBProfiler JSON artifact ----------------------------------------------
     tbp_data: dict | None = None
     tbp_dir = _export_path("tbprofiler")
     if os.path.isdir(tbp_dir):
@@ -189,7 +189,7 @@ def case_report_html(case_id: str, db: Session = Depends(get_db)):  # noqa: C901
                     pass
                 break
 
-    # ── Helper functions ──────────────────────────────────────────────────────
+    # -- Helper functions ------------------------------------------------------
     def _e(v) -> str:
         return html_lib.escape("" if v is None else str(v), quote=True)
 
@@ -268,13 +268,13 @@ def case_report_html(case_id: str, db: Session = Depends(get_db)):  # noqa: C901
             '<thead><tr>' + th + '</tr></thead><tbody>' + tr_html + '</tbody></table></div>'
         )
 
-    # ── Build report sections ─────────────────────────────────────────────────
+    # -- Build report sections -------------------------------------------------
 
     # 1. Identity card
     identity_body = _kv_table([
         ("Pseudonymised Case ID",    _e(full_id)),
         ("Short Reference",          _e(short_id)),
-        ("Local Lab Sample ID",      _e(core["local_lab_sample_id"] or "—")),
+        ("Local Lab Sample ID",      _e(core["local_lab_sample_id"] or "-")),
         ("Specimen Date",            _e(core["specimen_date"])),
         ("Geographic Region",        _e(region)),
         ("Case Status",              _badge_status(core["case_status"])),
@@ -285,9 +285,9 @@ def case_report_html(case_id: str, db: Session = Depends(get_db)):  # noqa: C901
     # 2. Genomic / Lineage profile
     lineage_body = _kv_table([
         ("Lineage",          _e(core["lineage"] or "Not determined")),
-        ("Sublineage",       _e(core["sublineage"] or "—")),
+        ("Sublineage",       _e(core["sublineage"] or "-")),
         ("Sequence Present", _e("Yes" if core["sequence"] else "No")),
-        ("Interpretation",   _e(core["interpretation_summary"] or "—")),
+        ("Interpretation",   _e(core["interpretation_summary"] or "-")),
     ])
     lineage_sec = _section("2. Genomic &amp; Lineage Profile", lineage_body)
 
@@ -307,8 +307,8 @@ def case_report_html(case_id: str, db: Session = Depends(get_db)):  # noqa: C901
         mut_table = _data_table(
             ["Gene / Mutation", "Drug", "Confidence"],
             [[_e(str(m.get("mutation", m) if isinstance(m, dict) else m)),
-              _e(str(m.get("drug", "—") if isinstance(m, dict) else "—")),
-              _e(str(m.get("confidence", "—") if isinstance(m, dict) else "—"))]
+              _e(str(m.get("drug", "-") if isinstance(m, dict) else "-")),
+              _e(str(m.get("confidence", "-") if isinstance(m, dict) else "-"))]
              for m in mut_raw[:30]],
             "No mutation data"
         )
@@ -332,13 +332,13 @@ def case_report_html(case_id: str, db: Session = Depends(get_db)):  # noqa: C901
     )
     qc_body = _kv_table([
         ("QC Status",             _badge_status(core["qc_status"])),
-        ("Coverage Breadth",      _e(f"{core['coverage_breadth']:.1f}%" if core["coverage_breadth"] is not None else "—")),
-        ("Mean Depth",            _e(f"{core['mean_depth']:.1f}×" if core["mean_depth"] is not None else "—")),
-        ("Contamination Flag",    _e("⚠ YES" if core["contamination_flag"] else "No")),
-        ("Ambiguous Bases (%)",   _e(f"{core['ambiguous_base_percent']:.2f}%" if core["ambiguous_base_percent"] is not None else "—")),
+        ("Coverage Breadth",      _e(f"{core['coverage_breadth']:.1f}%" if core["coverage_breadth"] is not None else "-")),
+        ("Mean Depth",            _e(f"{core['mean_depth']:.1f}x" if core["mean_depth"] is not None else "-")),
+        ("Contamination Flag",    _e("[WARN] YES" if core["contamination_flag"] else "No")),
+        ("Ambiguous Bases (%)",   _e(f"{core['ambiguous_base_percent']:.2f}%" if core["ambiguous_base_percent"] is not None else "-")),
     ])
     qc_sec = _section(
-        "4. Sequencing QC Metrics" + (" ⚠" if qc_alert else ""),
+        "4. Sequencing QC Metrics" + (" [WARN]" if qc_alert else ""),
         qc_body,
     )
 
@@ -347,7 +347,7 @@ def case_report_html(case_id: str, db: Session = Depends(get_db)):  # noqa: C901
         cluster_body = _kv_table([
             ("Cluster ID",           _e(core["cluster_id"][:8])),
             ("Cluster Size",         _e(str(core["cluster_size"]))),
-            ("SNP Distance (max)",   _e(str(core["snp_distance"]) if core["snp_distance"] is not None else "—")),
+            ("SNP Distance (max)",   _e(str(core["snp_distance"]) if core["snp_distance"] is not None else "-")),
             ("Investigation Status", _badge_status(core["cluster_status"])),
         ])
         peer_table = _data_table(
@@ -357,7 +357,7 @@ def case_report_html(case_id: str, db: Session = Depends(get_db)):  # noqa: C901
                     '<strong>' + _e(p["case_id"]) + '</strong>' if p["is_index"] else _e(p["case_id"]),
                     _e(p["date"]),
                     _e(p["region"]),
-                    _e(p["lineage"] or "—"),
+                    _e(p["lineage"] or "-"),
                     _resistance_badge(p["resistance"]),
                     _badge_status(p["status"]),
                 ]
@@ -382,8 +382,8 @@ def case_report_html(case_id: str, db: Session = Depends(get_db)):  # noqa: C901
         tx_rows = _kv_table([
             ("Is Key Network Node",      _e("Yes" if tx_context.get("is_key_node") else "No")),
             ("Linked Transmission Edges", _e(str(len(tx_context.get("linked_edges", []))))),
-            ("Total Network Edges",       _e(str(tx_context.get("total_edges", "—")))),
-            ("Total Key Nodes",           _e(str(tx_context.get("total_nodes", "—")))),
+            ("Total Network Edges",       _e(str(tx_context.get("total_edges", "-")))),
+            ("Total Key Nodes",           _e(str(tx_context.get("total_nodes", "-")))),
         ])
         edge_data = tx_context.get("linked_edges", [])
         if edge_data:
@@ -391,9 +391,9 @@ def case_report_html(case_id: str, db: Session = Depends(get_db)):  # noqa: C901
                 ["From", "To", "Probability / Weight"],
                 [
                     [
-                        _e(str(e.get("from", e.get("source", "—")))[:10]),
-                        _e(str(e.get("to",   e.get("target", "—")))[:10]),
-                        _e(str(e.get("probability", e.get("weight", "—")))),
+                        _e(str(e.get("from", e.get("source", "-")))[:10]),
+                        _e(str(e.get("to",   e.get("target", "-")))[:10]),
+                        _e(str(e.get("probability", e.get("weight", "-")))),
                     ]
                     for e in edge_data
                 ],
@@ -423,9 +423,9 @@ def case_report_html(case_id: str, db: Session = Depends(get_db)):  # noqa: C901
                     '<strong>' + _e(t["case_id"]) + '</strong>' if t["is_index"] else _e(t["case_id"]),
                     _e(t["date"]),
                     _e(t["region"]),
-                    _e(t["lineage"] or "—"),
+                    _e(t["lineage"] or "-"),
                     _resistance_badge(t["resistance"]),
-                    _e(t["cluster_id"] or "—"),
+                    _e(t["cluster_id"] or "-"),
                     _badge_status(t["status"]),
                 ]
                 for t in timeline
@@ -437,12 +437,12 @@ def case_report_html(case_id: str, db: Session = Depends(get_db)):  # noqa: C901
     # 8. TBProfiler data
     if tbp_data and isinstance(tbp_data, dict):
         tbp_fields = [
-            ("TBProfiler Version",    _e(tbp_data.get("tbprofiler_version", "—"))),
-            ("Main Lineage",          _e(tbp_data.get("main_lin", "—"))),
-            ("Sub Lineage",           _e(tbp_data.get("sub_lin", "—"))),
-            ("DR Type",               _e(tbp_data.get("drtype", "—"))),
-            ("Median Coverage",       _e(str(tbp_data.get("median_coverage", "—")))),
-            ("Pct Reads Mapped",      _e(str(tbp_data.get("pct_reads_mapped", "—")))),
+            ("TBProfiler Version",    _e(tbp_data.get("tbprofiler_version", "-"))),
+            ("Main Lineage",          _e(tbp_data.get("main_lin", "-"))),
+            ("Sub Lineage",           _e(tbp_data.get("sub_lin", "-"))),
+            ("DR Type",               _e(tbp_data.get("drtype", "-"))),
+            ("Median Coverage",       _e(str(tbp_data.get("median_coverage", "-")))),
+            ("Pct Reads Mapped",      _e(str(tbp_data.get("pct_reads_mapped", "-")))),
         ]
         tbp_sec = _section("8. TBProfiler Analysis Details", _kv_table(tbp_fields))
     else:
@@ -459,9 +459,9 @@ def case_report_html(case_id: str, db: Session = Depends(get_db)):  # noqa: C901
                 ["Timestamp", "Action", "User", "Details"],
                 [
                     [
-                        _e(str(a.get("timestamp", "—"))[:19]),
-                        _e(str(a.get("action", "—"))),
-                        _e(str(a.get("user_id", "—"))),
+                        _e(str(a.get("timestamp", "-"))[:19]),
+                        _e(str(a.get("action", "-"))),
+                        _e(str(a.get("user_id", "-"))),
                         _e(str(a.get("details", ""))[:120]),
                     ]
                     for a in audit_rows
@@ -475,7 +475,7 @@ def case_report_html(case_id: str, db: Session = Depends(get_db)):  # noqa: C901
             '<p style="color:#6c757d;font-style:italic">No audit entries found referencing this case.</p>',
         )
 
-    # ── Assemble HTML ─────────────────────────────────────────────────────────
+    # -- Assemble HTML ---------------------------------------------------------
     dr_summary_text = _e(str(core["predicted_drug_resistance"])[:60]) if core["predicted_drug_resistance"] else "Not determined"
     lineage_text    = _e(core["lineage"] or "Unknown")
     status_badge    = _badge_status(core["case_status"])
@@ -484,10 +484,10 @@ def case_report_html(case_id: str, db: Session = Depends(get_db)):  # noqa: C901
         '<div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:28px">'
         + _metric_card("Case ID",     short_id)
         + _metric_card("Region",      region)
-        + _metric_card("Lineage",     core["lineage"] or "—")
+        + _metric_card("Lineage",     core["lineage"] or "-")
         + _metric_card("Cluster",     core["cluster_id"][:8] if core["cluster_id"] else "None",
                         sub=f"{core['cluster_size']} members" if core["cluster_id"] else "")
-        + _metric_card("QC Status",   core["qc_status"] or "—",
+        + _metric_card("QC Status",   core["qc_status"] or "-",
                         alert=qc_alert)
         + _metric_card("Timeline Cases", str(len(timeline)))
         + '</div>'
@@ -498,7 +498,7 @@ def case_report_html(case_id: str, db: Session = Depends(get_db)):  # noqa: C901
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Case Report – {_e(short_id)}</title>
+<title>Case Report - {_e(short_id)}</title>
 <style>
   *, *::before, *::after {{ box-sizing: border-box; }}
   body {{
@@ -530,8 +530,8 @@ def case_report_html(case_id: str, db: Session = Depends(get_db)):  # noqa: C901
 <body>
 <div class="report-header">
   <h1>TB Case Investigation Report</h1>
-  <p>Case {_e(short_id)} &nbsp;·&nbsp; {_e(region)} &nbsp;·&nbsp;
-     Status: {status_badge} &nbsp;·&nbsp; Generated {_e(generated)}</p>
+  <p>Case {_e(short_id)} &nbsp; | &nbsp; {_e(region)} &nbsp; | &nbsp;
+     Status: {status_badge} &nbsp; | &nbsp; Generated {_e(generated)}</p>
 </div>
 <div class="report-body">
   <div class="no-print" style="margin-bottom:18px">
@@ -559,7 +559,7 @@ def case_report_html(case_id: str, db: Session = Depends(get_db)):  # noqa: C901
     {audit_sec}
   </div>
   <p style="text-align:center;color:#adb5bd;font-size:.8em;margin-top:24px">
-    TB Genomic Surveillance Platform &nbsp;·&nbsp; Confidential &nbsp;·&nbsp;
+    TB Genomic Surveillance Platform &nbsp; | &nbsp; Confidential &nbsp; | &nbsp;
     For authorised public-health use only
   </p>
 </div>
@@ -567,3 +567,4 @@ def case_report_html(case_id: str, db: Session = Depends(get_db)):  # noqa: C901
 </html>"""
 
     return HTMLResponse(content=html)
+

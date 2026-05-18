@@ -92,3 +92,4 @@ def outbreak_report_full_html(db: Session = Depends(cases.get_db)):
 def outbreak_report(db: Session = Depends(cases.get_db)):
     """Generate and return a PDF outbreak investigation report."""
     return outbreak_pdf_builder.outbreak_report(db)
+

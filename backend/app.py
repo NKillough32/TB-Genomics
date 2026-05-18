@@ -7,6 +7,7 @@ from backend.auth import require_roles
 from backend.database import init_db
 from backend.routers import (
     analytics,
+    case_analysis,
     case_assets,
     case_lookup,
     case_overview,
@@ -49,6 +50,7 @@ app.add_middleware(
 
 app.include_router(case_overview.router, dependencies=[Depends(require_roles("viewer"))])
 app.include_router(cases.router, dependencies=[Depends(require_roles("analyst"))])
+app.include_router(case_analysis.router, dependencies=[Depends(require_roles("analyst"))])
 app.include_router(case_assets.router, dependencies=[Depends(require_roles("viewer"))])
 app.include_router(case_reports.router, dependencies=[Depends(require_roles("analyst"))])
 app.include_router(case_lookup.router, dependencies=[Depends(require_roles("analyst"))])

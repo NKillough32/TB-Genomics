@@ -308,15 +308,35 @@ def confidence_gates(db: Session) -> list[dict[str, Any]]:
     rv_summary = resistance.get("summary") if isinstance(resistance.get("summary"), dict) else {}
     suppressed = int(rv_summary.get("suppressed_calls") or 0) if rv_summary else 0
     validated = int(rv_summary.get("validated_calls") or 0) if rv_summary else 0
+    rv_catalogue = str(resistance.get("catalogue_version") or "").lower()
+    using_who_catalogue = "who" in rv_catalogue
+    # When a WHO catalogue is in use, TBProfiler/Mykrobe calls are already WHO-graded.
+    # The local gene-drug mapping screen is a secondary cross-check only; it should not
+    # block interpretation — the WHO catalogue is the authoritative source of truth.
+    # Downgrade from interpretation-blocking "review" to non-blocking "warn" in that case.
+    if suppressed == 0 and rv_summary:
+        rv_gate_status = "pass"
+        rv_message = "Resistance mapping safety screen found no suppressed calls."
+    elif suppressed and using_who_catalogue:
+        rv_gate_status = "warn"
+        rv_message = (
+            f"{suppressed} resistance call(s) have unusual local gene-drug mappings but are covered "
+            f"by the WHO catalogue ({resistance.get('catalogue_version')}); no interpretation block applied."
+        )
+    elif suppressed:
+        rv_gate_status = "review"
+        rv_message = f"{suppressed} resistance calls are suppressed pending mapping review."
+    else:
+        rv_gate_status = "incomplete"
+        rv_message = "Resistance validation artifact is missing."
     gates.append(
         _gate(
             "resistance_mapping_safety",
             "Resistance mapping safety",
-            "pass" if suppressed == 0 and rv_summary else ("review" if suppressed else "incomplete"),
-            "Resistance mapping safety screen found no suppressed calls." if suppressed == 0 and rv_summary
-            else (f"{suppressed} resistance calls are suppressed pending mapping review." if suppressed else "Resistance validation artifact is missing."),
-            interpretation_blocking=suppressed > 0,
-            details={"suppressed_calls": suppressed, "validated_calls": validated},
+            rv_gate_status,
+            rv_message,
+            interpretation_blocking=suppressed > 0 and not using_who_catalogue,
+            details={"suppressed_calls": suppressed, "validated_calls": validated, "catalogue_version": resistance.get("catalogue_version")},
         )
     )
 

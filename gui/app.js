@@ -419,7 +419,7 @@ async function loadOutbreakerResults(){
 		if(analysis.graphics.length > 0){
 			html+='<h4>Diagnostic Plots</h4>';
 			for(const graphic of analysis.graphics){
-				const fullUrl=graphic.url.startsWith('http')?graphic.url:`${API}${graphic.url}`;
+				const fullUrl=(graphic.url.startsWith('http')?graphic.url:`${API}${graphic.url}`)+`?t=${Date.now()}`;
 				html+=`<img src="${escapeAttr(fullUrl)}" class="media-plot" alt="${escapeAttr(graphic.type)}"/>`;
 			}
 		}
@@ -436,17 +436,65 @@ async function loadLineageDrValidation(){
 	try{
 		const r=await fetch(`${API}/cases/lineage-dr-validation`);
 		const payload=await r.json();
-		let html='<div class="result-panel">';
-		html+=`<h4>Validation status: ${escapeHtml(payload.status||'unknown')}</h4>`;
 		const summary=payload.analysis_summary||{};
 		const epi=payload.analysis_epi_summary||{};
-		html+=`<div class="kpi-strip">Interpreted samples: ${summary.interpreted_samples||0} | With lineage: ${summary.samples_with_lineage||0} | With resistance calls: ${summary.samples_with_resistance_calls||0}</div>`;
-		html+=`<div class="kpi-strip">Any resistance signal: ${epi.samples_with_any_resistance_signal||0} | Rifampicin-resistant (suspected): ${epi.rifampicin_resistant_suspected||0} | MDR (suspected): ${epi.mdr_suspected||0}</div>`;
-		if(Array.isArray(epi.top_lineages)&&epi.top_lineages.length>0){
-			const topLineages=epi.top_lineages.slice(0,4).map(x=>`${escapeHtml(x.lineage)}: ${escapeHtml(x.count)}`).join(' | ');
-			html+=`<p><strong>Top lineages:</strong> ${topLineages}</p>`;
+		const engines=payload.engines||{};
+		const tbRun=payload.tbprofiler_run||{};
+		const mkRun=payload.mykrobe_run||{};
+		const concordance=payload.dr_concordance||{};
+		const rvSummary=(payload.resistance_validation||{}).summary||{};
+		const warnings=Array.isArray(payload.warnings)?payload.warnings:[];
+		const rawStatus=payload.status||'unknown';
+		const statusTone=rawStatus==='completed'?'status-pass':(rawStatus.includes('warning')?'status-warn':'status-fail');
+
+		let html='<div class="result-panel">';
+		html+=`<h4>Lineage &amp; DR Validation ${renderBadge(rawStatus.replace(/_/g,' '),statusTone)}</h4>`;
+
+		if(warnings.length){
+			html+='<div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:6px;padding:10px 14px;margin:8px 0;">';
+			html+=`<strong>&#9888; Warnings (${warnings.length})</strong><ul style="margin:4px 0 0 16px;padding:0;">`;
+			for(const w of warnings) html+=`<li>${escapeHtml(w)}</li>`;
+			html+='</ul></div>';
 		}
-		html+=`<pre class="log-box">${escapeHtml(JSON.stringify(payload,null,2))}</pre>`;
+
+		html+='<h5>Sample summary</h5>';
+		html+='<table class="data-table"><thead><tr><th>Metric</th><th>Count</th></tr></thead><tbody>';
+		html+=`<tr><td>Interpreted samples</td><td>${escapeHtml(summary.interpreted_samples??0)}</td></tr>`;
+		html+=`<tr><td>With lineage assigned</td><td>${escapeHtml(summary.samples_with_lineage??0)}</td></tr>`;
+		html+=`<tr><td>With resistance calls</td><td>${escapeHtml(summary.samples_with_resistance_calls??0)}</td></tr>`;
+		html+=`<tr><td>Any resistance signal</td><td>${escapeHtml(epi.samples_with_any_resistance_signal??0)}</td></tr>`;
+		html+=`<tr><td>Rifampicin-resistant (suspected)</td><td>${escapeHtml(epi.rifampicin_resistant_suspected??0)}</td></tr>`;
+		html+=`<tr><td>MDR (suspected)</td><td>${escapeHtml(epi.mdr_suspected??0)}</td></tr>`;
+		html+='</tbody></table>';
+
+		if(Array.isArray(epi.top_lineages)&&epi.top_lineages.length){
+			html+='<h5>Top lineages</h5>';
+			html+='<table class="data-table"><thead><tr><th>Lineage</th><th>Cases</th></tr></thead><tbody>';
+			for(const x of epi.top_lineages) html+=`<tr><td>${escapeHtml(x.lineage)}</td><td>${escapeHtml(x.count)}</td></tr>`;
+			html+='</tbody></table>';
+		}
+
+		html+='<h5>Tool engines</h5>';
+		html+='<table class="data-table"><thead><tr><th>Tool</th><th>Status</th><th>Samples run</th><th>Message</th></tr></thead><tbody>';
+		const tbEng=engines.tb_profiler||{};
+		const mkEng=engines.mykrobe||{};
+		html+=`<tr><td>TBProfiler</td><td>${renderStatusPill(tbEng.status||'unknown')}</td><td>${escapeHtml(tbRun.successful_samples??'-')}</td><td>${escapeHtml(tbEng.message||tbRun.message||'')}</td></tr>`;
+		html+=`<tr><td>Mykrobe</td><td>${renderStatusPill(mkEng.status||'unknown')}</td><td>${escapeHtml(mkRun.successful_samples??'-')}</td><td>${escapeHtml(mkEng.message||mkRun.message||'')}</td></tr>`;
+		html+='</tbody></table>';
+
+		html+='<h5>Cross-engine DR concordance</h5>';
+		html+=`<div class="kpi-strip">Samples compared: ${escapeHtml(concordance.samples_compared??0)} | Discordant: ${escapeHtml(concordance.discordant_sample_count??0)}</div>`;
+
+		if(rvSummary.total_mutation_calls!==undefined){
+			html+='<h5>Resistance call summary</h5>';
+			html+='<table class="data-table"><thead><tr><th>Category</th><th>Calls</th></tr></thead><tbody>';
+			html+=`<tr><td>Total mutation calls</td><td>${escapeHtml(rvSummary.total_mutation_calls??0)}</td></tr>`;
+			html+=`<tr><td>Expected gene-drug mappings</td><td>${escapeHtml(rvSummary.expected_gene_calls??0)}</td></tr>`;
+			html+=`<tr><td>Unusual gene-drug mappings</td><td>${escapeHtml(rvSummary.unusual_gene_drug_mapping_calls??0)}</td></tr>`;
+			html+=`<tr><td>Suppressed calls</td><td>${escapeHtml(rvSummary.suppressed_calls??0)}</td></tr>`;
+			html+='</tbody></table>';
+		}
+
 		html+='</div>';
 		box.innerHTML=html;
 	}catch(e){
@@ -456,11 +504,29 @@ async function loadLineageDrValidation(){
 function downloadOutbreakReport(){
 	window.open(`${API}/cases/outbreak-report`, '_blank');
 }
-function openOutbreakReportHtml(){
-	window.open(`${API}/cases/outbreak-report.html`, '_blank');
+async function openOutbreakReportHtml(){
+	const el=document.getElementById('lineageDrResults');
+	try{
+		const html=await apiText(`${API}/cases/outbreak-report.html`);
+		const blob=new Blob([html],{type:'text/html'});
+		const url=URL.createObjectURL(blob);
+		const win=window.open(url,'_blank');
+		if(win) setTimeout(()=>URL.revokeObjectURL(url),60000);
+	}catch(e){
+		if(el) el.innerHTML=`<div class="result-panel"><p style="color:#9a3412;"><strong>Cannot open short report:</strong> ${escapeHtml(e.message)}</p></div>`;
+	}
 }
-function openFullOutbreakReportHtml(){
-	window.open(`${API}/cases/outbreak-report.full.html`, '_blank');
+async function openFullOutbreakReportHtml(){
+	const el=document.getElementById('lineageDrResults');
+	try{
+		const html=await apiText(`${API}/cases/outbreak-report.full.html`);
+		const blob=new Blob([html],{type:'text/html'});
+		const url=URL.createObjectURL(blob);
+		const win=window.open(url,'_blank');
+		if(win) setTimeout(()=>URL.revokeObjectURL(url),60000);
+	}catch(e){
+		if(el) el.innerHTML=`<div class="result-panel"><p style="color:#9a3412;"><strong>Cannot open full report:</strong> ${escapeHtml(e.message)}</p></div>`;
+	}
 }
 async function loadAuditTrail(){
 	const box=document.getElementById('auditTrail');
@@ -1558,8 +1624,9 @@ async function loadPhyloTreeView(){
 		let html='<h4>Phylogenetic Tree Visualisation</h4>';
 		html+=`<div class="kpi-strip">Nodes: ${escapeHtml(g.node_count||0)} | Edges: ${escapeHtml(g.edge_count||0)}</div>`;
 		html+='<div class="analytics-image-row">';
-		html+=`<img class="media-plot" src="${escapeAttr(API+(d.images?.outbreaker_tree||''))}" alt="outbreaker tree"/>`;
-		html+=`<img class="media-plot" src="${escapeAttr(API+(d.images?.outbreaker_phylo||''))}" alt="phylogenetic tree"/>`;
+		const _cb=Date.now();
+		html+=`<img class="media-plot" src="${escapeAttr(API+(d.images?.outbreaker_tree||'')+'?t='+_cb)}" alt="outbreaker tree"/>`;
+		html+=`<img class="media-plot" src="${escapeAttr(API+(d.images?.outbreaker_phylo||'')+'?t='+_cb)}" alt="phylogenetic tree"/>`;
 		html+='</div>';
 		if(Array.isArray(g.edges)&&g.edges.length){
 			html+='<h5>Top inferred transmission links</h5><table class="data-table"><tr><th>Source</th><th>Target</th><th>Posterior</th><th>Confidence</th></tr>';
@@ -1737,7 +1804,7 @@ async function loadGeoMapView(){
 }
 
 function _agreementBand(value, passThreshold, warnThreshold){
-	if(value===null||value===undefined||Number.isNaN(Number(value))) return 'fail';
+	if(value===null||value===undefined||Number.isNaN(Number(value))) return 'pending';
 	const v=Number(value);
 	if(v>=passThreshold) return 'pass';
 	if(v>=warnThreshold) return 'warn';
@@ -1764,8 +1831,8 @@ async function loadCalibrationView(){
 		const binary=summary.binary_agreement;
 		const exactBand=_agreementBand(exact, 0.7, 0.5);
 		const binaryBand=_agreementBand(binary, 0.8, 0.65);
-		const exactStatus=exactBand==='pass'?'ready':(exactBand==='warn'?'warning':'failed');
-		const binaryStatus=binaryBand==='pass'?'ready':(binaryBand==='warn'?'warning':'failed');
+		const exactStatus=exactBand==='pass'?'ready':(exactBand==='warn'?'warning':(exactBand==='pending'?'pending':'failed'));
+		const binaryStatus=binaryBand==='pass'?'ready':(binaryBand==='warn'?'warning':(binaryBand==='pending'?'pending':'failed'));
 
 		let html='<h4>Calibration Dashboard: Model vs Reviewer</h4>';
 		html+=`<p class="hint">Coverage reflects the fraction of model-generated pairs that have reviewer classifications. Use this to track calibration and drift over time.</p>`;
@@ -1777,7 +1844,9 @@ async function loadCalibrationView(){
 			Binary agreement: ${escapeHtml(_safePct(binary))} ${renderStatusPill(binaryStatus)}
 		</div>`;
 
-		if(exactBand==='fail' || binaryBand==='fail'){
+		if(exactBand==='pending' && binaryBand==='pending'){
+			html+=`<p class="hint" style="color:#6b7280;">No reviewer comparisons have been submitted yet. Agreement metrics will appear once pairs are reviewed.</p>`;
+		}else if(exactBand==='fail' || binaryBand==='fail'){
 			html+=`<p class="hint" style="color:#9a3412;"><strong>Alert:</strong> Agreement has dropped below expected thresholds. Review recent contradictory pairs and re-check interpretation rules.</p>`;
 		}else if(exactBand==='warn' || binaryBand==='warn'){
 			html+=`<p class="hint" style="color:#92400e;"><strong>Watch:</strong> Agreement is moderate. Consider focused reviewer reconciliation and threshold review.</p>`;

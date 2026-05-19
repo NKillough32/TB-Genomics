@@ -95,43 +95,6 @@ def main() -> None:
         # new cluster_investigations rows for genuinely new clusters. Unchanged clusters
         # (same UUID derived from same members) keep all their investigation history.
 
-        # Load existing cluster memberships keyed by cluster_id
-        existing_cluster_rows = db.execute(
-            text("SELECT cluster_id::text, sample_id::text FROM case_clusters")
-        ).mappings().all()
-        existing_clusters: dict[str, set[str]] = {}
-        for r in existing_cluster_rows:
-            existing_clusters.setdefault(r["cluster_id"], set()).add(r["sample_id"])
-
-        # Compute new cluster UUIDs upfront (deterministic from members) so we can diff
-        new_cluster_uuids: set[str] = set()
-        for members in cluster_components:
-            ns_key = "seqcluster:" + "|".join(sorted(members))
-            new_cluster_uuids.add(str(uuid.uuid5(uuid.NAMESPACE_DNS, ns_key)))
-
-        # Remove clusters that no longer exist and their case_clusters rows.
-        # Preserve cluster_investigations for surviving clusters.
-        stale_cluster_ids = set(existing_clusters.keys()) - new_cluster_uuids
-        if stale_cluster_ids:
-            for stale_id in stale_cluster_ids:
-                db.execute(
-                    text("DELETE FROM case_clusters WHERE cluster_id = CAST(:cid AS uuid)"),
-                    {"cid": stale_id},
-                )
-                db.execute(
-                    text("DELETE FROM clusters WHERE cluster_id = CAST(:cid AS uuid)"),
-                    {"cid": stale_id},
-                )
-
-        # Remove all case_cluster assignments for surviving clusters so they can be re-inserted
-        # (membership may have changed even if UUID is the same when members change).
-        # The cluster and cluster_investigations rows are kept intact.
-        for surviving_id in new_cluster_uuids.intersection(existing_clusters.keys()):
-            db.execute(
-                text("DELETE FROM case_clusters WHERE cluster_id = CAST(:cid AS uuid)"),
-                {"cid": surviving_id},
-            )
-
         summary = {
             "status": "ok",
             "method": "sequence_distance_connected_components",
@@ -225,6 +188,49 @@ def main() -> None:
             groups.setdefault(root, []).append(case_id)
 
         cluster_components = [sorted(members) for members in groups.values() if len(members) >= min_cluster_size]
+
+        # Preserve investigation records across re-runs using a diff-based approach.
+        # Instead of TRUNCATE (which destroys assignee, notes, actions, risk band overrides),
+        # we load the existing cluster assignments, compare by membership, and only create
+        # new cluster_investigations rows for genuinely new clusters. Unchanged clusters
+        # (same UUID derived from same members) keep all their investigation history.
+
+        # Load existing cluster memberships keyed by cluster_id
+        existing_cluster_rows = db.execute(
+            text("SELECT cluster_id::text, sample_id::text FROM case_clusters")
+        ).mappings().all()
+        existing_clusters: dict[str, set[str]] = {}
+        for r in existing_cluster_rows:
+            existing_clusters.setdefault(r["cluster_id"], set()).add(r["sample_id"])
+
+        # Compute new cluster UUIDs upfront (deterministic from members) so we can diff
+        new_cluster_uuids: set[str] = set()
+        for members in cluster_components:
+            ns_key = "seqcluster:" + "|".join(sorted(members))
+            new_cluster_uuids.add(str(uuid.uuid5(uuid.NAMESPACE_DNS, ns_key)))
+
+        # Remove clusters that no longer exist and their case_clusters rows.
+        # Preserve cluster_investigations for surviving clusters.
+        stale_cluster_ids = set(existing_clusters.keys()) - new_cluster_uuids
+        if stale_cluster_ids:
+            for stale_id in stale_cluster_ids:
+                db.execute(
+                    text("DELETE FROM case_clusters WHERE cluster_id = CAST(:cid AS uuid)"),
+                    {"cid": stale_id},
+                )
+                db.execute(
+                    text("DELETE FROM clusters WHERE cluster_id = CAST(:cid AS uuid)"),
+                    {"cid": stale_id},
+                )
+
+        # Remove all case_cluster assignments for surviving clusters so they can be re-inserted
+        # (membership may have changed even if UUID is the same when members change).
+        # The cluster and cluster_investigations rows are kept intact.
+        for surviving_id in new_cluster_uuids.intersection(existing_clusters.keys()):
+            db.execute(
+                text("DELETE FROM case_clusters WHERE cluster_id = CAST(:cid AS uuid)"),
+                {"cid": surviving_id},
+            )
 
         assignments = []
         for idx, members in enumerate(sorted(cluster_components, key=len, reverse=True), start=1):

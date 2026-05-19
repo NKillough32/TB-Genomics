@@ -42,7 +42,7 @@ echo TB_ENABLE_SYNTHETIC_SEEDING=%TB_ENABLE_SYNTHETIC_SEEDING%
 echo TB_ALLOW_NON_OPERATIONAL_ACTIONS=%TB_ALLOW_NON_OPERATIONAL_ACTIONS%
 echo.
 
-".venv\Scripts\python.exe" -m uvicorn backend.app:app --reload
+".venv\Scripts\python.exe" -m uvicorn backend.app:app --reload --reload-dirs backend
 
 endlocal
 

@@ -54,7 +54,7 @@ Write-Host "TBPROFILER_WSL_ENV=$env:TBPROFILER_WSL_ENV"
 Write-Host "TBPROFILER_WSL_FALLBACK=$env:TBPROFILER_WSL_FALLBACK"
 Write-Host "TBPROFILER_DOCKER_FALLBACK=$env:TBPROFILER_DOCKER_FALLBACK"
 
-Start-Process -FilePath $venvPython -ArgumentList @('-m', 'uvicorn', 'backend.app:app', '--reload') -WorkingDirectory $root | Out-Null
+Start-Process -FilePath $venvPython -ArgumentList @('-m', 'uvicorn', 'backend.app:app', '--reload', '--reload-dirs', 'backend') -WorkingDirectory $root | Out-Null
 Start-Process -FilePath $venvPython -ArgumentList @('-m', 'http.server', '8081') -WorkingDirectory (Join-Path $root 'gui') | Out-Null
 
 for ($i = 0; $i -lt 30; $i++) {

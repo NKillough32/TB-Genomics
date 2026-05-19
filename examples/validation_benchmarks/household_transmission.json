@@ -1,0 +1,18 @@
+{
+  "scenario": "household_transmission",
+  "expected_classification": "probable transmission",
+  "notes": "Low SNP distance with strong household epidemiology support and plausible infectious-period overlap.",
+  "pairs": [
+    {
+      "case_a": "CASE-HH-001",
+      "case_b": "CASE-HH-002",
+      "expected_features": {
+        "snp_distance": 2,
+        "shared_household": true,
+        "same_region": true,
+        "temporal_overlap": true,
+        "resistance_concordance": "concordant"
+      }
+    }
+  ]
+}

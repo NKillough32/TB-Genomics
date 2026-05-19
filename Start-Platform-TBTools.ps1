@@ -30,6 +30,9 @@ $env:TBPROFILER_DOCKER_FALLBACK = '1'
 
 $wslExe = (Get-Command wsl.exe -ErrorAction SilentlyContinue).Source
 if ($wslExe) {
+    $wslWindowCommand = 'title TBTools WSL && wsl.exe'
+    Start-Process -FilePath 'cmd.exe' -ArgumentList @('/k', $wslWindowCommand) -WorkingDirectory $root | Out-Null
+
     $bashCommand = @'
 MAMBA_CMD="$HOME/micromamba"
 if [ ! -x "$MAMBA_CMD" ]; then

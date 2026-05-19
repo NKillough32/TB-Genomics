@@ -1522,15 +1522,21 @@ async function loadSnpMatrixView(){
 		const url=cid?`${base}&cluster_id=${encodeURIComponent(cid)}`:base;
 		const d=await fetch(url).then(r=>r.json());
 		if(!d.case_count){ view.textContent='No sequenced cases available for SNP matrix.'; return; }
+		const thresh=p.snpThreshold;
 		let html=`<h4>SNP Distance Matrix (${escapeHtml(d.case_count)} cases)</h4><p class="hint">${escapeHtml(d.message||'')}</p>`;
+		html+='<div style="display:flex;gap:1rem;align-items:center;margin-bottom:.5rem;flex-wrap:wrap;font-size:.78rem">';
+		html+='<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:14px;height:14px;background:#16a34a;border-radius:3px;display:inline-block"></span> Linked (≤'+escapeHtml(thresh)+' SNP)</span>';
+		html+='<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:14px;height:14px;background:#fef08a;border-radius:3px;border:1px solid #d97706;display:inline-block"></span> Marginal (≤25 SNP)</span>';
+		html+='<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:14px;height:14px;background:#fecaca;border-radius:3px;display:inline-block"></span> Distant (>25 SNP)</span>';
+		html+='</div>';
 		html+='<div class="analytics-table-wrap"><table class="data-table snp-matrix"><thead><tr><th>Case</th>';
-		for(const sid of d.short_case_ids){ html+=`<th>${escapeHtml(sid)}</th>`; }
+		for(const sid of d.short_case_ids){ html+=`<th class="snp-col-hdr"><span>${escapeHtml(sid)}</span></th>`; }
 		html+='</tr></thead><tbody>';
 		for(let i=0;i<d.case_count;i++){
 			html+=`<tr><th>${escapeHtml(d.short_case_ids[i])}</th>`;
 			for(let j=0;j<d.case_count;j++){
 				const val=d.matrix[i][j];
-				const cls=val===0?'snp-self':(val<=12?'snp-close':(val<=25?'snp-mid':'snp-far'));
+				const cls=val===0?'snp-self':(val<=thresh?'snp-close':(val<=25?'snp-mid':'snp-far'));
 				html+=`<td class="${cls}">${escapeHtml(val)}</td>`;
 			}
 			html+='</tr>';

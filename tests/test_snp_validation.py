@@ -11,9 +11,12 @@ def test_validated_snp_distance_excludes_ambiguous_sites():
 
 
 def test_validated_snp_distance_reports_length_delta():
+    # length_delta is reported as a quality flag but NOT added to distance,
+    # since sequence length differences reflect alignment/assembly artifacts
+    # rather than genuine SNPs (Issue #6 scientific calibration fix).
     result = validated_snp_distance("ACGT", "ACGTA")
 
-    assert result.distance == 1
+    assert result.distance == 0
     assert result.length_delta == 1
     assert result.status == "length_mismatch"
 

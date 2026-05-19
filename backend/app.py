@@ -18,6 +18,7 @@ from backend.routers import (
     ingest,
     jobs,
     reports,
+    tool_diagnostics,
 )
 
 
@@ -60,9 +61,9 @@ app.include_router(cluster_investigations.router, dependencies=[Depends(require_
 app.include_router(analytics.router, dependencies=[Depends(require_roles("viewer"))])
 app.include_router(epidemiology.router, dependencies=[Depends(require_roles("analyst"))])
 app.include_router(reports.router, dependencies=[Depends(require_roles("viewer"))])
+app.include_router(tool_diagnostics.router, dependencies=[Depends(require_roles("analyst"))])
 
 
 @app.get("/")
 def root():
     return {"status": "running"}
-

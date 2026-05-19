@@ -281,12 +281,19 @@ def run_pipeline():
                     return
 
                 _write_log(lf, f"Child job ID: {child_id}")
-                
-                # Poll until child completes
+
+                # Poll until child completes, propagating child progress into the
+                # pipeline's own slice of the 0–95% range so the bar moves smoothly.
+                step_start = int((idx / total) * 95)
+                step_end = int(((idx + 1) / total) * 95)
+                step_width = step_end - step_start
                 while True:
                     child = get_job_snapshot(child_id) or {}
                     if child.get("status") in ("completed", "failed"):
                         break
+                    child_pct = child.get("progress", 0) or 0
+                    pipeline_pct = step_start + int((child_pct / 100) * step_width)
+                    set_job_state(pipeline_id, progress=pipeline_pct)
                     threading.Event().wait(0.5)
 
                 child_status = (get_job_snapshot(child_id) or {}).get("status")

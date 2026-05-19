@@ -217,6 +217,7 @@ async function pollPipeline(steps){
 	const bar = document.getElementById('progressBar');
 	bar.style.width = (d.progress||0)+'%';
 	bar.textContent = (d.progress||0)+'%';
+	bar.classList.toggle('progress-bar--failed', d.status === 'failed');
 	const stepIdx = d.pipeline_step || 0;
 	const total = d.pipeline_total || steps.length;
 	if(stepIdx > 0 && stepIdx <= steps.length){
@@ -370,7 +371,7 @@ async function runJob(job){
 	activeJob=d.job_id;
 	poll();
 }
-async function poll(){if(!activeJob)return;const r=await fetch(`${API}/jobs/status/${activeJob}`);const d=await r.json();document.getElementById('jobStatus').textContent=JSON.stringify(d,null,2);const bar=document.getElementById('progressBar');bar.style.width=(d.progress||0)+'%';bar.textContent=(d.progress||0)+'%';if(d.status!=='completed'&&d.status!=='failed'){setTimeout(poll,1500);} }
+async function poll(){if(!activeJob)return;const r=await fetch(`${API}/jobs/status/${activeJob}`);const d=await r.json();document.getElementById('jobStatus').textContent=JSON.stringify(d,null,2);const bar=document.getElementById('progressBar');bar.style.width=(d.progress||0)+'%';bar.textContent=(d.progress||0)+'%';bar.classList.toggle('progress-bar--failed',d.status==='failed');if(d.status!=='completed'&&d.status!=='failed'){setTimeout(poll,1500);} }
 async function loadCases(){const r=await fetch(`${API}/cases`);document.getElementById('cases').textContent=JSON.stringify(await r.json(),null,2);} 
 async function loadOutbreakerResults(){
 	const box=document.getElementById('outbreakerResults');

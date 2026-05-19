@@ -139,15 +139,19 @@ tryCatch({
         incoming[dst] <- incoming[dst] + edge_prob
 
         # Issue #5: Build alternative ancestor candidates
+        # Guard with seq_len to avoid R's 2:1 = c(2,1) pitfall when sorted_freq has only 1 entry
         alternative_ancestors <- list()
-        for (cand_rank in 2:min(3, length(sorted_freq))) {
-          alt_ancestor_idx <- as.integer(names(sorted_freq)[cand_rank])
-          alt_prob <- as.numeric(sorted_freq[cand_rank]) / max(1, nrow(alpha_post))
-          alternative_ancestors[[cand_rank - 1]] <- list(
-            ancestor_id = ids[alt_ancestor_idx],
-            probability = round(alt_prob, 4),
-            rank = cand_rank
-          )
+        n_alts <- min(3, length(sorted_freq))
+        if (n_alts >= 2) {
+          for (cand_rank in 2:n_alts) {
+            alt_ancestor_idx <- as.integer(names(sorted_freq)[cand_rank])
+            alt_prob <- as.numeric(sorted_freq[cand_rank]) / max(1, nrow(alpha_post))
+            alternative_ancestors[[cand_rank - 1]] <- list(
+              ancestor_id = ids[alt_ancestor_idx],
+              probability = round(alt_prob, 4),
+              rank = cand_rank
+            )
+          }
         }
 
         edge_list[[length(edge_list) + 1]] <- list(

@@ -5,20 +5,31 @@ import json
 import shutil
 import glob
 import traceback
+import logging
 from datetime import datetime
 from sqlalchemy import text
 from backend.database import SessionLocal
 
 os.makedirs("logs", exist_ok=True)
 
+# Setup logging for job runner
+logger = logging.getLogger(__name__)
+
 # Ensure fallback env vars are set for lineage/DR tools (enables WSL/Docker fallback)
 # These allow run_lineage_dr_validation to use alternative runners if local tools fail
+_fallback_set = []
 if os.getenv("TBPROFILER_WSL_FALLBACK") is None:
     os.environ["TBPROFILER_WSL_FALLBACK"] = "1"
+    _fallback_set.append("TBPROFILER_WSL_FALLBACK=1")
 if os.getenv("TBPROFILER_DOCKER_FALLBACK") is None:
     os.environ["TBPROFILER_DOCKER_FALLBACK"] = "1"
+    _fallback_set.append("TBPROFILER_DOCKER_FALLBACK=1")
 if os.getenv("TBPROFILER_WSL_ENV") is None:
     os.environ["TBPROFILER_WSL_ENV"] = "tbtools"
+    _fallback_set.append("TBPROFILER_WSL_ENV=tbtools")
+
+if _fallback_set:
+    logger.debug(f"Job runner: Setting fallback env vars: {', '.join(_fallback_set)}")
 
 # Use the current Python interpreter (venv)
 python_exe = sys.executable
@@ -84,9 +95,11 @@ def run_job(job_name):
     job_id = str(uuid.uuid4())
     log = f"logs/{job_id}.log"
     _create_job(job_id, {"job": job_name, "status": "queued", "progress": 0, "logfile": log})
+    logger.debug(f"Job queued: {job_name} ({job_id})")
 
     def task():
         set_job_state(job_id, status="running", progress=10)
+        logger.debug(f"Job running: {job_name} ({job_id})")
         
         # Log job start
         _log_to_audit("job_started", "system", {"job_id": job_id, "job_name": job_name})
@@ -215,6 +228,7 @@ def run_job(job_name):
                 _write_log(lf, f"JOB COMPLETED SUCCESSFULLY")
                 _write_log(lf, "=" * 70)
                 set_job_state(job_id, progress=100, status="completed")
+                logger.info(f"Job completed: {job_name} ({job_id})")
                 
                 # Log job completion
                 _log_to_audit("job_completed", "system", {"job_id": job_id, "job_name": job_name})
@@ -227,6 +241,7 @@ def run_job(job_name):
                 _write_log(lf, "\nFull traceback:")
                 lf.write(traceback.format_exc())
                 lf.flush()
+                logger.error(f"Job failed: {job_name} ({job_id}) - {str(e)}")
                 
                 # Log job failure
                 _log_to_audit("job_failed", "system", {"job_id": job_id, "job_name": job_name, "error": str(e)})

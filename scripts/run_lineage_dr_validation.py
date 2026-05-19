@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import csv
 import json
+import logging
 import os
 import shlex
 import shutil
@@ -41,6 +42,16 @@ MAX_FASTA_SAMPLES = 10
 sys.path.insert(0, str(ROOT))
 
 from backend.database import SessionLocal
+
+# Set up logging - enable debug with TB_DEBUG_LINEAGE_DR=1
+_DEBUG = os.getenv("TB_DEBUG_LINEAGE_DR", "0") == "1"
+_log_level = logging.DEBUG if _DEBUG else logging.INFO
+logging.basicConfig(
+    level=_log_level,
+    format="[%(levelname)s] %(message)s",
+    stream=sys.stdout,
+)
+logger = logging.getLogger(__name__)
 
 
 def _json_default(obj: object) -> object:
@@ -1559,6 +1570,17 @@ def _log_concordance_to_audit(discordances: list[dict[str, Any]]) -> None:
 def main() -> None:
     EXPORTS.mkdir(parents=True, exist_ok=True)
 
+    logger.debug("=" * 70)
+    logger.debug("LINEAGE/DR VALIDATION START")
+    logger.debug("=" * 70)
+    
+    # Log environment configuration
+    logger.debug(f"TB_DEBUG_LINEAGE_DR={os.getenv('TB_DEBUG_LINEAGE_DR', 'not set')}")
+    logger.debug(f"TBPROFILER_WSL_FALLBACK={os.getenv('TBPROFILER_WSL_FALLBACK', 'not set')}")
+    logger.debug(f"TBPROFILER_DOCKER_FALLBACK={os.getenv('TBPROFILER_DOCKER_FALLBACK', 'not set')}")
+    logger.debug(f"TBPROFILER_WSL_ENV={os.getenv('TBPROFILER_WSL_ENV', 'not set')}")
+    logger.debug(f"TBPROFILER_DOCKER_IMAGE={os.getenv('TBPROFILER_DOCKER_IMAGE', 'default')}")
+
     docker = _probe_docker()
     wsl = _probe_wsl()
     docker_image = os.getenv("TBPROFILER_DOCKER_IMAGE", "quay.io/jodyphelan/tbprofiler:latest")
@@ -1567,14 +1589,24 @@ def main() -> None:
     wsl_env_name = os.getenv("TBPROFILER_WSL_ENV", "tbtools")
     resistance_catalogue = os.getenv("TB_RESISTANCE_CATALOGUE", "WHO TB catalogue v2 (2023)")
 
+    logger.debug(f"Fallback configuration: docker={docker_fallback_enabled}, wsl={wsl_fallback_enabled}, wsl_env={wsl_env_name}")
+    logger.debug(f"Docker probe: available={docker.get('available')}, daemon_running={docker.get('daemon_running')}")
+    logger.debug(f"WSL probe: available={wsl.get('available')}")
+
     tbprofiler_exec = _which_many(["tb-profiler", "tb-profiler.exe", "tb_profiler", "tb-profiler-tools"])
     mykrobe_exec = _which_many(["mykrobe", "mykrobe.exe"])
+    
+    logger.debug(f"Local tool detection: tbprofiler_exec={tbprofiler_exec}, mykrobe_exec={mykrobe_exec}")
+    
     inputs = _discover_inputs()
     fasta_inputs = _discover_fasta_inputs()
     fasta_sample_inputs = _prepare_fasta_sample_inputs(fasta_inputs)
     fasta_metadata = _fasta_input_metadata(fasta_inputs, fasta_sample_inputs)
     fasta_validation = _validate_fasta_sample_inputs(fasta_sample_inputs)
     fasta_ready_for_tools = fasta_validation["status"] == "matched"
+    
+    logger.debug(f"Input discovery: fasta_count={len(fasta_inputs)}, fasta_ready_for_tools={fasta_ready_for_tools}")
+    
     inputs.update(fasta_metadata)
     inputs["sample_id_validation"] = fasta_validation
 
@@ -1586,6 +1618,7 @@ def main() -> None:
     }
     if tbprofiler_exec:
         probe_status, probe_output = _probe_version(tbprofiler_exec, ["--version"])
+        logger.debug(f"TBProfiler version probe: status={probe_status}, output_len={len(probe_output) if probe_output else 0}")
         tbprofiler = {
             "status": "installed" if probe_status == "ok" else "installed_but_unusable",
             "executable": tbprofiler_exec,
@@ -1619,18 +1652,24 @@ def main() -> None:
         "message": "WSL tool probe not run",
     }
     if wsl.get("available") and wsl_fallback_enabled:
-        probe_status, probe_output = _wsl_probe_tool(
-            _build_wsl_micromamba_command(wsl_env_name, ["tb-profiler", "version"])
-        )
+        logger.info(f"Checking WSL tools in environment '{wsl_env_name}'...")
+        
+        wsl_cmd = _build_wsl_micromamba_command(wsl_env_name, ["tb-profiler", "version"])
+        logger.debug(f"Running WSL TBProfiler probe: {wsl_cmd}")
+        probe_status, probe_output = _wsl_probe_tool(wsl_cmd)
+        logger.debug(f"WSL TBProfiler probe result: status={probe_status}, output_len={len(probe_output) if probe_output else 0}")
+        
         wsl_tbprofiler = {
             "status": "installed" if probe_status == "ok" else "not_ready",
             "probe": {"status": probe_status, "output": probe_output},
             "message": "tb-profiler available in WSL env" if probe_status == "ok" else "tb-profiler unavailable in WSL env",
         }
 
-        mk_status, mk_output = _wsl_probe_tool(
-            _build_wsl_micromamba_command(wsl_env_name, ["mykrobe", "--help"])
-        )
+        wsl_cmd = _build_wsl_micromamba_command(wsl_env_name, ["mykrobe", "--help"])
+        logger.debug(f"Running WSL Mykrobe probe: {wsl_cmd}")
+        mk_status, mk_output = _wsl_probe_tool(wsl_cmd)
+        logger.debug(f"WSL Mykrobe probe result: status={mk_status}, output_len={len(mk_output) if mk_output else 0}")
+        
         wsl_mykrobe = {
             "status": "installed" if mk_status == "ok" else "not_ready",
             "probe": {"status": mk_status, "output": mk_output},
@@ -1755,6 +1794,13 @@ def main() -> None:
             "failures": [],
         }
 
+    # Decision logic for which runner to use
+    logger.debug(f"TBProfiler runner selection:")
+    logger.debug(f"  Local: status={tbprofiler_run['status']}")
+    logger.debug(f"  WSL fallback enabled: {wsl_fallback_enabled}")
+    logger.debug(f"  Docker fallback enabled: {docker_fallback_enabled}")
+    logger.debug(f"  FASTA inputs available: {bool(fasta_inputs)}, ready_for_tools: {fasta_ready_for_tools}")
+
     if (
         wsl_fallback_enabled
         and fasta_inputs
@@ -1766,7 +1812,9 @@ def main() -> None:
             or tbprofiler["status"] in {"not_installed", "installed_but_unusable"}
         )
     ):
+        logger.info("Running TBProfiler via WSL...")
         tbprofiler_wsl_run = _run_tbprofiler_on_fasta_wsl(fasta_inputs, fasta_sample_inputs, wsl_env_name)
+        logger.debug(f"WSL TBProfiler result: status={tbprofiler_wsl_run['status']}, samples={tbprofiler_wsl_run['attempted_samples']}")
         if tbprofiler_wsl_run["status"] == "completed":
             tbprofiler_run = tbprofiler_wsl_run
         elif tbprofiler_run["status"] == "skipped":
@@ -1783,13 +1831,16 @@ def main() -> None:
             or tbprofiler["status"] in {"not_installed", "installed_but_unusable"}
         )
     ):
+        logger.info("Running TBProfiler via Docker...")
         tbprofiler_docker_run = _run_tbprofiler_on_fasta_docker(fasta_inputs, fasta_sample_inputs, docker_image)
+        logger.debug(f"Docker TBProfiler result: status={tbprofiler_docker_run['status']}, samples={tbprofiler_docker_run['attempted_samples']}")
         if tbprofiler_docker_run["status"] == "completed":
             tbprofiler_run = tbprofiler_docker_run
         elif tbprofiler_run["status"] == "skipped":
             tbprofiler_run = tbprofiler_docker_run
 
     if tbprofiler_run["status"] == "completed" and tbprofiler_run["output_jsons"]:
+        logger.info(f"TBProfiler completed: {tbprofiler_run['successful_samples']} samples processed")
         pass  # imported below after mykrobe, so tbprofiler overwrites as authoritative
 
     # Run mykrobe via WSL in parallel with tb-profiler - always when available and FASTA inputs exist.
@@ -1961,6 +2012,17 @@ def main() -> None:
     }
 
     OUT_JSON.write_text(json.dumps(payload, indent=2, default=_json_default), encoding="utf-8")
+    
+    logger.info("=" * 70)
+    logger.info("LINEAGE/DR VALIDATION COMPLETE")
+    logger.info(f"Overall status: {payload['status']}")
+    logger.info(f"TBProfiler: {tbprofiler_run['status']} ({tbprofiler_run['successful_samples']}/{tbprofiler_run['attempted_samples']} samples)")
+    logger.info(f"Mykrobe: {mykrobe_run['status']} ({mykrobe_run['successful_samples']}/{mykrobe_run['attempted_samples']} samples)")
+    logger.info(f"Limitations: {', '.join(payload['limitation_codes']) if payload['limitation_codes'] else 'none'}")
+    logger.info(f"Warnings: {len(payload['warnings'])} warning(s)")
+    logger.info(f"DR concordance: {len(dr_concordance)} samples compared")
+    logger.info("=" * 70)
+    
     print(json.dumps(payload, indent=2, default=_json_default))
 
 

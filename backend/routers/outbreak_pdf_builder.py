@@ -131,6 +131,13 @@ def outbreak_report(db: Session = Depends(get_db)):
     synthesis_pairs = synthesis_data.get("pairs") if isinstance(synthesis_data, dict) else []
     if not isinstance(synthesis_pairs, list):
         synthesis_pairs = []
+    synthesis_parameters = synthesis_data.get("parameters") if isinstance(synthesis_data, dict) else {}
+    if not isinstance(synthesis_parameters, dict):
+        synthesis_parameters = {}
+    low_snp_threshold = int(synthesis_parameters.get("low_snp_threshold") or 12)
+    high_snp_contradiction_threshold = int(synthesis_parameters.get("high_snp_contradiction_threshold") or 20)
+    high_posterior_threshold = float(synthesis_parameters.get("high_posterior_threshold") or 0.70)
+    high_posterior_label = f"{high_posterior_threshold:.2f}"
     synthesis_pair_by_directed = {}
     synthesis_pair_by_unordered = {}
     for pair in synthesis_pairs:
@@ -149,6 +156,23 @@ def outbreak_report(db: Session = Depends(get_db)):
             or synthesis_pair_by_unordered.get(tuple(sorted([source, target])))
             or {}
         )
+
+    synthesis_clusters = synthesis_data.get("clusters") if isinstance(synthesis_data, dict) else []
+    if not isinstance(synthesis_clusters, list):
+        synthesis_clusters = []
+    synthesis_cluster_by_id = {
+        str(cluster.get("cluster_id")): cluster
+        for cluster in synthesis_clusters
+        if isinstance(cluster, dict) and cluster.get("cluster_id")
+    }
+
+    def _cluster_lineage_distribution_text(cluster_id: str) -> str:
+        cluster = synthesis_cluster_by_id.get(str(cluster_id or ""))
+        distribution = cluster.get("lineage_distribution") if isinstance(cluster, dict) else {}
+        if not isinstance(distribution, dict) or not distribution:
+            return "n/a"
+        items = sorted(distribution.items(), key=lambda item: (-int(item[1] or 0), str(item[0])))
+        return ", ".join(f"{key}: {value}" for key, value in items[:4])
 
     kpi_data = None
     try:
@@ -389,7 +413,7 @@ def outbreak_report(db: Session = Depends(get_db)):
         }
 
     high_confidence_edges = [
-        e for e in transmission_edges if float(e.get("probability") or 0.0) >= 0.70
+        e for e in transmission_edges if float(e.get("probability") or 0.0) >= high_posterior_threshold
     ]
     high_confidence_all_count = len(high_confidence_edges)
     high_confidence_snapshot_count = int(
@@ -1090,7 +1114,7 @@ def outbreak_report(db: Session = Depends(get_db)):
         dashboard_card(
             "SNP-supported links",
             str(pairwise_links_le_12),
-            "<=12 SNP candidate links before epi review",
+            f"<= {low_snp_threshold} SNP candidate links before epi review",
         ),
         dashboard_card(
             "Open clusters",
@@ -1100,7 +1124,7 @@ def outbreak_report(db: Session = Depends(get_db)):
         dashboard_card(
             "Model links",
             str(high_confidence_all_count),
-            "Posterior >=0.70; validate with SNP + epi",
+            f"Posterior >= {high_posterior_label}; validate with SNP + epi",
         ),
         dashboard_card(
             "MDR/RR signals",
@@ -1228,7 +1252,8 @@ def outbreak_report(db: Session = Depends(get_db)):
     story.append(Spacer(1, 0.05 * inch))
     story.append(Paragraph(
         "Appendices A\u2013D are in landscape format after the main report. "
-        "Flag codes used in pair tables: SNP-linked = SNP \u226412 supported; D1: SNP>12 = genomically discordant; Model-only = no pairwise SNP; QC-unresolved = QC failed/not reported.",
+        f"Flag codes used in pair tables: SNP-linked = SNP <= {low_snp_threshold} supported; "
+        f"D1: SNP > {low_snp_threshold} = genomically discordant; Model-only = no pairwise SNP; QC-unresolved = QC failed/not reported.",
         small_style,
     ))
     story.append(PageBreak())
@@ -1259,8 +1284,12 @@ def outbreak_report(db: Session = Depends(get_db)):
         [Paragraph("SNP (single nucleotide polymorphism)", cell_bold_style),
          Paragraph("A single base-pair difference in the genome. Closely related strains share very few SNPs. Used as a genetic \u2018distance\u2019 metric.", cell_body_style)],
         [Paragraph("SNP threshold for transmission", cell_bold_style),
-         Paragraph("Strains with \u226412 SNPs are considered potentially linked (UK NICE guidance). \u22645 SNPs suggests recent direct transmission. "
-                   ">50 SNPs effectively rules out recent shared transmission.", cell_body_style)],
+         Paragraph(
+             f"Transmission synthesis for this run uses <= {low_snp_threshold} SNPs as the low-SNP support threshold "
+             f"and >= {high_snp_contradiction_threshold} SNPs as the contradiction threshold. "
+             "These thresholds are run parameters and should be reviewed against local SOPs before external circulation.",
+             cell_body_style,
+         )],
         [Paragraph("Lineage", cell_bold_style),
          Paragraph("M. tuberculosis is classified into 7+ major lineages (L1\u2013L7) reflecting global evolutionary history. Lineage influences "
                    "drug-resistance patterns and may correlate with transmissibility.", cell_body_style)],
@@ -1281,7 +1310,7 @@ def outbreak_report(db: Session = Depends(get_db)):
                    "and XDR-TB (extensively drug resistant). Genomic DR prediction is used alongside phenotypic DST.", cell_body_style)],
         [Paragraph("Transmission network", cell_bold_style),
          Paragraph("A directed graph where arrows indicate the most probable direction of transmission. Model-prioritised links "
-                   "(posterior probability >0.70) are hypotheses and should be validated against pairwise SNP, QC status, and epidemiology.", cell_body_style)],
+                   f"(posterior probability >= {high_posterior_label}) are hypotheses and should be validated against pairwise SNP, QC status, and epidemiology.", cell_body_style)],
     ]
 
     append_section_heading("Case Summary", min_following_height=1.9)
@@ -1400,7 +1429,7 @@ def outbreak_report(db: Session = Depends(get_db)):
         "<b>How to interpret outbreaker2 results:</b> outbreaker2 reconstructs the most probable transmission tree using "
         "both genetic distance (SNPs) and timing (collection dates). Pairs with high posterior transmission probability "
         "are model-prioritised transmission hypotheses only. In this report, they should not be interpreted as direct "
-        "transmission unless supported by pairwise SNP distance <=12, QC pass status, and epidemiological corroboration. "
+        f"transmission unless supported by pairwise SNP distance <= {low_snp_threshold}, QC pass status, and epidemiological corroboration. "
         "Lower probability pairs may still be linked within the same cluster but through one or more undetected intermediate cases.",
         section_note_style,
     ))
@@ -1491,7 +1520,7 @@ def outbreak_report(db: Session = Depends(get_db)):
         snp_hist = seq_quality.get("pairwise_snp_distance_histogram") or (sequence_summary_data.get("pairwise_snp_distance_histogram") if sequence_summary_data else {}) or {}
         if snp_hist:
             hist_rows = [["Distance Bin", "Pair Count"]]
-            for bin_name in ["0-5", "6-12", "13-25", ">25", "unknown"]:
+            for bin_name in ["0-5", f"6-{low_snp_threshold}", f"{low_snp_threshold + 1}-{high_snp_contradiction_threshold}", f">{high_snp_contradiction_threshold}", "unknown"]:
                 if bin_name in snp_hist:
                     hist_rows.append([bin_name, str(snp_hist.get(bin_name, 0))])
             if len(hist_rows) > 1:
@@ -1800,7 +1829,7 @@ def outbreak_report(db: Session = Depends(get_db)):
                 action_long = "Model-prioritised exposure review - confirm with pairwise SNP and epidemiology before action."
                 warning = "Model-only"
                 action = "Validate SNP+epi"
-            elif link_pairwise <= 12:
+            elif link_pairwise <= low_snp_threshold:
                 warning_long = "Pairwise SNP supports cluster linkage, but epidemiology must still corroborate the direction."
                 action_long = "Confirm with pairwise SNP and epidemiology before operational action."
                 warning = "SNP-linked"
@@ -1808,7 +1837,7 @@ def outbreak_report(db: Session = Depends(get_db)):
             else:
                 warning_long = "Pairwise SNP distance is too high for direct transmission interpretation."
                 action_long = "Model-prioritised exposure review - confirm with pairwise SNP and epidemiology before action."
-                warning = "SNP>12"
+                warning = f"SNP>{low_snp_threshold}"
                 action = "Validate SNP+epi"
 
             case_classif_rows.append([
@@ -1869,7 +1898,7 @@ def outbreak_report(db: Session = Depends(get_db)):
     append_section_heading("Model-Prioritised Transmission Hypotheses")
     story.append(Paragraph(
         "The outbreaker2 model infers transmission probabilities from SNP distance and sample collection dates. "
-        "Posterior probability >0.70 indicates a plausible transmission event, but genomic validation is essential. "
+        f"Posterior probability >= {high_posterior_label} indicates a plausible transmission hypothesis under this run's synthesis configuration, but genomic validation is essential. "
         "Pairs are classified below by SNP support and QC status. "
         "<b>Do not escalate model-only or genomically discordant links to field investigation without genomic and epidemiological corroboration.</b>",
         section_note_style,
@@ -1910,8 +1939,8 @@ def outbreak_report(db: Session = Depends(get_db)):
             outbreaker_probability=prob,
             same_cluster=same_cluster,
         )
-        validation_flag = "SNP-linked" if pairwise_distance is not None and pairwise_distance <= 12 and same_cluster and not qc_problem else (
-            "QC-unresolved" if qc_problem else ("D1: SNP>12" if pairwise_distance is not None and pairwise_distance > 12 else "Model-only")
+        validation_flag = "SNP-linked" if pairwise_distance is not None and pairwise_distance <= low_snp_threshold and same_cluster and not qc_problem else (
+            "QC-unresolved" if qc_problem else (f"D1: SNP>{low_snp_threshold}" if pairwise_distance is not None and pairwise_distance > low_snp_threshold else "Model-only")
         )
         synthesis_pair = _synthesis_pair_for(source, target)
         synthesis_confidence = str(
@@ -1943,7 +1972,7 @@ def outbreak_report(db: Session = Depends(get_db)):
         }
         if qc_problem:
             qc_resolution_pairs.append(record)
-        elif pairwise_distance is not None and pairwise_distance <= 12 and same_cluster:
+        elif pairwise_distance is not None and pairwise_distance <= low_snp_threshold and same_cluster:
             genomic_pairs.append(record)
         elif pairwise_distance is not None and pairwise_distance > 12:
             genomically_discordant.append(record)
@@ -2003,7 +2032,7 @@ def outbreak_report(db: Session = Depends(get_db)):
     if not genomic_pairs:
         story.append(Spacer(1, 0.1 * inch))
         story.append(Paragraph(
-            "<b>[WARN] CRITICAL NOTE: No direct-transmission pairwise SNP links <=12 are demonstrated in this report extract.</b> "
+            f"<b>[WARN] CRITICAL NOTE: No direct-transmission pairwise SNP links <= {low_snp_threshold} are demonstrated in this report extract.</b> "
             "The outbreaker2 model has identified transmission hypotheses, but these currently lack clear genomic support within the recent-transmission threshold. "
             "All displayed model-prioritised links should be treated as hypotheses pending: (1) pairwise SNP analysis and validation, (2) QC review and repeat sequencing where needed, (3) epidemiological investigation to corroborate or refute the model's predictions. "
             "Do not escalate field investigations based on model probability alone.",
@@ -2011,17 +2040,17 @@ def outbreak_report(db: Session = Depends(get_db)):
         ))
         story.append(Spacer(1, 0.08 * inch))
         # SNP support breakdown table
-        snp_le5 = sum(1 for (a, b), d in pairwise_snp_matrix.items() if d is not None and d <= 5 and (a, b) in outbreaker_pair_prob and outbreaker_pair_prob[(a, b)] >= 0.70)
-        snp_6_12 = sum(1 for (a, b), d in pairwise_snp_matrix.items() if d is not None and 6 <= d <= 12 and (a, b) in outbreaker_pair_prob and outbreaker_pair_prob[(a, b)] >= 0.70)
-        snp_gt12 = sum(1 for (a, b), d in pairwise_snp_matrix.items() if d is not None and d > 12 and (a, b) in outbreaker_pair_prob and outbreaker_pair_prob[(a, b)] >= 0.70)
-        snp_unavail = sum(1 for (a, b) in outbreaker_pair_prob if outbreaker_pair_prob[(a, b)] >= 0.70 and pairwise_snp_matrix.get((a, b)) is None)
+        snp_le5 = sum(1 for (a, b), d in pairwise_snp_matrix.items() if d is not None and d <= 5 and (a, b) in outbreaker_pair_prob and outbreaker_pair_prob[(a, b)] >= high_posterior_threshold)
+        snp_6_12 = sum(1 for (a, b), d in pairwise_snp_matrix.items() if d is not None and 6 <= d <= low_snp_threshold and (a, b) in outbreaker_pair_prob and outbreaker_pair_prob[(a, b)] >= high_posterior_threshold)
+        snp_gt12 = sum(1 for (a, b), d in pairwise_snp_matrix.items() if d is not None and d > low_snp_threshold and (a, b) in outbreaker_pair_prob and outbreaker_pair_prob[(a, b)] >= high_posterior_threshold)
+        snp_unavail = sum(1 for (a, b) in outbreaker_pair_prob if outbreaker_pair_prob[(a, b)] >= high_posterior_threshold and pairwise_snp_matrix.get((a, b)) is None)
         snp_support_rows = [
             ["Link category", "Count"],
             ["Pairwise SNP \u22645 and QC pass", str(snp_le5)],
-            ["Pairwise SNP 6\u201312 and QC pass", str(snp_6_12)],
-            ["Pairwise SNP >12 and QC pass", str(snp_gt12)],
+            [f"Pairwise SNP 6-{low_snp_threshold} and QC pass", str(snp_6_12)],
+            [f"Pairwise SNP >{low_snp_threshold} and QC pass", str(snp_gt12)],
             ["SNP unavailable or QC unresolved", str(snp_unavail)],
-            ["Total model-prioritised links \u22650.70", str(high_confidence_all_count)],
+            [f"Total model-prioritised links >= {high_posterior_label}", str(high_confidence_all_count)],
         ]
         snp_support_table = Table(
             wrap_rows(snp_support_rows),
@@ -2032,9 +2061,9 @@ def outbreak_report(db: Session = Depends(get_db)):
         story.append(snp_support_table)
         story.append(Spacer(1, 0.1 * inch))
 
-    build_pair_rows(genomic_pairs[:20], "Table 12. Genomically supported model-prioritised links (pairwise SNP \u226412 and shared cluster support). These represent the most plausible recent direct transmission candidates based on both genetic distance and temporal data.", "SNP-supported")
+    build_pair_rows(genomic_pairs[:20], f"Table 12. Genomically supported model-prioritised links (pairwise SNP <= {low_snp_threshold} and shared cluster support). These represent the most plausible recent direct transmission candidates based on both genetic distance and temporal data.", "SNP-supported")
     build_pair_rows(model_only_pairs[:20], "Table 13. Model-prioritised hypotheses without pairwise SNP data. These require sequencing/SNP analysis before operational use.", "Model-only")
-    build_pair_rows(genomically_discordant[:20], "Table 14. Genomically discordant model predictions (posterior >0.70 but pairwise SNP >12). SNP distance does not support direct recent transmission; likely reflects extended genetic relatedness or model misspecification.", "SNP>12 discordant")
+    build_pair_rows(genomically_discordant[:20], f"Table 14. Genomically discordant model predictions (posterior >= {high_posterior_label} but pairwise SNP > {low_snp_threshold}). SNP distance does not support direct recent transmission; likely reflects extended genetic relatedness or model misspecification.", f"SNP>{low_snp_threshold} discordant")
     build_pair_rows(qc_resolution_pairs[:20], "Table 15. Model-prioritised pairs involving QC-failed or not-reported samples. Hold pending repeat sequencing or QC review.", "QC unresolved")
     if len(_pairs_csv_rows) > 1:
         _write_csv_rows(_export_path("transmission_pairs.csv"), _pairs_csv_rows)
@@ -2044,7 +2073,7 @@ def outbreak_report(db: Session = Depends(get_db)):
     append_section_heading("Current Outbreak Interpretation")
     story.append(Paragraph(
         "Current interpretation: This report identifies three open genomic clusters and multiple outbreaker2 model-prioritised transmission hypotheses. "
-        "However, no pairwise SNP links <=12 are demonstrated in this extract, several links involve QC-failed or QC-not-reported samples, "
+        f"However, no pairwise SNP links <= {low_snp_threshold} are demonstrated in this extract, several links involve QC-failed or QC-not-reported samples, "
         "and model diagnostics remain exploratory. The immediate priorities are repeat sequencing/QC review, validation of resistance calls, "
         "phenotypic DST confirmation, and epidemiological corroboration before field escalation.",
         interp_style,
@@ -2059,8 +2088,8 @@ def outbreak_report(db: Session = Depends(get_db)):
     ))
     counts_rows = [
         ["Metric", "Count", "Definition"],
-        ["Model-prioritised links \u22650.70", str(high_confidence_all_count), "All outbreaker2 edges with posterior probability \u22650.70 across full run"],
-        ["All discordant outbreaker2 links reviewed", "see below", "All model-linked pairs reviewed for adjudication, including pairs below the \u22650.70 threshold. This explains why Appendix B may include posterior values below 0.70 (e.g. 0.601 or 0.483)."],
+        [f"Model-prioritised links >= {high_posterior_label}", str(high_confidence_all_count), f"All outbreaker2 edges with posterior probability >= {high_posterior_label} across full run"],
+        ["All discordant outbreaker2 links reviewed", "see below", f"All model-linked pairs reviewed for adjudication, including pairs below the >= {high_posterior_label} threshold. This explains why Appendix B may include posterior values below the high-posterior threshold."],
         ["Displayed/plotted network links", str(high_confidence_snapshot_count), "Links shown in network JSON snapshot (may be filtered for display)"],
     ]
     counts_table = Table(
@@ -2092,7 +2121,7 @@ def outbreak_report(db: Session = Depends(get_db)):
             disc_code = "D3"
         discordant_pairs.append({
             "pair": f"{_short_case_id(left)}-{_short_case_id(right)}",
-            "snp_result": "pairwise<=12" if in_seq else "pairwise>12 or unavailable",
+            "snp_result": f"pairwise<={low_snp_threshold}" if in_seq else f"pairwise>{low_snp_threshold} or unavailable",
             "out_result": "linked" if in_out else "not_linked",
             "pairwise": pairwise_distance,
             "posterior": post,
@@ -2110,7 +2139,7 @@ def outbreak_report(db: Session = Depends(get_db)):
         discordant_snp_missing = sum(1 for item in discordant_pairs if item.get("pairwise") is None)
         story.append(Paragraph(
             f"Discordant model links: {len(discordant_pairs)} total. "
-            f"With pairwise SNP >12: {discordant_gt12}. "
+            f"With pairwise SNP > {low_snp_threshold}: {discordant_gt12}. "
             f"With pairwise SNP unavailable: {discordant_snp_missing}. "
             "Top five highest-priority discordant examples are shown below; the full table is provided in Appendix B.",
             styles["Normal"],
@@ -2178,12 +2207,17 @@ def outbreak_report(db: Session = Depends(get_db)):
     story.append(Paragraph(
         "Pairwise SNP distances are the primary genomic evidence for or against direct recent transmission. "
         "The table below summarises all model-prioritised case pairs by SNP distance category. "
-        "<=12 SNPs is the operational threshold for probable recent transmission; >12 SNPs makes direct transmission unlikely; "
+        f"<= {low_snp_threshold} SNPs is the configured low-SNP support threshold for probable recent transmission; > {low_snp_threshold} SNPs weakens direct-transmission support; "
         "unavailable SNP (QC-failed or no consensus sequence) requires repeat sequencing before inference.",
         interp_style,
     ))
     _tp_path = _export_path("transmission_pairs.csv")
-    _snp_bins = {"0-5 SNPs (direct)": 0, "6-12 SNPs (probable)": 0, "13-25 SNPs (possible shared source)": 0, ">25 SNPs (unlikely direct)": 0, "SNP unavailable (QC/sequence missing)": 0}
+    _direct_label = "0-5 SNPs (direct)"
+    _support_label = f"6-{low_snp_threshold} SNPs (probable)" if low_snp_threshold > 5 else f"<= {low_snp_threshold} SNPs (probable)"
+    _intermediate_label = f"{low_snp_threshold + 1}-{high_snp_contradiction_threshold} SNPs (possible shared source)"
+    _contradiction_label = f">{high_snp_contradiction_threshold} SNPs (unlikely direct)"
+    _unavailable_label = "SNP unavailable (QC/sequence missing)"
+    _snp_bins = {_direct_label: 0, _support_label: 0, _intermediate_label: 0, _contradiction_label: 0, _unavailable_label: 0}
     _snp_pairs_rows = [["Pair", "SNP distance", "Category", "Epi link", "Flag"]]
     _snp_available = 0
     if os.path.exists(_tp_path):
@@ -2198,16 +2232,16 @@ def outbreak_report(db: Session = Depends(get_db)):
                     _snp_val = int(_snp_raw)
                     _snp_available += 1
                     if _snp_val <= 5:
-                        _cat = "0-5 SNPs (direct)"
-                    elif _snp_val <= 12:
-                        _cat = "6-12 SNPs (probable)"
-                    elif _snp_val <= 25:
-                        _cat = "13-25 SNPs (possible shared source)"
+                        _cat = _direct_label
+                    elif _snp_val <= low_snp_threshold:
+                        _cat = _support_label
+                    elif _snp_val <= high_snp_contradiction_threshold:
+                        _cat = _intermediate_label
                     else:
-                        _cat = ">25 SNPs (unlikely direct)"
+                        _cat = _contradiction_label
                 except (ValueError, TypeError):
                     _snp_val = None
-                    _cat = "SNP unavailable (QC/sequence missing)"
+                    _cat = _unavailable_label
                 _snp_bins[_cat] = _snp_bins.get(_cat, 0) + 1
                 _snp_pairs_rows.append([_pair, _snp_raw if _snp_val is not None else "n/a", _cat, _epi, _flag])
     if len(_snp_pairs_rows) > 1:
@@ -2219,18 +2253,18 @@ def outbreak_report(db: Session = Depends(get_db)):
         _snp_detail_tbl.setStyle(standard_table_style(font_size=7.2, header=True, valign_top=True))
         append_numbered_caption(
             "Pairwise SNP distance for all model-prioritised case pairs. "
-            "Pairs with SNP <=12 and QC pass are primary candidates for direct transmission investigation. "
-            "Pairs with SNP >12 or unavailable require genomic and epidemiological review before field action. "
+            f"Pairs with SNP <= {low_snp_threshold} and QC pass are primary candidates for direct transmission investigation. "
+            f"Pairs with SNP > {low_snp_threshold} or unavailable require genomic and epidemiological review before field action. "
             "Epi link column indicates whether epidemiological corroboration is available (same cluster, contact-traced, or unknown)."
         )
         story.append(Spacer(1, 0.08 * inch))
     _snp_bin_rows = [["SNP distance category", "Pair count", "Operational implication"]]
     _snp_bin_rows += [
-        ["0-5 SNPs (direct)", str(_snp_bins.get("0-5 SNPs (direct)", 0)), "Immediate: probable direct transmission - contact trace; confirm epi link"],
-        ["6-12 SNPs (probable)", str(_snp_bins.get("6-12 SNPs (probable)", 0)), "Priority: probable cluster; review shared setting and exposures"],
-        ["13-25 SNPs (possible shared source)", str(_snp_bins.get("13-25 SNPs (possible shared source)", 0)), "Review: possible shared source/reactivation; epi adjudication required"],
-        [">25 SNPs (unlikely direct)", str(_snp_bins.get(">25 SNPs (unlikely direct)", 0)), "Low priority: unlikely direct recent transmission; monitor only"],
-        ["SNP unavailable", str(_snp_bins.get("SNP unavailable (QC/sequence missing)", 0)), "Hold: repeat sequencing or QC resolution required before inference"],
+        [_direct_label, str(_snp_bins.get(_direct_label, 0)), "Immediate: probable direct transmission - contact trace; confirm epi link"],
+        [_support_label, str(_snp_bins.get(_support_label, 0)), "Priority: probable cluster; review shared setting and exposures"],
+        [_intermediate_label, str(_snp_bins.get(_intermediate_label, 0)), "Review: possible shared source/reactivation; epi adjudication required"],
+        [_contradiction_label, str(_snp_bins.get(_contradiction_label, 0)), "Low priority: unlikely direct recent transmission; monitor only"],
+        ["SNP unavailable", str(_snp_bins.get(_unavailable_label, 0)), "Hold: repeat sequencing or QC resolution required before inference"],
     ]
     _snp_bin_tbl = Table(
         wrap_rows(_snp_bin_rows),
@@ -2579,14 +2613,15 @@ def outbreak_report(db: Session = Depends(get_db)):
         for edge in transmission_edges:
             src = str(edge.get("source") or "")
             src_cluster = str((case_by_id.get(src) or {}).get("cluster_id") or "")
-            if src_cluster and float(edge.get("probability") or 0.0) >= 0.70:
+            if src_cluster and float(edge.get("probability") or 0.0) >= high_posterior_threshold:
                 cluster_outgoing[src_cluster] = cluster_outgoing.get(src_cluster, 0) + 1
 
-        cluster_genomic_rows = [["Cluster", "Cases", "First", "Latest", "Med SNP", "Max SNP", "RR/MDR", "Index case", "Recent 30/60/90d"]]
+        cluster_genomic_rows = [["Cluster", "Cases", "First", "Latest", "Med SNP", "Max SNP", "Lineage distribution", "RR/MDR", "Index case", "Recent 30/60/90d"]]
         cluster_ops_rows = [["Cluster", "Status", "Lead", "Epi link", "Setting", "Contact tracing", "LTBI screen", "DST status", "Next step"]]
 
         for row in cluster_epi_rows:
             cluster_id = str(row.get("cluster_id") or "")
+            lineage_distribution = _cluster_lineage_distribution_text(cluster_id)
             rr_mdr = f"{int(row.get('rr_cases') or 0)}/{int(row.get('mdr_cases') or 0)}"
             recent = f"{int(row.get('recent_30d') or 0)}/{int(row.get('recent_60d') or 0)}/{int(row.get('recent_90d') or 0)}"
             status = str(row.get("investigation_status") or "unknown")
@@ -2600,6 +2635,7 @@ def outbreak_report(db: Session = Depends(get_db)):
                 str(row.get("latest_specimen") or "n/a"),
                 str(row.get("median_snp_proxy") or "n/a"),
                 str(row.get("max_snp_proxy") or "n/a"),
+                lineage_distribution,
                 rr_mdr,
                 _short_case_id(str(row.get("suspected_index_case") or "")),
                 recent,
@@ -2618,13 +2654,13 @@ def outbreak_report(db: Session = Depends(get_db)):
 
         cluster_genomic_table = Table(
             wrap_rows(cluster_genomic_rows),
-            colWidths=fit_col_widths([0.68*inch, 0.56*inch, 0.82*inch, 0.82*inch, 0.68*inch, 0.68*inch, 0.62*inch, 0.72*inch, 0.95*inch], fill=True),
+            colWidths=fit_col_widths([0.55*inch, 0.42*inch, 0.68*inch, 0.68*inch, 0.52*inch, 0.52*inch, 1.25*inch, 0.52*inch, 0.62*inch, 0.82*inch], fill=True),
             repeatRows=1,
         )
         cluster_genomic_table.setStyle(standard_table_style(font_size=7.2, header=True))
         append_table_with_caption(
             cluster_genomic_table,
-            "Cluster genomic summary: case counts, specimen date range, SNP distance range, RR/MDR case burden, index case, and recent case counts (30/60/90 days).",
+            "Cluster genomic summary: case counts, specimen date range, SNP distance range, synthesis lineage distribution, RR/MDR case burden, index case, and recent case counts (30/60/90 days).",
             spacer_after=0.12,
             keep_together=False,
         )
@@ -3040,14 +3076,14 @@ def outbreak_report(db: Session = Depends(get_db)):
             f"Table 21. Top-priority cases by network centrality. "
             f"Network snapshot: {transmission_data.get('node_count', 0)} nodes, "
             f"{transmission_data.get('edge_count', 0)} directed links, "
-            f"{high_confidence_all_count} model-prioritised links (posterior >0.70). "
+            f"{high_confidence_all_count} model-prioritised links (posterior >= {high_posterior_label}). "
             "<b>Out</b> = outgoing transmission links (potential sources); <b>In</b> = incoming links (potential recipients). "
             "Cases with multiple outgoing model-prioritised links should be treated as potential source nodes requiring validation, not confirmed sources. "
             f"Counts may differ where links are filtered for display, QC status, or posterior thresholding. "
             f"Executive summary count reflects all model links ({high_confidence_all_count}); network snapshot JSON count is {high_confidence_snapshot_count}."
         )
         story.append(Paragraph(
-            "Model-prioritised links with posterior probability >0.70 represent statistical transmission hypotheses from outbreaker2. "
+            f"Model-prioritised links with posterior probability >= {high_posterior_label} represent statistical transmission hypotheses from outbreaker2. "
             "In this run, they should not be treated as genomic evidence of direct transmission unless supported by pairwise SNP distance, "
             "QC pass status, and epidemiological corroboration.",
             section_note_style,
@@ -3061,8 +3097,8 @@ def outbreak_report(db: Session = Depends(get_db)):
         ["Node colour", "Cluster assignment (same colour = same cluster context)"],
         ["Red border", "QC unresolved (failed, contaminated, or not reported)"],
         ["RR/MDR/FQ marker", "Predicted resistance signal; confirm by phenotypic DST"],
-        ["Solid edge", "Pairwise SNP <=12 and QC pass (supported candidate link)"],
-        ["Dotted edge", "Pairwise SNP >12 (unlikely direct recent transmission)"],
+        ["Solid edge", f"Pairwise SNP <= {low_snp_threshold} and QC pass (supported candidate link)"],
+        ["Dotted edge", f"Pairwise SNP > {low_snp_threshold} (unlikely direct recent transmission)"],
         ["Grey edge", "Pairwise SNP unavailable (model-only hypothesis)"],
     ]
     legend_table = Table(
@@ -3137,9 +3173,9 @@ def outbreak_report(db: Session = Depends(get_db)):
                     [Paragraph("<b>Embedded legend</b>", small_style), Paragraph("<b>Encoding</b>", small_style)],
                     [Paragraph("Node colour", small_style), Paragraph("Cluster", small_style)],
                     [Paragraph("Red border", small_style), Paragraph("QC unresolved", small_style)],
-                    [Paragraph("Dotted edge", small_style), Paragraph("SNP >12", small_style)],
+                    [Paragraph("Dotted edge", small_style), Paragraph(f"SNP > {low_snp_threshold}", small_style)],
                     [Paragraph("Grey edge", small_style), Paragraph("SNP unavailable", small_style)],
-                    [Paragraph("Solid edge", small_style), Paragraph("SNP <=12 and QC pass", small_style)],
+                    [Paragraph("Solid edge", small_style), Paragraph(f"SNP <= {low_snp_threshold} and QC pass", small_style)],
                     [Paragraph("RR/MDR marker", small_style), Paragraph("Predicted resistance; confirm with DST", small_style)],
                 ]
                 legend_tbl = Table(
@@ -3236,12 +3272,12 @@ def outbreak_report(db: Session = Depends(get_db)):
     action_ref_rows = [
         [Paragraph("Finding", cell_hdr_style), Paragraph("Recommended Action", cell_hdr_style),
          Paragraph("Urgency", cell_hdr_style)],
-        [Paragraph("New case links to an existing open cluster (\u226412 SNPs)", cell_bold_style),
+        [Paragraph(f"New case links to an existing open cluster (<= {low_snp_threshold} SNPs)", cell_bold_style),
          Paragraph("Notify cluster lead; extend contact tracing to include new case contacts; "
                    "review whether the cluster source has been identified.", cell_body_style),
          Paragraph("Within 5 working days", cell_body_style)],
-        [Paragraph("Model-prioritised link identified (posterior >0.70)", cell_bold_style),
-         Paragraph("Review only after confirming pairwise SNP support (\u226412), QC pass status, and epidemiological plausibility. "
+        [Paragraph(f"Model-prioritised link identified (posterior >= {high_posterior_label})", cell_bold_style),
+         Paragraph(f"Review only after confirming pairwise SNP support (<= {low_snp_threshold}), QC pass status, and epidemiological plausibility. "
                "Do not escalate on model probability alone; document whether SNP and epi evidence corroborates the link.", cell_body_style),
          Paragraph("Within 5 working days", cell_body_style)],
         [Paragraph("New cluster opened (\u22652 cases genetically linked, no prior cluster)", cell_bold_style),
@@ -3303,6 +3339,8 @@ def outbreak_report(db: Session = Depends(get_db)):
         story.append(Paragraph(f"Secondary engine validation timestamp: {secondary_validation_data.get('generated_at')}", styles["Normal"]))
     if method_comparison_data and method_comparison_data.get("generated_at"):
         story.append(Paragraph(f"Method comparison timestamp: {method_comparison_data.get('generated_at')}", styles["Normal"]))
+    if synthesis_data and synthesis_data.get("generated_at"):
+        story.append(Paragraph(f"Transmission synthesis timestamp: {synthesis_data.get('generated_at')}", styles["Normal"]))
 
     reproducibility_rows = [
         ["Metadata item", "Value"],
@@ -3313,9 +3351,14 @@ def outbreak_report(db: Session = Depends(get_db)):
         ["outbreaker2 version", str(summary_data.get("analysis_engine_version") if summary_data else None) if (summary_data and summary_data.get("analysis_engine_version")) else f"Not recorded \u2014 engine: {summary_data.get('analysis_engine', 'outbreaker2') if summary_data else 'outbreaker2'} (mandatory before external circulation)"],
         ["Random seed", str(summary_data.get("random_seed") if summary_data else None) if (summary_data and summary_data.get("random_seed") is not None) else "Not set \u2014 run is non-reproducible without a fixed seed; mandatory before external circulation"],
         ["Model priors", str(summary_data.get("model_priors") if summary_data else None) if (summary_data and summary_data.get("model_priors")) else (f"Default outbreaker2 priors; MCMC: {summary_data.get('n_generations','?')} generations, burnin {summary_data.get('burnin','?')}, {summary_data.get('n_samples','?')} posterior samples" if summary_data else "Not recorded \u2014 populate before circulation")],
+        ["Synthesis low-SNP threshold", str(low_snp_threshold)],
+        ["Synthesis contradiction SNP threshold", str(high_snp_contradiction_threshold)],
+        ["Synthesis high-posterior threshold", high_posterior_label],
+        ["Synthesis temporal window days", str(synthesis_parameters.get("temporal_window_days", "Not recorded"))],
         ["Input hash: exports/cases.csv", _sha256_of_file(_export_path("cases.csv"))],
         ["Input hash: exports/dna.fasta", _sha256_of_file(_export_path("dna.fasta"))],
         ["Input hash: exports/transmission_network.json", _sha256_of_file(_export_path("transmission_network.json"))],
+        ["Input hash: exports/synthesis_output.json", _sha256_of_file(_export_path("synthesis_output.json"))],
     ]
     reproducibility_table = Table(
         wrap_rows(reproducibility_rows),
@@ -3395,8 +3438,8 @@ def outbreak_report(db: Session = Depends(get_db)):
                 "<b>Warning codes:</b> "
                 "SNP-missing/QC - QC unresolved, pairwise SNP unavailable; "
                 "Model-only - outbreaker2 link, no pairwise SNP; "
-                "SNP-linked - SNP <=12, epi corroboration still required; "
-                "SNP>12 - pairwise SNP above transmission threshold.  "
+                f"SNP-linked - SNP <= {low_snp_threshold}, epi corroboration still required; "
+                f"SNP>{low_snp_threshold} - pairwise SNP above transmission threshold.  "
                 "<b>Action codes:</b> "
                 "Repeat/QC - repeat or verify sequence before any transmission interpretation; "
                 "Validate SNP+epi - confirm with pairwise SNP and epidemiology before operational action.",
@@ -3413,9 +3456,9 @@ def outbreak_report(db: Session = Depends(get_db)):
         story.append(Spacer(1, 0.1 * inch))
         disc_code_rows = [
             [Paragraph("Code", cell_hdr_style), Paragraph("Meaning", cell_hdr_style)],
-            [Paragraph("D1", cell_bold_style), Paragraph("Model-linked (outbreaker2 \u22650.70) AND pairwise SNP >12 \u2014 genomically discordant; unlikely direct recent transmission. Do not escalate without further review.", cell_body_style)],
-            [Paragraph("D2", cell_bold_style), Paragraph("Model-linked (outbreaker2 \u22650.70) AND pairwise SNP unavailable \u2014 requires sequencing/SNP analysis before transmission interpretation.", cell_body_style)],
-            [Paragraph("D3", cell_bold_style), Paragraph("Pairwise SNP \u226412 but NOT model-prioritised \u2014 possible older or shared-source linkage; review epidemiology to determine significance.", cell_body_style)],
+            [Paragraph("D1", cell_bold_style), Paragraph(f"Model-linked (outbreaker2 >= {high_posterior_label}) AND pairwise SNP > {low_snp_threshold} - genomically discordant; unlikely direct recent transmission. Do not escalate without further review.", cell_body_style)],
+            [Paragraph("D2", cell_bold_style), Paragraph(f"Model-linked (outbreaker2 >= {high_posterior_label}) AND pairwise SNP unavailable - requires sequencing/SNP analysis before transmission interpretation.", cell_body_style)],
+            [Paragraph("D3", cell_bold_style), Paragraph(f"Pairwise SNP <= {low_snp_threshold} but NOT model-prioritised - possible older or shared-source linkage; review epidemiology to determine significance.", cell_body_style)],
         ]
         disc_code_tbl = Table(
             disc_code_rows,

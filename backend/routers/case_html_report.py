@@ -176,6 +176,26 @@ def case_report_html(case_id: str, db: Session = Depends(get_db)):  # noqa: C901
         except Exception:
             tx_context = {}
 
+    synthesis_pair_by_directed: dict[tuple[str, str], dict] = {}
+    synthesis_pair_by_unordered: dict[tuple[str, str], dict] = {}
+    synthesis_path = _export_path("synthesis_output.json")
+    if os.path.exists(synthesis_path):
+        try:
+            with open(synthesis_path, "r", encoding="utf-8") as _f:
+                synthesis_data = json.load(_f)
+            for pair in synthesis_data.get("pairs") or []:
+                if not isinstance(pair, dict):
+                    continue
+                source = str(pair.get("source") or "")
+                target = str(pair.get("target") or "")
+                if not source or not target:
+                    continue
+                synthesis_pair_by_directed[(source, target)] = pair
+                synthesis_pair_by_unordered[tuple(sorted([source, target]))] = pair
+        except Exception:
+            synthesis_pair_by_directed = {}
+            synthesis_pair_by_unordered = {}
+
     # -- TBProfiler JSON artifact ----------------------------------------------
     tbp_data: dict | None = None
     tbp_dir = _export_path("tbprofiler")
@@ -200,6 +220,31 @@ def case_report_html(case_id: str, db: Session = Depends(get_db)):  # noqa: C901
                   "failed": "#e63946"}.get(s, "#6c757d")
         return (f'<span style="background:{colour};color:#fff;padding:2px 8px;'
                 f'border-radius:10px;font-size:0.8em;font-weight:600">{_e(status or "Unknown")}</span>')
+
+    def _synthesis_badge(status: str | None) -> str:
+        raw = status or "Not synthesised"
+        s = raw.lower().replace("_", " ")
+        if "strong" in s:
+            colour = "#2a9d8f"
+        elif "moderate" in s or "genomic only" in s:
+            colour = "#f4a261"
+        elif "model only" in s:
+            colour = "#e76f51"
+        elif "contradictory" in s:
+            colour = "#e63946"
+        else:
+            colour = "#6c757d"
+        return (
+            f'<span style="background:{colour};color:#fff;padding:2px 8px;'
+            f'border-radius:10px;font-size:0.8em;font-weight:600">{_e(s.title())}</span>'
+        )
+
+    def _synthesis_pair_for(source: str, target: str) -> dict:
+        return (
+            synthesis_pair_by_directed.get((source, target))
+            or synthesis_pair_by_unordered.get(tuple(sorted([source, target])))
+            or {}
+        )
 
     def _resistance_badge(dr) -> str:
         if not dr:
@@ -388,13 +433,33 @@ def case_report_html(case_id: str, db: Session = Depends(get_db)):  # noqa: C901
         edge_data = tx_context.get("linked_edges", [])
         if edge_data:
             edge_table = _data_table(
-                ["From", "To", "Probability / Weight"],
+                ["From", "To", "Probability / Weight", "Synthesis confidence", "Priority", "Lineage / DR", "Flags"],
                 [
-                    [
-                        _e(str(e.get("from", e.get("source", "-")))[:10]),
-                        _e(str(e.get("to",   e.get("target", "-")))[:10]),
+                    (lambda src, tgt, syn: [
+                        _e(src[:10]),
+                        _e(tgt[:10]),
                         _e(str(e.get("probability", e.get("weight", "-")))),
-                    ]
+                        _synthesis_badge(str(syn.get("confidence") or syn.get("confidence_code") or "Not synthesised")),
+                        _e(str(syn.get("priority_score", "n/a"))),
+                        _e(
+                            " / ".join(
+                                part for part in [
+                                    str(syn.get("lineage_concordance") or ""),
+                                    str(syn.get("resistance_profile_concordance") or ""),
+                                ]
+                                if part
+                            )
+                            or "n/a"
+                        ),
+                        _e(", ".join(str(flag).replace("_", " ") for flag in (syn.get("flags") or [])[:3]) or "none"),
+                    ])(
+                        str(e.get("from", e.get("source", "-"))),
+                        str(e.get("to", e.get("target", "-"))),
+                        _synthesis_pair_for(
+                            str(e.get("from", e.get("source", ""))),
+                            str(e.get("to", e.get("target", ""))),
+                        ),
+                    )
                     for e in edge_data
                 ],
                 "No linked edges",

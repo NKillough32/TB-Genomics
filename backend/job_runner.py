@@ -173,13 +173,14 @@ def run_job(job_name):
                     if priority_result.returncode != 0:
                         lf.write("Warning: Supplementary visualizations generation had issues\n")
                 else:
-                    subprocess.run(
+                    result = subprocess.run(
                         ALLOWED_JOBS[job_name],
                         stdout=lf,
-                        stderr=lf,
-                        check=True,
+                        stderr=subprocess.STDOUT,
                         cwd=project_root,
                     )
+                    if result.returncode != 0:
+                        raise Exception(f"{job_name} exited with code {result.returncode}")
                 
                 set_job_state(job_id, progress=100, status="completed")
                 
@@ -187,7 +188,9 @@ def run_job(job_name):
                 _log_to_audit("job_completed", "system", {"job_id": job_id, "job_name": job_name})
             except Exception as e:
                 set_job_state(job_id, status="failed")
-                lf.write(str(e))
+                lf.write(f"\n=== JOB FAILED ===\n")
+                lf.write(f"Error: {str(e)}\n")
+                lf.flush()
                 
                 # Log job failure
                 _log_to_audit("job_failed", "system", {"job_id": job_id, "job_name": job_name, "error": str(e)})

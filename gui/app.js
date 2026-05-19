@@ -475,11 +475,24 @@ async function loadLineageDrValidation(){
 		}
 
 		html+='<h5>Tool engines</h5>';
-		html+='<table class="data-table"><thead><tr><th>Tool</th><th>Status</th><th>Samples run</th><th>Message</th></tr></thead><tbody>';
+		html+='<table class="data-table"><thead><tr><th>Tool</th><th>Status</th><th>Run outcome</th><th>Message</th></tr></thead><tbody>';
 		const tbEng=engines.tb_profiler||{};
 		const mkEng=engines.mykrobe||{};
-		html+=`<tr><td>TBProfiler</td><td>${renderStatusPill(tbEng.status||'unknown')}</td><td>${escapeHtml(tbRun.successful_samples??'-')}</td><td>${escapeHtml(tbEng.message||tbRun.message||'')}</td></tr>`;
-		html+=`<tr><td>Mykrobe</td><td>${renderStatusPill(mkEng.status||'unknown')}</td><td>${escapeHtml(mkRun.successful_samples??'-')}</td><td>${escapeHtml(mkEng.message||mkRun.message||'')}</td></tr>`;
+		const toolOutcome=(engine,run)=>{
+			const status=String(engine.status||run.status||'unknown');
+			if(['installed','completed','ok','available'].includes(status)){
+				return `${escapeHtml(run.successful_samples??0)}/${escapeHtml(run.attempted_samples??0)} completed`;
+			}
+			if(run.status==='completed'){
+				return `${escapeHtml(run.successful_samples??0)}/${escapeHtml(run.attempted_samples??0)} completed`;
+			}
+			if(run.attempted_samples!==undefined&&Number(run.attempted_samples)>0){
+				return `${escapeHtml(run.attempted_samples)} attempted, none usable`;
+			}
+			return 'not run';
+		};
+		html+=`<tr><td>TBProfiler</td><td>${renderStatusPill(tbEng.status||'unknown')}</td><td>${toolOutcome(tbEng,tbRun)}</td><td>${escapeHtml(tbEng.message||tbRun.message||'')}</td></tr>`;
+		html+=`<tr><td>Mykrobe</td><td>${renderStatusPill(mkEng.status||'unknown')}</td><td>${toolOutcome(mkEng,mkRun)}</td><td>${escapeHtml(mkEng.message||mkRun.message||'')}</td></tr>`;
 		html+='</tbody></table>';
 
 		html+='<h5>Cross-engine DR concordance</h5>';
@@ -2194,6 +2207,5 @@ async function loadRegions(){
 	}
 }
 (async()=>{try{await fetch(`${API}/`);document.getElementById('status').innerHTML=renderSystemStatusItem('Backend','Running','status-pass','API responded successfully');}catch{document.getElementById('status').innerHTML=renderSystemStatusItem('Backend','Unavailable','status-fail','Unable to reach the API from this session');}refreshDemoModeStatus();loadRegions();loadKPIBanner();loadWorkflowStatus();loadDataSafety();loadDataReadiness();loadAnalyticsClusters();loadTransmissionSynthesisOverview();loadActionableReportSummary();loadFullKpis();loadOutbreakerStatus();loadResistanceValidationStatus();})();
-
 
 

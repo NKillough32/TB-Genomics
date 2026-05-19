@@ -1696,32 +1696,44 @@ async function loadGrowthCurvesView(){
 	}
 }
 
-async function loadGenomicVsEpiView(){
+async function loadGeoMapView(){
 	const view=document.getElementById('analyticsPrimaryView');
-	view.textContent='Loading genomic vs epi comparison...';
+	view.innerHTML='<h4>Geography Map (region centroids)</h4><div id="geo-leaflet-map" style="height:400px;width:100%;border-radius:6px;border:1px solid #e2e8f0"></div><div id="geo-map-table"></div>';
 	try{
-		const p=_analyticsParams();
-		const d=await fetch(`${API}/analytics/genomic-vs-epi?snp_threshold=${encodeURIComponent(p.snpThreshold)}&epi_window_days=${encodeURIComponent(p.epiWindowDays)}&posterior_min=${encodeURIComponent(p.posteriorMin)}`).then(r=>r.json());
-		const s=d.summary||{};
-		const cfg=d.parameters||{};
-		let html='<h4>Genomic vs Epidemiological Link Comparison</h4>';
-		html+=`<p class="hint">Using SNP <= ${escapeHtml(cfg.snp_threshold??p.snpThreshold)}, epi window ${escapeHtml(cfg.epi_window_days??p.epiWindowDays)} days, posterior >= ${escapeHtml((cfg.posterior_min??p.posteriorMin).toFixed ? (cfg.posterior_min??p.posteriorMin).toFixed(2) : (cfg.posterior_min??p.posteriorMin))}</p>`;
-		html+=`<div class="kpi-strip">Total: ${escapeHtml(s.total_pairs||0)} | Both: ${escapeHtml(s.both_supported||0)} | Genomic-only: ${escapeHtml(s.genomic_only||0)} | Epi-only: ${escapeHtml(s.epi_only||0)} | Neither: ${escapeHtml(s.neither||0)}</div>`;
-		html+='<table class="data-table"><tr><th>Pair</th><th>Posterior</th><th>SNP</th><th>Genomic</th><th>Epi</th><th>Category</th></tr>';
-		for(const p of (d.pairs||[]).slice(0,40)){
-			html+=`<tr><td>${escapeHtml(p.pair)}</td><td>${escapeHtml((p.posterior||0).toFixed(3))}</td><td>${escapeHtml(p.snp_distance??'n/a')}</td><td>${p.genomic_supported?'Y':'N'}</td><td>${p.epi_supported?'Y':'N'}</td><td>${escapeHtml(p.category)}</td></tr>`;
+		const d=await fetch(`${API}/analytics/geo-map`).then(r=>r.json());
+		const points=d.points||[];
+		// Initialise Leaflet map — destroy any previous instance first
+		if(window._geoLeafletMap){ window._geoLeafletMap.remove(); window._geoLeafletMap=null; }
+		const centre=points.length?[Number(points[0].lat),Number(points[0].lon)]:[54.6,-6.7];
+		const map=L.map('geo-leaflet-map').setView(centre,7);
+		window._geoLeafletMap=map;
+		L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{
+			maxZoom:19,
+			attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+		}).addTo(map);
+		const maxCount=Math.max(1,...points.map(p=>Number(p.case_count||0)));
+		for(const p of points){
+			const r=6+(Number(p.case_count||0)/maxCount)*14;
+			L.circleMarker([Number(p.lat),Number(p.lon)],{
+				radius:r, color:'#991b1b', fillColor:'#ef4444',
+				fillOpacity:0.75, weight:1.5
+			}).bindPopup(`<strong>${escapeHtml(p.region)}</strong><br>Cases: ${escapeHtml(p.case_count)}<br>Clusters: ${escapeHtml(p.cluster_count)}<br>Recent 90d: ${escapeHtml(p.recent_cases_90d)}`).addTo(map);
 		}
-		html+='</table>';
-		if(Array.isArray(d.notes)&&d.notes.length){ html+=`<p class="hint">${escapeHtml(d.notes.join(' '))}</p>`; }
-		view.innerHTML=html;
+		if(points.length>1){
+			const lats=points.map(p=>Number(p.lat));
+			const lons=points.map(p=>Number(p.lon));
+			map.fitBounds([[Math.min(...lats),Math.min(...lons)],[Math.max(...lats),Math.max(...lons)]],{padding:[30,30]});
+		}
+		let tbl='<table class="data-table" style="margin-top:.75rem"><tr><th>Region</th><th>Cases</th><th>Clusters</th><th>Recent 90d</th></tr>';
+		for(const p of points.slice(0,20)){
+			tbl+=`<tr><td>${escapeHtml(p.region)}</td><td>${escapeHtml(p.case_count)}</td><td>${escapeHtml(p.cluster_count)}</td><td>${escapeHtml(p.recent_cases_90d)}</td></tr>`;
+		}
+		tbl+='</table>';
+		document.getElementById('geo-map-table').innerHTML=tbl;
 	}catch(e){
-		view.textContent='Failed to load genomic vs epi view: '+e;
+		view.innerHTML+='<p style="color:#dc2626">Failed to load map: '+escapeHtml(String(e))+'</p>';
 	}
 }
-
-function _agreementBand(value, warnThreshold, failThreshold){
-	if(value===null || value===undefined) return 'unknown';
-	if(value < failThreshold) return 'fail';
 	if(value < warnThreshold) return 'warn';
 	return 'pass';
 }

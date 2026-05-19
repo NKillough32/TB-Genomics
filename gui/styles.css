@@ -1390,6 +1390,13 @@ footer {
   font-variant-numeric: tabular-nums;
   border: 1px solid #e2e8f0;
 }
+/* Alternating row stripes — even rows get a slightly darker tint per band */
+.snp-matrix tbody tr:nth-child(even) th         { background: #e9f0f7; }
+.snp-matrix tbody tr:nth-child(even) td         { background: #f1f5f9; }
+.snp-matrix tbody tr:nth-child(even) td.snp-close { background: #15803d; }
+.snp-matrix tbody tr:nth-child(even) td.snp-mid   { background: #fde047; }
+.snp-matrix tbody tr:nth-child(even) td.snp-far   { background: #fca5a5; }
+.snp-matrix tbody tr:nth-child(even) td.snp-self  { background: #e9f0f7; color: #94a3b8; }
 
 .snp-matrix tr:hover td,
 .snp-matrix tr:hover th { filter: brightness(0.93); }

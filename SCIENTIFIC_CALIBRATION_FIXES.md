@@ -144,32 +144,35 @@ These issues require design changes beyond parameter tuning and are noted for fu
 ---
 
 ### Issue 5: Outbreaker Reports Marginal Mode Ancestry Only, Losing Posterior Uncertainty  
-**Status: ⚠️ BLOCKING**
+**Status: ✅ FIXED**
 
-- **Problem**: The R script exports `which.max(freq)` — the single most common ancestor across posterior samples — as the transmission link with a probability. This discards uncertainty information. A case where 40% of samples point to ancestor A and 38% to B is indistinguishable from one where 99% point to a single ancestor, both reported as "high confidence" if the mode ≥ 0.8.
+- **Problem**: The R script exported `which.max(freq)` — the single most common ancestor across posterior samples — as the transmission link with a probability. This discarded uncertainty information. A case where 40% of samples point to ancestor A and 38% to B was indistinguishable from one where 99% point to a single ancestor.
 
-- **Proposed Solution**:  
-  Export top 2–3 ancestral candidates with probabilities for each target case, allowing the synthesis layer to flag "uncertain ancestry" when posterior is diffuse.
+- **Fix Applied**:
+  - Modified `build_transmission_network()` in `run_outbreaker2.R` to export top 2–3 ancestral candidates with probabilities
+  - Each edge now includes `alternative_ancestors` list with rank, probability, and ancestor ID for candidates 2–3
+  - Modal (best) ancestor still used for link scoring to maintain backward compatibility
+  - JSON schema now supports exploring posterior uncertainty at synthesis layer
 
-- **Implementation Notes**:
-  - Modify R script to capture `names(sort(freq, decreasing=TRUE)[1:3])` and their probabilities
-  - Update JSON schema to support multiple candidates per case
-  - Add synthesis flag: `"uncertain_ancestry"` when top 2 candidates are within 10 percentage points
+- **Files Modified**:
+  - [outbreaker2/run_outbreaker2.R](outbreaker2/run_outbreaker2.R#L120-L145) — Alternative ancestors exported alongside modal mode
 
 ---
 
 ### Issue 10: No Index Case Identification  
-**Status: ⚠️ BLOCKING**
+**Status: ✅ FIXED**
 
-- **Problem**: Outbreaker2 uses `NA` in the `alpha` column to indicate a case with no identified ancestor (likely an import or index case). The R script discards these: `ancestry <- ancestry[!is.na(ancestry)]`. Cases frequently assigned NA ancestry (>50% of posterior samples) are actionable public health signals but are lost.
+- **Problem**: Outbreaker2 uses `NA` in the `alpha` column to indicate a case with no identified ancestor (likely an import or index case). The R script was discarding these: `ancestry <- ancestry[!is.na(ancestry)]`. Cases frequently assigned NA ancestry (>50% of posterior samples) are actionable public health signals but were lost.
 
-- **Proposed Solution**:  
-  Export `p_unlinked` (proportion of posterior samples where `alpha = NA`) per case, allowing synthesis to flag index cases or imports.
+- **Fix Applied**:
+  - Modified `build_transmission_network()` in `run_outbreaker2.R` to compute `p_unlinked` (proportion of posterior samples where `alpha = NA`) for each case
+  - Each node now includes:
+    - `p_unlinked`: Proportion of posterior samples with no identified ancestor (range 0–1)
+    - `likely_index_case`: Boolean flag (true if p_unlinked > 0.5)
+  - Synthesis layer can now identify and flag imports/index cases; distinguish star clusters from multi-source clusters
 
-- **Implementation Notes**:
-  - Compute proportion of NA assignments in ancestry chains
-  - Add to synthesis output: `"likely_index_case"` if p_unlinked > 0.5
-  - Use in cluster context: distinguish star clusters from index cases vs multi-source clusters
+- **Files Modified**:
+  - [outbreaker2/run_outbreaker2.R](outbreaker2/run_outbreaker2.R#L95-L188) — p_unlinked tracking and output
 
 ---
 
@@ -211,20 +214,22 @@ These issues require design changes beyond parameter tuning and are noted for fu
 | 1. Temporal window (45→90 days) | 🟢 | ✅ FIXED | `transmission_synthesis.py`, `epi_evidence.py`, `analytics.py` (7 endpoints) |
 | 4. SNP length delta | 🟢 | ✅ FIXED | `snp_validation.py` |
 | 7. Location overlap threshold | 🟢 | ✅ FIXED | `epi_evidence.py` |
-| 6. Node risk score formula | 🟡 | 📝 DOCUMENTED | (R script documentation needed) |
+| 5. Marginal mode with alternatives | 🟡 | ✅ FIXED | `run_outbreaker2.R` |
+| 10. Index case identification (p_unlinked) | 🟡 | ✅ FIXED | `run_outbreaker2.R` |
+| 12. Seasonality context | 🟡 | ✅ CONFIGURED | `transmission_synthesis.py` (env vars) |
+| 6. Node risk score formula | 🟡 | 📝 DOCUMENTED | (R script, weights 0.7/0.3) |
 | 8. Resistance mutation-level concordance | 🟡 | 📝 DOCUMENTED | `transmission_synthesis.py` |
 | 9. Circular comparison metric | 🟡 | 📝 DOCUMENTED | `compare_clustering_methods.py` |
 | 2. Investigation data truncation | 🔴 | ⚠️ BLOCKING | Requires DB schema + migration |
 | 3. Specimen vs transmission date | 🔴 | ⚠️ BLOCKING | Requires R script + data availability |
-| 5. Marginal mode only | 🔴 | ⚠️ BLOCKING | Requires R script output change |
-| 10. Index case identification | 🔴 | ⚠️ BLOCKING | Requires R script output change |
-| 11. Transmission generation tracking | 🔴 | ⚠️ PARTIAL | Can add to synthesis output |
-| 12. Seasonality context | 🔴 | ⚠️ PARTIAL | Requires KPI endpoint refactor |
+| 11. Transmission generation tracking | 🔴 | ⚠️ PARTIAL | TODO in synthesis layer |
 
 ---
 
 ## Next Steps
 
-1. **Validate Tier-1 fixes**: Run integration tests to confirm temporal window and SNP distance changes don't break existing clustering thresholds.
-2. **Plan Tier-2 parameterization**: Make node risk score and incidence baseline configurable via environment variables.
-3. **Schedule Tier-3 work**: Coordinate with TB programme leadership on investigation data preservation and R script calibration study (issues 2, 3, 5).
+1. **Validate all fixes**: Run integration tests to confirm temporal window (90 days), SNP distance (no length_delta), location overlap (≥1 day), and R script changes (alternative ancestors, p_unlinked export) don't break existing clustering or analysis workflows.
+2. **Integrate synthesis layer**: Update synthesis feature extraction to consume `alternative_ancestors` and `p_unlinked` from transmission network JSON for uncertainty flagging.
+3. **Schedule Tier-3 work**: Coordinate with TB programme leadership on two architectural changes:
+   - **Issue 2**: Investigate data preservation (requires DB schema, migration strategy)
+   - **Issue 3**: Specimen vs transmission date calibration study (if symptom_onset_date becomes available)

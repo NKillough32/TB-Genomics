@@ -283,10 +283,43 @@ def build_transmission_synthesis(
     net = _export_json("exports/transmission_network.json")
     edges = net.get("edges") or []
 
-    # TODO (Issue #11): Compute transmission generation depth from edges.
-    # BFS/DFS from identified index case (p_unlinked > 0.5) to measure chain length.
-    # Add to cluster summary: max_transmission_generation and generation_distribution (e.g., {"1": 5, "2": 3, "3": 1}).
-    # Use for risk assessment: chains with generation >= 3 suggest sustained transmission requiring escalated response.
+    # Issue #11: Compute transmission generation depth via BFS from index/import cases.
+    # Index cases are nodes with likely_index_case=True (p_unlinked > 0.5) from the R output.
+    # Chains with max generation >= 3 indicate sustained transmission requiring escalated response.
+    def _compute_generation_depths(all_nodes: list[dict], edge_list: list[dict]) -> dict[str, int]:
+        """BFS from index cases to assign generation depth to each case."""
+        children: dict[str, list[str]] = {}
+        for e in edge_list:
+            src = str(e.get("source") or "")
+            tgt = str(e.get("target") or "")
+            if src and tgt:
+                children.setdefault(src, []).append(tgt)
+        # Seed: cases flagged as likely index, or those with no incoming edges
+        all_targets = {str(e.get("target") or "") for e in edge_list if e.get("target")}
+        all_sources = {str(e.get("source") or "") for e in edge_list if e.get("source")}
+        index_cases = {
+            str(n.get("full_case_id") or n.get("case_id") or "")
+            for n in all_nodes
+            if n.get("likely_index_case") is True
+        }
+        # Fall back to nodes with no incoming edges if no explicit index cases
+        root_seeds = index_cases or (all_sources - all_targets)
+        depths: dict[str, int] = {}
+        queue = list(root_seeds)
+        for seed in queue:
+            depths[seed] = 0
+        visited = set(queue)
+        while queue:
+            node = queue.pop(0)
+            for child in children.get(node, []):
+                if child not in visited:
+                    depths[child] = depths[node] + 1
+                    visited.add(child)
+                    queue.append(child)
+        return depths
+
+    all_nodes = net.get("all_nodes") or []
+    generation_depths = _compute_generation_depths(all_nodes, edges)
 
     # Bulk-load structured epi records for all cases so per-pair queries are avoided.
     epi_records = load_epi_records_for_cases(db, case_ids=list(case_index.keys()))
@@ -553,6 +586,15 @@ def build_transmission_synthesis(
         first_specimen = min(specimen_dates).isoformat() if specimen_dates else None
         last_specimen = max(specimen_dates).isoformat() if specimen_dates else None
 
+        # Issue #11: Compute generation depth distribution for this cluster
+        cluster_member_ids = {m["case_id"] for m in member_rows}
+        cluster_depths = {cid: d for cid, d in generation_depths.items() if cid in cluster_member_ids}
+        gen_distribution: dict[str, int] = {}
+        for d in cluster_depths.values():
+            gen_distribution[str(d)] = gen_distribution.get(str(d), 0) + 1
+        max_generation = max(cluster_depths.values(), default=None)
+        sustained_transmission = max_generation is not None and max_generation >= 3
+
         by_cluster.append(
             {
                 "cluster_id": cluster_key,
@@ -573,6 +615,11 @@ def build_transmission_synthesis(
                         "previous_60_days": cases_prev_60,
                         "last_90_days": cases_last_90,
                         "previous_90_days": cases_prev_90,
+                    },
+                    "transmission_generations": {
+                        "max_generation": max_generation,
+                        "generation_distribution": gen_distribution,
+                        "sustained_transmission_flag": sustained_transmission,
                     },
                     "priority_score": c_priority,
                     "priority_band": score_band(c_priority),

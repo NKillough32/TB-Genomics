@@ -89,16 +89,48 @@ def main() -> None:
             samples = samples[:max_sequences]
 
 
-        # Replace current cluster assignment with sequence-derived clusters.
-        # cluster_investigations holds a direct FK to clusters, and TRUNCATE
-        # requires all referenced tables to be cleared in the same statement.
-        # TODO (Issue #2): TRUNCATE wipes all investigation data (assignee, notes, actions, risk band overrides).
-        # This destroys operational work history. Refactor to diff old vs new assignments:
-        # - Same members: keep record, update alert_flag
-        # - New members: flag "membership_updated"
-        # - Split: archive old, replicate to new clusters
-        # Requires: membership_changed_flag and previous_cluster_id fields in cluster_investigations table.
-        db.execute(text("TRUNCATE TABLE case_clusters, cluster_investigations, clusters"))
+        # Preserve investigation records across re-runs using a diff-based approach.
+        # Instead of TRUNCATE (which destroys assignee, notes, actions, risk band overrides),
+        # we load the existing cluster assignments, compare by membership, and only create
+        # new cluster_investigations rows for genuinely new clusters. Unchanged clusters
+        # (same UUID derived from same members) keep all their investigation history.
+
+        # Load existing cluster memberships keyed by cluster_id
+        existing_cluster_rows = db.execute(
+            text("SELECT cluster_id::text, sample_id::text FROM case_clusters")
+        ).mappings().all()
+        existing_clusters: dict[str, set[str]] = {}
+        for r in existing_cluster_rows:
+            existing_clusters.setdefault(r["cluster_id"], set()).add(r["sample_id"])
+
+        # Compute new cluster UUIDs upfront (deterministic from members) so we can diff
+        new_cluster_uuids: set[str] = set()
+        for members in cluster_components:
+            ns_key = "seqcluster:" + "|".join(sorted(members))
+            new_cluster_uuids.add(str(uuid.uuid5(uuid.NAMESPACE_DNS, ns_key)))
+
+        # Remove clusters that no longer exist and their case_clusters rows.
+        # Preserve cluster_investigations for surviving clusters.
+        stale_cluster_ids = set(existing_clusters.keys()) - new_cluster_uuids
+        if stale_cluster_ids:
+            for stale_id in stale_cluster_ids:
+                db.execute(
+                    text("DELETE FROM case_clusters WHERE cluster_id = CAST(:cid AS uuid)"),
+                    {"cid": stale_id},
+                )
+                db.execute(
+                    text("DELETE FROM clusters WHERE cluster_id = CAST(:cid AS uuid)"),
+                    {"cid": stale_id},
+                )
+
+        # Remove all case_cluster assignments for surviving clusters so they can be re-inserted
+        # (membership may have changed even if UUID is the same when members change).
+        # The cluster and cluster_investigations rows are kept intact.
+        for surviving_id in new_cluster_uuids.intersection(existing_clusters.keys()):
+            db.execute(
+                text("DELETE FROM case_clusters WHERE cluster_id = CAST(:cid AS uuid)"),
+                {"cid": surviving_id},
+            )
 
         summary = {
             "status": "ok",
@@ -196,13 +228,17 @@ def main() -> None:
 
         assignments = []
         for idx, members in enumerate(sorted(cluster_components, key=len, reverse=True), start=1):
-            namespace_key = "seqcluster:" + "|".join(members)
+            namespace_key = "seqcluster:" + "|".join(sorted(members))
             cluster_uuid = str(uuid.uuid5(uuid.NAMESPACE_DNS, namespace_key))
+            is_new_cluster = cluster_uuid not in existing_clusters
 
             db.execute(
                 text(
                     "INSERT INTO clusters (cluster_id, snp_distance, investigation_status, alert_flag) "
-                    "VALUES (:cluster_id, :snp_distance, :investigation_status, :alert_flag)"
+                    "VALUES (:cluster_id, :snp_distance, :investigation_status, :alert_flag) "
+                    "ON CONFLICT (cluster_id) DO UPDATE SET "
+                    "  alert_flag = EXCLUDED.alert_flag, "
+                    "  snp_distance = EXCLUDED.snp_distance"
                 ),
                 {
                     "cluster_id": cluster_uuid,
@@ -238,6 +274,7 @@ def main() -> None:
                     "cluster_label": f"SEQ-{idx:03d}",
                     "cluster_id": cluster_uuid,
                     "case_count": len(members),
+                    "investigation_preserved": not is_new_cluster,
                 }
             )
 

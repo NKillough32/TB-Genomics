@@ -42,6 +42,7 @@ def main() -> None:
                 """
                 SELECT c.pseudonymised_case_id::text AS case_id,
                        c.specimen_date,
+                       c.symptom_onset_date,
                        cs.sequence AS existing_sequence
                 FROM cases c
                 LEFT JOIN consensus_sequences cs
@@ -52,7 +53,7 @@ def main() -> None:
         ).mappings().all()
 
         with open("exports/cases.csv", "w", newline="", encoding="utf-8") as csv_file:
-            writer = csv.DictWriter(csv_file, fieldnames=["case_id", "sample_date"])
+            writer = csv.DictWriter(csv_file, fieldnames=["case_id", "sample_date", "symptom_onset_date"])
             writer.writeheader()
 
             for row in rows:
@@ -63,7 +64,9 @@ def main() -> None:
                     sample_date_str = str(sample_date)
                 else:
                     sample_date_str = "2025-01-01"
-                writer.writerow({"case_id": row["case_id"], "sample_date": sample_date_str})
+                onset = row["symptom_onset_date"]
+                onset_str = onset.isoformat() if isinstance(onset, date) else (str(onset) if onset else "")
+                writer.writerow({"case_id": row["case_id"], "sample_date": sample_date_str, "symptom_onset_date": onset_str})
 
         raw_sequences = []
         for row in rows:

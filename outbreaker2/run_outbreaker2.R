@@ -34,13 +34,21 @@ tryCatch({
   f_dens <- f_raw / sum(f_raw)
 
   # Prepare data for outbreaker
-  # TODO (Issue #3): Currently using sample_date (specimen collection date), but Outbreaker2 expects
-  # symptom onset or notification date for accurate serial interval prior. In TB, specimens are collected
-  # 1-6 weeks AFTER symptom onset, systematically shifting dates later and compressing inferred
-  # transmission intervals. If symptom_onset_date becomes available, use:
-  #   case_dates <- as.Date(coalesce(cases$symptom_onset_date, cases$sample_date))
-  # This would improve accuracy of ancestor assignments.
-  case_dates <- as.Date(cases$sample_date)
+  # Issue #3: Prefer symptom_onset_date for the serial interval prior; fall back to sample_date.
+  # In TB, specimens are collected 1-6 weeks AFTER symptom onset, so sample_date alone
+  # compresses inferred transmission intervals and biases ancestor assignments toward recent cases.
+  has_onset_col <- "symptom_onset_date" %in% names(cases)
+  date_col_used <- if (has_onset_col && any(nchar(trimws(cases$symptom_onset_date)) > 0, na.rm = TRUE)) {
+    onset_parsed <- suppressWarnings(as.Date(ifelse(
+      nchar(trimws(cases$symptom_onset_date)) > 0, cases$symptom_onset_date, cases$sample_date
+    )))
+    cat("Using symptom_onset_date (with sample_date fallback) for Outbreaker2 date prior.\n")
+    onset_parsed
+  } else {
+    cat("symptom_onset_date not available; using sample_date for Outbreaker2 date prior.\n")
+    as.Date(cases$sample_date)
+  }
+  case_dates <- date_col_used
   names(case_dates) <- as.character(cases$case_id)
   dna_ids <- as.character(labels(dna))
   aligned_dates <- case_dates[dna_ids]
@@ -92,6 +100,8 @@ tryCatch({
     edge_list <- list()
     incoming <- setNames(rep(0, n_cases), ids)
     outgoing <- setNames(rep(0, n_cases), ids)
+    # Issue #10: Track proportion of unlinked (NA) ancestry for each case to identify imports/index cases
+    p_unlinked <- setNames(rep(NA_real_, n_cases), ids)
 
     if (length(alpha_cols) == n_cases) {
       alpha_matrix <- as.matrix(chain_local[, alpha_cols, drop = FALSE])
@@ -100,8 +110,12 @@ tryCatch({
       posterior_samples <- nrow(alpha_post)
 
       for (target_idx in seq_len(n_cases)) {
-        ancestry <- suppressWarnings(as.integer(alpha_post[, target_idx]))
-        ancestry <- ancestry[!is.na(ancestry)]
+        alpha_samples <- suppressWarnings(as.integer(alpha_post[, target_idx]))
+        # Issue #10: Calculate proportion unlinked before filtering
+        n_unlinked <- sum(is.na(alpha_samples))
+        p_unlinked[ids[target_idx]] <- round(n_unlinked / max(1, length(alpha_samples)), 4)
+        
+        ancestry <- alpha_samples[!is.na(alpha_samples)]
         ancestry <- ancestry[ancestry >= 1 & ancestry <= n_cases]
 
         if (length(ancestry) == 0) {
@@ -114,13 +128,27 @@ tryCatch({
         }
 
         freq <- table(ancestry)
-        best_ancestor_idx <- as.integer(names(freq)[which.max(freq)])
-        edge_prob <- as.numeric(max(freq)) / max(1, nrow(alpha_post))
+        sorted_freq <- sort(freq, decreasing = TRUE)
+        # Issue #5: Export top alternative ancestors (up to 3 total candidates) with probabilities
+        best_ancestor_idx <- as.integer(names(sorted_freq)[1])
+        edge_prob <- as.numeric(sorted_freq[1]) / max(1, nrow(alpha_post))
 
         src <- ids[best_ancestor_idx]
         dst <- ids[target_idx]
         outgoing[src] <- outgoing[src] + edge_prob
         incoming[dst] <- incoming[dst] + edge_prob
+
+        # Issue #5: Build alternative ancestor candidates
+        alternative_ancestors <- list()
+        for (cand_rank in 2:min(3, length(sorted_freq))) {
+          alt_ancestor_idx <- as.integer(names(sorted_freq)[cand_rank])
+          alt_prob <- as.numeric(sorted_freq[cand_rank]) / max(1, nrow(alpha_post))
+          alternative_ancestors[[cand_rank - 1]] <- list(
+            ancestor_id = ids[alt_ancestor_idx],
+            probability = round(alt_prob, 4),
+            rank = cand_rank
+          )
+        }
 
         edge_list[[length(edge_list) + 1]] <- list(
           source = src,
@@ -130,7 +158,8 @@ tryCatch({
             edge_prob >= 0.8, "high",
             ifelse(edge_prob >= 0.6, "medium", "low")
           ),
-          inference = "posterior_marginal_mode"
+          inference = "posterior_marginal_mode",
+          alternative_ancestors = alternative_ancestors
         )
       }
     }
@@ -159,7 +188,10 @@ tryCatch({
           sum(vapply(
             edge_list, function(e) e$target == case_id, logical(1)
           ))
-        )
+        ),
+        # Issue #10: Proportion of posterior samples with NA (unlinked) ancestry
+        p_unlinked = p_unlinked[case_id],
+        likely_index_case = if (is.na(p_unlinked[case_id])) NA else (p_unlinked[case_id] > 0.5)
       )
     })
 

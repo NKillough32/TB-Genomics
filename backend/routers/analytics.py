@@ -1154,7 +1154,7 @@ def case_pair_evidence(
     scoring_profile: str = "default_v1",
     snp_strong_threshold: int = Query(5, ge=0, le=100),
     snp_moderate_threshold: int = Query(12, ge=1, le=200),
-    temporal_window_days: int = Query(45, ge=1, le=365),
+    temporal_window_days: int = Query(90, ge=1, le=365),
     db: Session = Depends(get_db),
 ):
     """Build structured transmission-link evidence for case pairs."""
@@ -1216,7 +1216,7 @@ def transmission_evidence(
     scoring_profile: str = "default_v1",
     snp_strong_threshold: int = Query(5, ge=0, le=100),
     snp_moderate_threshold: int = Query(12, ge=1, le=200),
-    temporal_window_days: int = Query(45, ge=1, le=365),
+    temporal_window_days: int = Query(90, ge=1, le=365),
     db: Session = Depends(get_db),
 ):
     """Return a full structured transmission evidence card for a single case pair."""
@@ -1816,7 +1816,7 @@ def case_pair_calibration(
     scoring_profile: str = "default_v1",
     snp_strong_threshold: int = Query(5, ge=0, le=100),
     snp_moderate_threshold: int = Query(12, ge=1, le=200),
-    temporal_window_days: int = Query(45, ge=1, le=365),
+    temporal_window_days: int = Query(90, ge=1, le=365),
     db: Session = Depends(get_db),
 ):
     """Compare model pair interpretations with reviewer classifications."""
@@ -2008,7 +2008,7 @@ def pair_triage_queue(
     scoring_profile: str = "default_v1",
     snp_strong_threshold: int = Query(5, ge=0, le=100),
     snp_moderate_threshold: int = Query(12, ge=1, le=200),
-    temporal_window_days: int = Query(45, ge=1, le=365),
+    temporal_window_days: int = Query(90, ge=1, le=365),
     db: Session = Depends(get_db),
 ):
     """Operational queue of case pairs ranked by review priority."""
@@ -2571,7 +2571,7 @@ def transmission_synthesis(
     min_posterior: float = Query(0.0, ge=0.0, le=1.0),
     low_snp_threshold: int = Query(12, ge=1, le=100),
     high_snp_contradiction_threshold: int = Query(20, ge=1, le=200),
-    temporal_window_days: int = Query(45, ge=1, le=365),
+    temporal_window_days: int = Query(90, ge=1, le=365),
     high_posterior_threshold: float = Query(0.7, ge=0.0, le=1.0),
     rapid_growth_recent_days: int = Query(90, ge=7, le=365),
     rapid_growth_case_threshold: int = Query(4, ge=1, le=100),
@@ -2598,7 +2598,7 @@ def transmission_synthesis_for_cluster(
     min_posterior: float = Query(0.0, ge=0.0, le=1.0),
     low_snp_threshold: int = Query(12, ge=1, le=100),
     high_snp_contradiction_threshold: int = Query(20, ge=1, le=200),
-    temporal_window_days: int = Query(45, ge=1, le=365),
+    temporal_window_days: int = Query(90, ge=1, le=365),
     high_posterior_threshold: float = Query(0.7, ge=0.0, le=1.0),
     rapid_growth_recent_days: int = Query(90, ge=7, le=365),
     rapid_growth_case_threshold: int = Query(4, ge=1, le=100),
@@ -2625,7 +2625,7 @@ def cluster_risk_summary(
     min_posterior: float = Query(0.0, ge=0.0, le=1.0),
     low_snp_threshold: int = Query(12, ge=1, le=100),
     high_snp_contradiction_threshold: int = Query(20, ge=1, le=200),
-    temporal_window_days: int = Query(45, ge=1, le=365),
+    temporal_window_days: int = Query(90, ge=1, le=365),
     high_posterior_threshold: float = Query(0.7, ge=0.0, le=1.0),
     rapid_growth_recent_days: int = Query(90, ge=7, le=365),
     rapid_growth_case_threshold: int = Query(4, ge=1, le=100),

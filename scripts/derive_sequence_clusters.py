@@ -92,6 +92,12 @@ def main() -> None:
         # Replace current cluster assignment with sequence-derived clusters.
         # cluster_investigations holds a direct FK to clusters, and TRUNCATE
         # requires all referenced tables to be cleared in the same statement.
+        # TODO (Issue #2): TRUNCATE wipes all investigation data (assignee, notes, actions, risk band overrides).
+        # This destroys operational work history. Refactor to diff old vs new assignments:
+        # - Same members: keep record, update alert_flag
+        # - New members: flag "membership_updated"
+        # - Split: archive old, replicate to new clusters
+        # Requires: membership_changed_flag and previous_cluster_id fields in cluster_investigations table.
         db.execute(text("TRUNCATE TABLE case_clusters, cluster_investigations, clusters"))
 
         summary = {

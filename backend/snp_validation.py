@@ -39,7 +39,9 @@ def validated_snp_distance(seq_a: str, seq_b: str) -> SnpDistanceValidation:
             distance += 1
 
     length_delta = abs(len(left) - len(right))
-    distance += length_delta
+    # Do NOT add length_delta to distance: sequence length differences are typically
+    # assembly/trimming artefacts, not true biological variants. Report separately
+    # for transparency but exclude from SNP count to avoid false clustering.
 
     if not left or not right:
         status = "missing_sequence"

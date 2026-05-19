@@ -34,6 +34,12 @@ tryCatch({
   f_dens <- f_raw / sum(f_raw)
 
   # Prepare data for outbreaker
+  # TODO (Issue #3): Currently using sample_date (specimen collection date), but Outbreaker2 expects
+  # symptom onset or notification date for accurate serial interval prior. In TB, specimens are collected
+  # 1-6 weeks AFTER symptom onset, systematically shifting dates later and compressing inferred
+  # transmission intervals. If symptom_onset_date becomes available, use:
+  #   case_dates <- as.Date(coalesce(cases$symptom_onset_date, cases$sample_date))
+  # This would improve accuracy of ancestor assignments.
   case_dates <- as.Date(cases$sample_date)
   names(case_dates) <- as.character(cases$case_id)
   dna_ids <- as.character(labels(dna))

@@ -1,3 +1,13 @@
+"""Compare sequence clustering assignments with Outbreaker2 transmission inference.
+
+LIMITATION: This comparison is circular and not independent. Outbreaker2 uses the
+sequence-derived clusters as its input case set, so precision/recall against sequence
+clustering measures whether outbreaker agrees with itself-via-sequence clustering.
+This inflates agreement metrics. For true independent comparison, both methods should
+be run on the full case set (not outbreaker on a sequence-derived subset) and compared
+against a gold standard of epidemiologically-confirmed transmission links (if available).
+"""
+
 import csv
 import json
 import os

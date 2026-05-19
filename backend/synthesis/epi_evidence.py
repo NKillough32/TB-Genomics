@@ -245,7 +245,7 @@ def compute_epi_evidence(
     *,
     specimen_date_a: date | None = None,
     specimen_date_b: None | date = None,
-    temporal_window_days: int = 45,
+    temporal_window_days: int = 90,  # First-generation TB links typically span 60–150 days
 ) -> dict[str, Any]:
     """
     Compute structured epi evidence for a single case pair from pre-loaded records.
@@ -401,9 +401,9 @@ def compute_epi_evidence(
     has_strong_contact = any(s["evidence_weight"] >= 0.6 for s in shared_contacts)
     has_strong_location = any(
         s["evidence_weight"] >= 0.6
-        and (s["attendance_overlap_days"] is None or s["attendance_overlap_days"] >= 0)
+        and (s["attendance_overlap_days"] is None or s["attendance_overlap_days"] >= 1)
         for s in shared_locations
-    )
+    )  # Require ≥1 day overlap; 0 days means adjacent days or missing data
     has_any_shared = bool(shared_contacts or shared_locations or shared_exposures)
     has_plausible_time = temporal_overlap in {"plausible", "marginal"}
 

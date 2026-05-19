@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import csv
+import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
@@ -33,13 +34,18 @@ from backend.synthesis.scoring import (
 class SynthesisConfig:
     low_snp_threshold: int = 12
     high_snp_contradiction_threshold: int = 20
-    temporal_window_days: int = 45
+    temporal_window_days: int = 90  # First-generation TB links typically span 60–150 days (diagnostic delay ~3 months)
     high_posterior_threshold: float = 0.7
     min_posterior: float = 0.0
     rapid_growth_recent_days: int = 90
     rapid_growth_case_threshold: int = 4
     wide_date_spread_days: int = 180
     temporal_backfill_tolerance_days: int = 30
+    # Issue #12: Seasonality baseline for KPI context. Set via environment variables:
+    # TB_INCIDENCE_BASELINE_PER_100K (default 5.0, UK TB rates)
+    # SYSTEM_POPULATION (default 1,900,000 for Northern Ireland)
+    incidence_baseline_per_100k: float = float(os.getenv("TB_INCIDENCE_BASELINE_PER_100K", "5.0"))
+    system_population: int = int(os.getenv("SYSTEM_POPULATION", "1900000"))
 
 
 def _export_json(path: str) -> dict[str, Any]:
@@ -139,6 +145,14 @@ def _major_lineage(lineage_str: str) -> str:
 
 
 def _resistance_profile_concordance(source_profile: Any, target_profile: Any) -> str:
+    """Compare resistance profiles between two cases.
+
+    LIMITATION: Compares the set of resistant drugs only, not mutation-level identity.
+    Two cases with rifampicin resistance but different rpoB mutations (e.g. S450L vs H445Y)
+    are marked concordant, which may indicate convergent evolution rather than true transmission.
+    For mutation-level specificity, would need to compare predicted_drug_resistance at the
+    individual_resistance_mutations level; this is not yet implemented.
+    """
     src = _resistant_drug_set(source_profile)
     tgt = _resistant_drug_set(target_profile)
     if not src and not tgt:
@@ -268,6 +282,11 @@ def build_transmission_synthesis(
 
     net = _export_json("exports/transmission_network.json")
     edges = net.get("edges") or []
+
+    # TODO (Issue #11): Compute transmission generation depth from edges.
+    # BFS/DFS from identified index case (p_unlinked > 0.5) to measure chain length.
+    # Add to cluster summary: max_transmission_generation and generation_distribution (e.g., {"1": 5, "2": 3, "3": 1}).
+    # Use for risk assessment: chains with generation >= 3 suggest sustained transmission requiring escalated response.
 
     # Bulk-load structured epi records for all cases so per-pair queries are avoided.
     epi_records = load_epi_records_for_cases(db, case_ids=list(case_index.keys()))

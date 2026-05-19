@@ -11,6 +11,15 @@ from backend.database import SessionLocal
 
 os.makedirs("logs", exist_ok=True)
 
+# Ensure fallback env vars are set for lineage/DR tools (enables WSL/Docker fallback)
+# These allow run_lineage_dr_validation to use alternative runners if local tools fail
+if os.getenv("TBPROFILER_WSL_FALLBACK") is None:
+    os.environ["TBPROFILER_WSL_FALLBACK"] = "1"
+if os.getenv("TBPROFILER_DOCKER_FALLBACK") is None:
+    os.environ["TBPROFILER_DOCKER_FALLBACK"] = "1"
+if os.getenv("TBPROFILER_WSL_ENV") is None:
+    os.environ["TBPROFILER_WSL_ENV"] = "tbtools"
+
 # Use the current Python interpreter (venv)
 python_exe = sys.executable
 

@@ -22,7 +22,7 @@ echo Starting TB backend on http://localhost:8000
 echo DATABASE_URL=%DATABASE_URL%
 echo.
 
-".venv\Scripts\python.exe" -m uvicorn backend.app:app --reload --reload-dirs backend
+".venv\Scripts\python.exe" -m uvicorn backend.app:app --reload --reload-dir backend
 
 endlocal
 

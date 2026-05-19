@@ -54,7 +54,23 @@ Write-Host "TBPROFILER_WSL_ENV=$env:TBPROFILER_WSL_ENV"
 Write-Host "TBPROFILER_WSL_FALLBACK=$env:TBPROFILER_WSL_FALLBACK"
 Write-Host "TBPROFILER_DOCKER_FALLBACK=$env:TBPROFILER_DOCKER_FALLBACK"
 
-Start-Process -FilePath $venvPython -ArgumentList @('-m', 'uvicorn', 'backend.app:app', '--reload', '--reload-dirs', 'backend') -WorkingDirectory $root | Out-Null
+# Create a temporary batch file to launch backend with env vars (Start-Process doesn't inherit env vars)
+$backendBatch = Join-Path $root '.launch_backend.bat'
+$backendScript = @"
+@echo off
+setlocal enabledelayedexpansion
+set DATABASE_URL=$env:DATABASE_URL
+set TBPROFILER_WSL_ENV=$env:TBPROFILER_WSL_ENV
+set TBPROFILER_WSL_FALLBACK=$env:TBPROFILER_WSL_FALLBACK
+set TBPROFILER_DOCKER_FALLBACK=$env:TBPROFILER_DOCKER_FALLBACK
+cd /d "$root"
+"$venvPython" -m uvicorn backend.app:app --reload --reload-dir backend
+endlocal
+"@
+$backendScript | Out-File -FilePath $backendBatch -Encoding ASCII -Force
+Start-Process -FilePath 'cmd.exe' -ArgumentList @('/k', $backendBatch) -WorkingDirectory $root | Out-Null
+
+# Launch GUI (doesn't need env vars)
 Start-Process -FilePath $venvPython -ArgumentList @('-m', 'http.server', '8081') -WorkingDirectory (Join-Path $root 'gui') | Out-Null
 
 for ($i = 0; $i -lt 30; $i++) {
@@ -83,7 +99,21 @@ if (-not $SkipBrowser) {
 
 Write-Host '[INFO] Running lineage/DR validation preflight in background to refresh tool status...'
 try {
-    Start-Process -FilePath $venvPython -ArgumentList @(Join-Path $root 'scripts\run_lineage_dr_validation.py') -WorkingDirectory $root | Out-Null
+    # Create temp batch for validation job with proper env vars
+    $validationBatch = Join-Path $root '.launch_validation.bat'
+    $validationScript = @"
+@echo off
+setlocal enabledelayedexpansion
+set DATABASE_URL=$env:DATABASE_URL
+set TBPROFILER_WSL_ENV=$env:TBPROFILER_WSL_ENV
+set TBPROFILER_WSL_FALLBACK=$env:TBPROFILER_WSL_FALLBACK
+set TBPROFILER_DOCKER_FALLBACK=$env:TBPROFILER_DOCKER_FALLBACK
+cd /d "$root"
+"$venvPython" scripts\run_lineage_dr_validation.py
+endlocal
+"@
+    $validationScript | Out-File -FilePath $validationBatch -Encoding ASCII -Force
+    Start-Process -FilePath 'cmd.exe' -ArgumentList @('/c', $validationBatch) -WindowStyle Hidden -WorkingDirectory $root | Out-Null
 } catch {
     Write-Host "[WARN] Could not start lineage/DR validation preflight: $($_.Exception.Message)"
 }

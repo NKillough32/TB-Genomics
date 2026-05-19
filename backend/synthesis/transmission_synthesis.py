@@ -11,7 +11,15 @@ from sqlalchemy.orm import Session
 
 from backend.synthesis.epi_evidence import compute_epi_evidence, load_epi_records_for_cases
 from backend.synthesis.explanations import category_display, interpretation_text, recommended_actions
-from backend.synthesis.flags import cluster_flags, pair_flags
+from backend.synthesis.flags import (
+    FLAG_LINEAGE_DISCORDANCE,
+    FLAG_LOW_SEQUENCE_COVERAGE_FOR_PAIR,
+    FLAG_RESISTANCE_PROFILE_DISCORDANCE,
+    FLAG_RESISTANCE_PROFILE_PARTIAL_OVERLAP,
+    FLAG_TEMPORAL_IMPLAUSIBLE,
+    cluster_flags,
+    pair_flags,
+)
 from backend.synthesis.scoring import (
     cluster_priority_score,
     confidence_category,
@@ -368,17 +376,17 @@ def build_transmission_synthesis(
         )
 
         if lineage_concordance == "discordant":
-            p_flags.append("lineage_discordance")
+            p_flags.append(FLAG_LINEAGE_DISCORDANCE)
         # Note: lineage_concordance is informational; not added to flags (no action needed)
 
         if resistance_concordance == "discordant":
-            p_flags.append("resistance_profile_discordance")
+            p_flags.append(FLAG_RESISTANCE_PROFILE_DISCORDANCE)
         elif resistance_concordance == "partial_overlap":
-            p_flags.append("resistance_profile_partial_overlap")
+            p_flags.append(FLAG_RESISTANCE_PROFILE_PARTIAL_OVERLAP)
         # Note: resistance_profile_concordance is informational; not added to flags
 
         if temporal_delta_days is not None and temporal_delta_days < -cfg.temporal_backfill_tolerance_days:
-            p_flags.append("temporally_implausible_direction")
+            p_flags.append(FLAG_TEMPORAL_IMPLAUSIBLE)
 
         low_depth_threshold = 10.0
         low_coverage_threshold = 0.90
@@ -387,7 +395,7 @@ def build_transmission_synthesis(
         source_low_cov = src.get("coverage_breadth") is not None and float(src["coverage_breadth"]) < low_coverage_threshold
         target_low_cov = tgt.get("coverage_breadth") is not None and float(tgt["coverage_breadth"]) < low_coverage_threshold
         if source_low_depth or target_low_depth or source_low_cov or target_low_cov:
-            p_flags.append("low_sequence_coverage_for_pair")
+            p_flags.append(FLAG_LOW_SEQUENCE_COVERAGE_FOR_PAIR)
 
         category = confidence_category(
             snp_distance=snp,
@@ -397,9 +405,9 @@ def build_transmission_synthesis(
             high_snp_contradiction_threshold=cfg.high_snp_contradiction_threshold,
             high_posterior_threshold=cfg.high_posterior_threshold,
         )
-        if "lineage_discordance" in p_flags:
+        if FLAG_LINEAGE_DISCORDANCE in p_flags:
             category = "contradictory"
-        elif "resistance_profile_discordance" in p_flags:
+        elif FLAG_RESISTANCE_PROFILE_DISCORDANCE in p_flags:
             if category == "strong_support":
                 category = "moderate_support"
             elif category == "moderate_support":

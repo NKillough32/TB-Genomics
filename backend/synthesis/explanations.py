@@ -1,5 +1,20 @@
 from __future__ import annotations
 
+from backend.synthesis.flags import (
+    FLAG_CROSS_REGION,
+    FLAG_HIGH_POSTERIOR_HIGH_SNP,
+    FLAG_LINEAGE_DISCORDANCE,
+    FLAG_LOW_CONF_OUTBREAKER_EDGE,
+    FLAG_LOW_SEQUENCE_COVERAGE_FOR_PAIR,
+    FLAG_LOW_SNP_NO_LINK,
+    FLAG_MISSING_SEQUENCE_OR_QC,
+    FLAG_RAPID_GROWTH,
+    FLAG_RESISTANCE_IN_CLUSTER,
+    FLAG_RESISTANCE_PROFILE_DISCORDANCE,
+    FLAG_RESISTANCE_PROFILE_PARTIAL_OVERLAP,
+    FLAG_TEMPORAL_IMPLAUSIBLE,
+    FLAG_WIDE_DATE_SPREAD,
+)
 from backend.synthesis.scoring import category_label
 
 
@@ -13,19 +28,19 @@ _CATEGORY_TEXT = {
 }
 
 _FLAG_ACTIONS = {
-    "high_posterior_high_snp_distance": "Review sequence quality, contamination indicators, and metadata consistency.",
-    "low_snp_no_known_epi_or_geographic_link": "Prioritise epidemiology review for travel, social links, and missing exposure history.",
-    "same_cluster_wide_date_spread": "Check for cluster persistence, reactivation, or multiple transmission generations.",
-    "resistance_signal_inside_cluster": "Escalate to AMR-focused review and verify resistance mutation concordance.",
-    "cross_region_cluster": "Coordinate cross-region case review and confirm movement/exposure links.",
-    "rapidly_growing_cluster": "Escalate contact tracing and increase cluster monitoring frequency.",
-    "missing_sequence_or_qc_data": "Request missing sequencing/QC completion before final sign-off.",
-    "low_confidence_outbreaker_edge": "Treat inferred direction cautiously and seek supporting evidence.",
-    "lineage_discordance": "Verify lineage calls for both cases; discordant lineages are a strong counter-indication for direct transmission.",
-    "resistance_profile_discordance": "Review drug resistance mutations for both cases; inconsistent profiles reduce transmission probability.",
-    "resistance_profile_partial_overlap": "Resistance profiles partially overlap; consider whether resistance was acquired within the chain.",
-    "temporally_implausible_directionality": "Source specimen postdates target — review dates and assess whether direction of transmission is reliable.",
-    "low_sequence_coverage_for_pair": "One or both sequences have low depth or coverage; SNP-based evidence should be treated with caution.",
+    FLAG_HIGH_POSTERIOR_HIGH_SNP: "Review sequence quality, contamination indicators, and metadata consistency.",
+    FLAG_LOW_SNP_NO_LINK: "Prioritise epidemiology review for travel, social links, and missing exposure history.",
+    FLAG_WIDE_DATE_SPREAD: "Check for cluster persistence, reactivation, or multiple transmission generations.",
+    FLAG_RESISTANCE_IN_CLUSTER: "Escalate to AMR-focused review and verify resistance mutation concordance.",
+    FLAG_CROSS_REGION: "Coordinate cross-region case review and confirm movement/exposure links.",
+    FLAG_RAPID_GROWTH: "Escalate contact tracing and increase cluster monitoring frequency.",
+    FLAG_MISSING_SEQUENCE_OR_QC: "Request missing sequencing/QC completion before final sign-off.",
+    FLAG_LOW_CONF_OUTBREAKER_EDGE: "Treat inferred direction cautiously and seek supporting evidence.",
+    FLAG_LINEAGE_DISCORDANCE: "Verify lineage calls for both cases; discordant lineages are a strong counter-indication for direct transmission.",
+    FLAG_RESISTANCE_PROFILE_DISCORDANCE: "Review drug resistance mutations for both cases; inconsistent profiles reduce transmission probability.",
+    FLAG_RESISTANCE_PROFILE_PARTIAL_OVERLAP: "Resistance profiles partially overlap; consider whether resistance was acquired within the chain.",
+    FLAG_TEMPORAL_IMPLAUSIBLE: "Source specimen postdates target — review dates and assess whether direction of transmission is reliable.",
+    FLAG_LOW_SEQUENCE_COVERAGE_FOR_PAIR: "One or both sequences have low depth or coverage; SNP-based evidence should be treated with caution.",
 }
 
 

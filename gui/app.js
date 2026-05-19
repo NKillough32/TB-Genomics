@@ -752,17 +752,81 @@ function _cicRenderActions(d){
 	document.getElementById('cicActionsTable').innerHTML = html;
 }
 
-function _cicRenderAnalyticsWhy(data){
+function _cicPairKey(caseA, caseB){
+	const left=String(caseA||'').trim();
+	const right=String(caseB||'').trim();
+	if(!left && !right) return '';
+	return [left, right].sort().join('::');
+}
+
+function _cicFormatDistribution(distribution){
+	const entries=Object.entries(distribution||{}).sort((a,b)=>{
+		const countDiff=Number(b[1]||0)-Number(a[1]||0);
+		return countDiff || String(a[0]).localeCompare(String(b[0]));
+	});
+	if(!entries.length) return '';
+	return entries.map(([label,count])=>`${label}: ${count}`).join(' | ');
+}
+
+function _cicGrowthWindowSummary(growthWindows){
+	if(!growthWindows || typeof growthWindows!=='object') return [];
+	return [
+		['30 days', growthWindows.last_30_days, growthWindows.previous_30_days],
+		['60 days', growthWindows.last_60_days, growthWindows.previous_60_days],
+		['90 days', growthWindows.last_90_days, growthWindows.previous_90_days],
+	].filter(([, recent, previous])=>Number.isFinite(Number(recent)) || Number.isFinite(Number(previous)))
+		.map(([label, recent, previous])=>`${label}: ${Number(recent||0)} recent vs ${Number(previous||0)} prior`);
+}
+
+function _cicSnpHistogramSummary(pairs){
+	const bins=[
+		{label:'0-5 SNPs', min:0, max:5, count:0},
+		{label:'6-12 SNPs', min:6, max:12, count:0},
+		{label:'13-20 SNPs', min:13, max:20, count:0},
+		{label:'21+ SNPs', min:21, max:Number.POSITIVE_INFINITY, count:0},
+	];
+	for(const pair of (Array.isArray(pairs)?pairs:[])){
+		const snp=Number(pair?.snp_distance);
+		if(!Number.isFinite(snp) || snp<0) continue;
+		const bucket=bins.find(entry=>snp>=entry.min && snp<=entry.max);
+		if(bucket) bucket.count+=1;
+	}
+	return bins.filter(bin=>bin.count>0).map(bin=>`${bin.label}: ${bin.count} pairs`);
+}
+
+function _cicBuildSynthesisPairIndex(cluster){
+	const index=new Map();
+	for(const pair of (Array.isArray(cluster?.pairwise_transmission_evidence)?cluster.pairwise_transmission_evidence:[])){
+		const key=_cicPairKey(pair.source, pair.target);
+		if(key) index.set(key, pair);
+	}
+	return index;
+}
+
+function _cicRenderAnalyticsWhy(data, synthesisCluster, evidenceData){
 	const box=document.getElementById('cicAnalyticsWhy');
 	if(!box) return;
-	if(!data){
+	if(!data && !synthesisCluster && !evidenceData){
 		box.innerHTML='<p class="hint">No prioritisation data available.</p>';
 		return;
 	}
-	const reasons=Array.isArray(data.reasons)?data.reasons:[];
-	const metrics=data.metrics||{};
-	let html=`<div class="kpi-strip">Cases: ${escapeHtml(metrics.case_count||0)} | Recent: ${escapeHtml(metrics.recent_cases||0)} | Regions: ${escapeHtml(metrics.region_count||0)} | High-confidence edges: ${escapeHtml(metrics.high_confidence_edges||0)}</div>`;
-	if(data.summary){
+	const reasons=Array.isArray(data?.reasons)?data.reasons:[];
+	const metrics=data?.metrics||{};
+	const clusterSummary=synthesisCluster?.summary||{};
+	const growthSummary=_cicGrowthWindowSummary(clusterSummary.growth_windows);
+	const lineageSummary=_cicFormatDistribution(synthesisCluster?.lineage_distribution);
+	const snpHistogram=_cicSnpHistogramSummary(evidenceData?.pairs);
+	let html=`<div class="kpi-strip">Cases: ${escapeHtml(metrics.case_count||clusterSummary.member_count||0)} | Recent: ${escapeHtml(metrics.recent_cases||clusterSummary.recent_case_count||0)} | Regions: ${escapeHtml(metrics.region_count||(Array.isArray(clusterSummary.regions)?clusterSummary.regions.length:0)||0)} | High-confidence edges: ${escapeHtml(metrics.high_confidence_edges||0)}</div>`;
+	if(growthSummary.length){
+		html+=`<p class="hint">Growth windows: ${escapeHtml(growthSummary.join(' | '))}</p>`;
+	}
+	if(lineageSummary){
+		html+=`<p class="hint">Lineage mix: ${escapeHtml(lineageSummary)}</p>`;
+	}
+	if(snpHistogram.length){
+		html+=`<p class="hint">SNP distance histogram: ${escapeHtml(snpHistogram.join(' | '))}</p>`;
+	}
+	if(data?.summary){
 		html+=`<p class="hint">${escapeHtml(data.summary)}</p>`;
 	}
 	if(reasons.length){
@@ -777,11 +841,12 @@ function _cicRenderAnalyticsWhy(data){
 	box.innerHTML=html;
 }
 
-function _cicRenderPairEvidence(data){
+function _cicRenderPairEvidence(data, synthesisCluster){
 	const box=document.getElementById('cicPairEvidence');
 	const pairSelect=document.getElementById('cicReviewPairSelect');
 	if(!box) return;
 	const pairs=Array.isArray(data?.pairs)?data.pairs:[];
+	const synthesisPairIndex=_cicBuildSynthesisPairIndex(synthesisCluster);
 	if(!pairs.length){
 		box.innerHTML='<p class="hint">No pair evidence available for this cluster.</p>';
 		if(pairSelect) pairSelect.innerHTML='<option value="">Select a pair from the loaded evidence</option>';
@@ -800,13 +865,16 @@ function _cicRenderPairEvidence(data){
 	if(summary.length){
 		html+=`<p class="hint">${summary.join(' | ')}</p>`;
 	}
-	html+='<div class="analytics-table-wrap"><table class="data-table"><thead><tr><th>Pair</th><th>Genomic</th><th>Epi</th><th>Temporal</th><th>Interpretation</th><th>Evidence</th><th>Review</th><th></th><th></th><th></th></tr></thead><tbody>';
+	html+='<div class="analytics-table-wrap"><table class="data-table"><thead><tr><th>Pair</th><th>Genomic</th><th>Epi</th><th>Temporal</th><th>Lineage</th><th>Resistance</th><th>Interpretation</th><th>Evidence</th><th>Review</th><th></th><th></th><th></th></tr></thead><tbody>';
 	for(const pair of pairs.slice(0,25)){
 		const genomic=pair.genomic_plausibility||{};
 		const epi=pair.epidemiological_support||{};
 		const temporal=pair.temporal_plausibility||{};
 		const evidence=pair.evidence||{};
 		const review=pair.reviewer_classification||{};
+		const synthesisPair=synthesisPairIndex.get(_cicPairKey(pair.case_a, pair.case_b))||{};
+		const lineageConcordance=synthesisPair.lineage_concordance||'n/a';
+		const resistanceConcordance=synthesisPair.resistance_profile_concordance||'n/a';
 		const reviewText=review.classification
 			? `${review.classification}${review.reviewer ? ` by ${review.reviewer}` : ''}${review.reviewed_at ? ` (${String(review.reviewed_at).replace('T',' ').replace('Z',' UTC')})` : ''}`
 			: 'not reviewed';
@@ -815,6 +883,8 @@ function _cicRenderPairEvidence(data){
 			<td>${escapeHtml(genomic.support||'')}</td>
 			<td>${escapeHtml(epi.support||'')}</td>
 			<td>${escapeHtml(temporal.delta_days ?? 'n/a')}</td>
+			<td>${escapeHtml(lineageConcordance)}</td>
+			<td>${escapeHtml(resistanceConcordance)}</td>
 			<td>${escapeHtml(pair.overall_interpretation||'')}</td>
 			<td>${escapeHtml([evidence.basis, Array.isArray(evidence.supports) && evidence.supports.length ? evidence.supports.slice(0,3).join(', ') : ''].filter(Boolean).join(' | '))}</td>
 			<td>${escapeHtml(reviewText)}</td>
@@ -1057,26 +1127,30 @@ async function cicLoadAnalyticsReview(){
 	const clusterInput=document.getElementById('cicReviewClusterId');
 	if(clusterInput) clusterInput.value=clusterId;
 	try{
-		const [whyResult, evidenceResult, reviewsResult] = await Promise.allSettled([
+		const [whyResult, evidenceResult, reviewsResult, synthesisResult] = await Promise.allSettled([
 			fetch(`${API}/analytics/cluster-why/${encodeURIComponent(clusterId)}`),
 			fetch(`${API}/analytics/case-pair-evidence?cluster_id=${encodeURIComponent(clusterId)}`),
 			fetch(`${API}/analytics/case-pair-reviews?cluster_id=${encodeURIComponent(clusterId)}&limit=100`),
+			fetch(`${API}/analytics/transmission-synthesis/${encodeURIComponent(clusterId)}`),
 		]);
 
 		const whyResp = whyResult.status === 'fulfilled' ? whyResult.value : null;
 		const evidenceResp = evidenceResult.status === 'fulfilled' ? evidenceResult.value : null;
 		const reviewsResp = reviewsResult.status === 'fulfilled' ? reviewsResult.value : null;
+		const synthesisResp = synthesisResult.status === 'fulfilled' ? synthesisResult.value : null;
 
 		const whyData = whyResp && whyResp.ok ? await whyResp.json() : null;
 		const evidenceData = evidenceResp && evidenceResp.ok ? await evidenceResp.json() : null;
 		const reviewsData = reviewsResp && reviewsResp.ok ? await reviewsResp.json() : null;
+		const synthesisData = synthesisResp && synthesisResp.ok ? await synthesisResp.json() : null;
+		const synthesisCluster = (Array.isArray(synthesisData?.clusters)?synthesisData.clusters:[]).find(cluster=>String(cluster.cluster_id||'')===String(clusterId)) || null;
 
 		if(whyBox){
-			if(whyData) _cicRenderAnalyticsWhy(whyData);
+			if(whyData || synthesisCluster || evidenceData) _cicRenderAnalyticsWhy(whyData, synthesisCluster, evidenceData);
 			else whyBox.innerHTML='<p class="hint">Cluster prioritisation could not be loaded.</p>';
 		}
 		if(evidenceBox){
-			if(evidenceData) _cicRenderPairEvidence(evidenceData);
+			if(evidenceData) _cicRenderPairEvidence(evidenceData, synthesisCluster);
 			else evidenceBox.innerHTML='<p class="hint">Pair evidence could not be loaded.</p>';
 		}
 		if(reviewsBox){

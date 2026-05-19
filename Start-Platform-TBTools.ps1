@@ -30,28 +30,20 @@ $env:TBPROFILER_DOCKER_FALLBACK = '1'
 
 $wslExe = (Get-Command wsl.exe -ErrorAction SilentlyContinue).Source
 if ($wslExe) {
-    $wslWindowCommand = 'title TBTools WSL && wsl.exe'
-    Start-Process -FilePath 'cmd.exe' -ArgumentList @('/k', $wslWindowCommand) -WorkingDirectory $root | Out-Null
+    $rootResolved = (Resolve-Path $root).Path
+    $wslScript = Join-Path $rootResolved 'scripts\launch_tbtools_wsl.sh'
 
-    $bashCommand = @'
-MAMBA_CMD="$HOME/micromamba"
-if [ ! -x "$MAMBA_CMD" ]; then
-  MAMBA_CMD=micromamba
-fi
-
-echo "[INFO] Checking TBProfiler and Mykrobe in WSL env: tbtools"
-if command -v micromamba >/dev/null 2>&1 || [ -x "$HOME/micromamba" ]; then
-  "$MAMBA_CMD" run -n tbtools tb-profiler --version || true
-  "$MAMBA_CMD" run -n tbtools mykrobe --help || true
-else
-  echo "[WARN] micromamba not found in WSL. Install micromamba and the tbtools environment."
-fi
-
-echo
-echo "[INFO] Leaving a WSL login shell open. Close this window when finished."
-exec bash -l
-'@
-    Start-Process -FilePath $wslExe -ArgumentList @('bash', '-lc', $bashCommand) -WorkingDirectory $root | Out-Null
+    if ((Test-Path $wslScript -PathType Leaf) -and ($rootResolved -match '^[A-Za-z]:\\')) {
+        $drive = $rootResolved.Substring(0, 1).ToLower()
+        $tail = $rootResolved.Substring(2).Replace('\', '/')
+        $rootWsl = "/mnt/$drive$tail"
+        $wslScriptPath = "$rootWsl/scripts/launch_tbtools_wsl.sh"
+        $wslWindowCommand = "title TBTools WSL && `"$wslExe`" bash -lc `"bash '$wslScriptPath'`""
+        Start-Process -FilePath 'cmd.exe' -ArgumentList @('/k', $wslWindowCommand) -WorkingDirectory $root | Out-Null
+    } else {
+        Write-Host '[WARN] WSL launcher script path could not be resolved. Opening plain WSL shell.'
+        Start-Process -FilePath 'cmd.exe' -ArgumentList @('/k', 'title TBTools WSL && wsl.exe') -WorkingDirectory $root | Out-Null
+    }
 } else {
     Write-Host '[WARN] wsl.exe is not available. TBProfiler/Mykrobe fallback checks will stay limited to the local executable path.'
 }
@@ -75,14 +67,23 @@ for ($i = 0; $i -lt 30; $i++) {
     Start-Sleep -Seconds 1
 }
 
-Write-Host '[INFO] Running lineage/DR validation preflight to refresh tool status...'
-try {
-    & $venvPython (Join-Path $root 'scripts\run_lineage_dr_validation.py')
-} catch {
-    Write-Host "[WARN] Lineage/DR validation preflight failed: $($_.Exception.Message)"
+if (-not $SkipBrowser) {
+    for ($i = 0; $i -lt 10; $i++) {
+        try {
+            if (Test-NetConnection -ComputerName 'localhost' -Port 8081 -InformationLevel Quiet -WarningAction SilentlyContinue) {
+                break
+            }
+        } catch {
+        }
+        Start-Sleep -Milliseconds 500
+    }
+
+    Start-Process 'http://localhost:8081' | Out-Null
 }
 
-Start-Sleep -Seconds 1
-if (-not $SkipBrowser) {
-    Start-Process 'http://localhost:8081' | Out-Null
+Write-Host '[INFO] Running lineage/DR validation preflight in background to refresh tool status...'
+try {
+    Start-Process -FilePath $venvPython -ArgumentList @(Join-Path $root 'scripts\run_lineage_dr_validation.py') -WorkingDirectory $root | Out-Null
+} catch {
+    Write-Host "[WARN] Could not start lineage/DR validation preflight: $($_.Exception.Message)"
 }

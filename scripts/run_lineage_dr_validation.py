@@ -17,6 +17,7 @@ from __future__ import annotations
 import csv
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -260,6 +261,19 @@ def _wsl_probe_tool(command: str) -> tuple[str, str]:
     last_line = lines[-1][:200]
     summary = first_line if first_line == last_line else f"{first_line} | {last_line}"
     return ("ok", summary) if proc.returncode == 0 else ("error", summary)
+
+
+def _build_wsl_micromamba_command(wsl_env: str, args: list[str]) -> str:
+    env_quoted = shlex.quote(wsl_env)
+    args_quoted = " ".join(shlex.quote(arg) for arg in args)
+    return (
+        'source ~/.bashrc >/dev/null 2>&1 || true; '
+        'if command -v micromamba >/dev/null 2>&1; then '
+        f'micromamba run -n {env_quoted} {args_quoted}; '
+        'elif [ -x ~/micromamba ]; then '
+        f'~/micromamba run -n {env_quoted} {args_quoted}; '
+        "else echo 'micromamba not found in WSL PATH or ~/micromamba'; exit 127; fi"
+    )
 
 
 def _win_to_wsl_path(path: Path) -> str | None:
@@ -959,11 +973,18 @@ def _run_tbprofiler_on_fasta_wsl(fasta_files: list[Path], sample_inputs: list[di
                 )
                 continue
 
-            bash_cmd = (
-                f'$HOME/micromamba run -n {wsl_env} tb-profiler profile '
-                f'--fasta "{sample_fasta_wsl}" '
-                f'--prefix "{sample_id}" '
-                f'--dir "{run_dir_wsl}"'
+            bash_cmd = _build_wsl_micromamba_command(
+                wsl_env,
+                [
+                    "tb-profiler",
+                    "profile",
+                    "--fasta",
+                    sample_fasta_wsl,
+                    "--prefix",
+                    sample_id,
+                    "--dir",
+                    run_dir_wsl,
+                ],
             )
             started_at = datetime.now().timestamp() - 1.0
             proc = subprocess.run(
@@ -1060,14 +1081,32 @@ def _run_mykrobe_on_fasta_wsl(fasta_files: list[Path], sample_inputs: list[dict[
 
             result_json = run_dir / f"{sample_id}_mykrobe.json"
             result_json_wsl = _win_to_wsl_path(result_json)
+            if not result_json_wsl:
+                failures.append(
+                    {
+                        "sample_id": sample_id,
+                        "exit_code": 1,
+                        "output_tail": "Unable to map result JSON to WSL path",
+                    }
+                )
+                continue
 
-            bash_cmd = (
-                f'$HOME/micromamba run -n {wsl_env} mykrobe predict '
-                f'--sample "{sample_id}" '
-                f'--seq "{sample_fasta_wsl}" '
-                f'--species tb '
-                f'--format json '
-                f'--output "{result_json_wsl}"'
+            bash_cmd = _build_wsl_micromamba_command(
+                wsl_env,
+                [
+                    "mykrobe",
+                    "predict",
+                    "--sample",
+                    sample_id,
+                    "--seq",
+                    sample_fasta_wsl,
+                    "--species",
+                    "tb",
+                    "--format",
+                    "json",
+                    "--output",
+                    result_json_wsl,
+                ],
             )
             started_at = datetime.now().timestamp() - 1.0
             proc = subprocess.run(
@@ -1580,14 +1619,18 @@ def main() -> None:
         "message": "WSL tool probe not run",
     }
     if wsl.get("available") and wsl_fallback_enabled:
-        probe_status, probe_output = _wsl_probe_tool(f"$HOME/micromamba run -n {wsl_env_name} tb-profiler version")
+        probe_status, probe_output = _wsl_probe_tool(
+            _build_wsl_micromamba_command(wsl_env_name, ["tb-profiler", "version"])
+        )
         wsl_tbprofiler = {
             "status": "installed" if probe_status == "ok" else "not_ready",
             "probe": {"status": probe_status, "output": probe_output},
             "message": "tb-profiler available in WSL env" if probe_status == "ok" else "tb-profiler unavailable in WSL env",
         }
 
-        mk_status, mk_output = _wsl_probe_tool(f"$HOME/micromamba run -n {wsl_env_name} mykrobe --help")
+        mk_status, mk_output = _wsl_probe_tool(
+            _build_wsl_micromamba_command(wsl_env_name, ["mykrobe", "--help"])
+        )
         wsl_mykrobe = {
             "status": "installed" if mk_status == "ok" else "not_ready",
             "probe": {"status": mk_status, "output": mk_output},

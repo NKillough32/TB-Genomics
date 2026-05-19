@@ -165,6 +165,21 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
             return ""
         rows = []
         for gate in gates:
+            gate_status = str(gate.get("status", "unknown"))
+            gate_message = gate.get("message", "")
+            gate_key = str(gate.get("key", "") or "").lower()
+            gate_label = str(gate.get("label", gate.get("key", "Gate")) or "")
+            if (
+                ("mcmc" in gate_key or "mcmc" in gate_label.lower())
+                and isinstance(summary_data, dict)
+                and int(summary_data.get("n_samples") or 0) < 100
+            ):
+                gate_status = "review"
+                gate_message = (
+                    "Only "
+                    f"{int(summary_data.get('n_samples') or 0)} posterior sample(s) available after burn-in. "
+                    "Treat model directionality and edge probabilities as exploratory."
+                )
             flags = []
             if gate.get("process_blocking"):
                 flags.append("blocks process")
@@ -174,8 +189,8 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
             rows.append(
                 "<tr>"
                 f"<td>{_safe_html(gate.get('label', gate.get('key', 'Gate')))}</td>"
-                f"<td>{_status_badge(str(gate.get('status', 'unknown')))}</td>"
-                f"<td>{_safe_html(gate.get('message', ''))}</td>"
+                f"<td>{_status_badge(gate_status)}</td>"
+                f"<td>{_safe_html(gate_message)}</td>"
                 f"<td>{_safe_html(flag_text)}</td>"
                 "</tr>"
             )
@@ -657,13 +672,16 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
 
     # Load all PNGs into a dict keyed by stem for contextual placement
     figures_by_stem: dict[str, str] = {}  # stem -> base64 data URI
-    for image_path in sorted(Path(_export_path()).glob("outbreaker_*.png")):
-        uri = _image_data_uri(str(image_path))
-        if uri:
-            figures_by_stem[image_path.stem] = uri
+    if full:
+        for image_path in sorted(Path(_export_path()).glob("outbreaker_*.png")):
+            uri = _image_data_uri(str(image_path))
+            if uri:
+                figures_by_stem[image_path.stem] = uri
 
     def _figure_card(stem: str, show_in_gallery: bool = False) -> str:
         """Render a single figure with interpretive caption, zoom button, and download link."""
+        if not full:
+            return '<p class="muted">Figure omitted from the short report. Open the full HTML report for embedded figures and downloads.</p>'
         uri = figures_by_stem.get(stem)
         if not uri:
             return f'<p class="muted figure-missing">Figure <em>{_safe_html(stem)}</em> not yet generated. Run the analysis pipeline to produce it.</p>'
@@ -1104,6 +1122,11 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
         if _e.get("target"):
             _model_nodes.add(str(_e["target"]))
     denom_model_nodes = len(_model_nodes)
+    model_node_note = (
+        "Includes samples beyond current QC-pass set; model output is not operationally usable until QC is resolved"
+        if denom_model_nodes > denom_qc_pass else
+        "From transmission network JSON; 0 = analysis not yet run"
+    )
 
     # -------------------------------------------------------------------------
     # Additional computed values for new sections
@@ -1118,7 +1141,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
   <tr><td>Culture-positive / sequencing-eligible</td><td>Cases with a consensus sequence loaded</td><td><strong>{_safe_html(str(denom_culture_pos))}</strong></td><td>Source: consensus_sequences</td></tr>
   <tr><td>Sequenced samples</td><td>Cases with sequence data in this extract</td><td><strong>{_safe_html(str(denom_sequenced))}</strong></td><td></td></tr>
   <tr><td>QC-pass genomes</td><td>Genomes passing QC - used for SNP clustering</td><td><strong>{_safe_html(str(denom_qc_pass))}</strong></td><td>Fail/contaminated excluded from inference</td></tr>
-  <tr><td>outbreaker2 model nodes</td><td>Cases/samples included in transmission model</td><td><strong>{_safe_html(str(denom_model_nodes))}</strong></td><td>From transmission network JSON; 0 = analysis not yet run</td></tr>
+  <tr><td>outbreaker2 model nodes</td><td>Cases/samples included in transmission model</td><td><strong>{_safe_html(str(denom_model_nodes))}</strong></td><td>{_safe_html(model_node_note)}</td></tr>
 </tbody></table></div>"""
 
     # QC thresholds box HTML
@@ -1298,6 +1321,41 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
         _science_limitations.append("lineage/DR outputs unlinked")
     elif _dr_skipped_or_blocked:
         _science_limitations.append("lineage/DR validation unavailable")
+    posterior_samples = 0
+    if isinstance(summary_data, dict):
+        try:
+            posterior_samples = int(summary_data.get("n_samples") or 0)
+        except Exception:
+            posterior_samples = 0
+    if posterior_samples < 100:
+        model_reliability = "Exploratory"
+    model_ready_blockers: list[str] = []
+    if posterior_samples < 100:
+        model_ready_blockers.append(
+            f"only {posterior_samples} posterior sample(s) available after burn-in"
+        )
+    if extract_qc_pass_pct is not None and extract_qc_pass_pct < 90:
+        model_ready_blockers.append(f"QC pass rate is {extract_qc_pass_label}, below the >=90% target")
+    if qc_resolution_pairs:
+        model_ready_blockers.append(f"{len(qc_resolution_pairs)} high-posterior pair(s) are QC-unresolved")
+    if genomically_discordant:
+        model_ready_blockers.append(f"{len(genomically_discordant)} high-posterior pair(s) are SNP-discordant")
+    if not genomic_pairs:
+        model_ready_blockers.append("no high-posterior pair is currently SNP-supported and QC-pass")
+    model_operational_ready = not model_ready_blockers
+    model_readiness_html = (
+        '<div class="callout" style="margin-bottom:.6rem">'
+        '<strong>Operational transmission inference: Ready for MDT review.</strong> '
+        'High-posterior links include SNP-supported, QC-pass pairs; epidemiological corroboration is still required.'
+        '</div>'
+        if model_operational_ready else
+        '<div class="callout callout-alert" style="margin-bottom:.6rem">'
+        '<strong>Operational transmission inference: Not ready for field escalation.</strong> '
+        'The report can support MDT review, but transmission directionality and model links must remain provisional. '
+        '<ul class="compact-list">'
+        + ''.join(f'<li>{_safe_html(item)}</li>' for item in model_ready_blockers)
+        + '</ul></div>'
+    )
     if missing_repro:
         status_html = f'<span class="status-banner status-draft">DRAFT - {len(missing_repro)} reproducibility field(s) missing</span>'
     elif _appendices_missing:
@@ -1333,10 +1391,23 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
         f'<div class="callout callout-alert" style="margin-bottom:.6rem">'
         f'<strong>No SNP-supported direct transmission links identified.</strong> '
         f'Zero pairwise SNP links at &le;12 SNPs exist in this dataset. '
-        f'All {high_confidence_all_count} model link(s) &ge;0.70 posterior probability are '
+        f'All {high_confidence_all_count} high-posterior model edge(s) are '
         f'<em>exploratory only</em> and must not trigger field investigation without '
         f'SNP &le;12 and epidemiological corroboration.</div>'
     ) if pairwise_links_le_12 == 0 else ""
+    outbreaker_output_assessment_html = f"""
+<div class="section-note" style="margin-top:.7rem">
+  <strong>Usefulness of current outbreaker2 outputs:</strong>
+  The generated summary JSON, transmission network JSON, RDS object, diagnostic plots, tree, and derived pair table are useful for
+  MDT review and audit. They are not yet sufficient for operational transmission inference because model inputs are not limited to
+  QC-pass genomes and the current posterior sample count is {_safe_html(str(posterior_samples))}.
+</div>
+<div class="tbl-wrap"><table><thead><tr><th>Output area</th><th>Current state</th><th>Refinement needed</th></tr></thead><tbody>
+  <tr><td>Model input set</td><td>{_safe_html(str(denom_model_nodes))} model node(s), {_safe_html(str(denom_qc_pass))} QC-pass genome(s)</td><td>Run outbreaker2 only on QC-pass, non-contaminated sequenced samples; export excluded cases with reasons.</td></tr>
+  <tr><td>Posterior support</td><td>{_safe_html(str(high_confidence_all_count))} high-posterior model edge(s)</td><td>Label as hypotheses; add posterior support distribution and alternative ancestors per edge in reviewer tables.</td></tr>
+  <tr><td>Diagnostics</td><td>{_safe_html(str(posterior_samples))} posterior sample(s) after burn-in</td><td>Increase retained posterior samples and report ESS/R-hat or equivalent multi-chain diagnostics before operational use.</td></tr>
+  <tr><td>Review table</td><td>Pairs are classified against SNP/QC evidence in the report</td><td>Make this the primary operational artifact, with final MDT adjudication fields and exportable CSV.</td></tr>
+</tbody></table></div>"""
 
     # 2. Dashboard cards
     _seq_sub = f"of {denom_notified} notified ({extract_coverage_label})"
@@ -1348,9 +1419,9 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
   {_metric_card("QC-pass genomes", str(denom_qc_pass), _qc_sub, alert=extract_qc_pass_pct is not None and extract_qc_pass_pct < 90)}
   {_metric_card("QC unresolved", str(qc_status_counts['fail'] + qc_status_counts['not_reported'] + qc_status_counts['contamination']), f"{qc_status_counts['pass']} passed", alert=(qc_status_counts['fail'] + qc_status_counts['contamination']) > 0)}
   {_metric_card("Open clusters", str(open_clusters), f"{high_priority_open} priority >10")}
-    {_metric_card("Model links >=0.70", str(high_confidence_all_count), "Posterior >=0.70 - validate with SNP+epi")}
+  {_metric_card("High-posterior model links", str(high_confidence_all_count), "Posterior >=0.70 - not confirmed transmission")}
   {_metric_card("SNP links <=12", str(pairwise_links_le_12), "Direct transmission candidates")}
-  {_metric_card("Model reliability", model_reliability, "MCMC convergence", alert=model_reliability=="Exploratory")}
+  {_metric_card("Transmission inference", "Not ready" if not model_operational_ready else "MDT review", "Model output remains provisional" if not model_operational_ready else "Requires epi corroboration", alert=not model_operational_ready)}
 </div>"""
 
     # Progress bars for coverage/QC
@@ -1390,7 +1461,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
     # 4. MDT Governance table
     mdt_rows = [
         ("Circulation readiness", "Review required" if _science_limitations else ("Governance ready" if circulation_ok else "BLOCKED"), "; ".join(_science_limitations) if _science_limitations else "Complete mandatory reproducibility metadata before external circulation"),
-        ("Model reliability", model_reliability, "Treat directionality as exploratory; diagnostics may be unavailable"),
+        ("Transmission inference", "Not ready for field escalation" if not model_operational_ready else "Ready for MDT review", "Treat directionality as exploratory unless SNP <=12, QC pass, and epi corroboration are all present"),
         ("Open clusters", f"{int(open_clusters)} total / {high_priority_open} priority >10", "MDT review and epi data completion for all open clusters"),
         ("Discordant model links", f"{len(discordant_pairs)} identified", "Pairwise SNP + epi adjudication required"),
         ("MDT sign-off status", "Pending - MDT review required", "Chair to record: accepted / rejected / deferred for each open cluster"),
@@ -1852,15 +1923,15 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
     )
     network_edges_html = _data_table_html(
         network_edges[:15 if not full else None],
-        [("From", "source"), ("To", "target"), ("Probability", "probability"),
-         ("Confidence", "confidence"), ("Inference", "inference")],
+        [("From", "source"), ("To", "target"), ("Posterior probability", "probability"),
+         ("Posterior band", "confidence"), ("Inference", "inference")],
         "No transmission-link data."
     )
     network_meta_html = ""
     if isinstance(transmission_data, dict):
         net_kv = [(l, k) for l, k in [("Generated at", "generated_at"), ("Inference source", "inference_source"),
                    ("Provenance", "provenance"), ("Node count", "node_count"), ("Edge count", "edge_count"),
-                   ("High-confidence edges", "high_confidence_edges")] if transmission_data.get(k) is not None]
+                   ("High-posterior model edges", "high_confidence_edges")] if transmission_data.get(k) is not None]
         network_meta_html = "<table class='kv-table'><tbody>" + "".join(
             f"<tr><th>{_safe_html(l)}</th><td>{_safe_html(str(transmission_data.get(k)))}</td></tr>" for l, k in net_kv
         ) + "</tbody></table>"
@@ -1945,6 +2016,58 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
   <details><summary>Resistance validation</summary><div><pre>{_safe_html(json.dumps(resistance_validation_data, indent=2, default=str) if resistance_validation_data else 'No artifact found.')}</pre></div></details>
 </div>"""
 
+    appendix_sections_html = (
+        f"""
+    <!-- =================================================================== -->
+    <!-- APPENDICES -->
+    <!-- =================================================================== -->
+    <section class="{appendix_a_class}" id="appendix-a">
+      <h2>Appendix A &#8212; Case-level operational actions</h2>
+      {appendix_a_body_html}
+    </section>
+
+    <section class="{appendix_b_class}" id="appendix-b">
+      <h2>Appendix B &#8212; Full discordance review</h2>
+      {appendix_b_body_html}
+    </section>
+"""
+        if full else ""
+    )
+    figures_section_html = (
+        f"""
+    <!-- FIGURES -->
+    <section class="card" id="figures">
+      <h2>Figures overview</h2>
+      <p class="muted" style="margin-bottom:.7rem">All generated figures. Click any image to zoom; use the download link to save. Figures are also embedded inline within their relevant report sections above.</p>
+      <div class="figures-grid">{''.join(graphics_html) if graphics_html else '<p class="muted">No outbreak graphics found in exports/. Run the analysis pipeline to generate figures.</p>'}</div>
+    </section>
+
+    <!-- LIGHTBOX DIALOG -->
+    <dialog class="lb" id="lightbox" aria-modal="true" aria-label="Figure zoom view">
+      <div class="lb-inner">
+        <img class="lb-img" id="lb-img" src="" alt="">
+        <div class="lb-bar">
+          <span class="lb-caption" id="lb-caption"></span>
+          <a class="lb-dl" id="lb-dl" href="" download="">&#x2B07; Download</a>
+          <button class="lb-close" onclick="document.getElementById('lightbox').close()" aria-label="Close zoom">&#x2715; Close</button>
+        </div>
+      </div>
+    </dialog>
+"""
+        if full else ""
+    )
+    concepts_section_html = (
+        f"""
+    <!-- KEY CONCEPTS -->
+    <section class="card" id="concepts">
+      <h2>Key concepts (Appendix D)</h2>
+      <p class="muted" style="margin-bottom:.5rem">Click to expand each definition.</p>
+      {concepts_html}
+    </section>
+"""
+        if full else ""
+    )
+
     # -------------------------------------------------------------------------
     # Assemble final HTML
     # -------------------------------------------------------------------------
@@ -1999,10 +2122,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
     <a href="#provenance">Data provenance</a>
     <a href="#epi-completeness">Epi data completeness</a>
     <h3>Appendices</h3>
-    <a href="#appendix-a">Appendix A - Case actions</a>
-    <a href="#appendix-b">Appendix B - Discordance</a>
-    <a href="#figures">Figures</a>
-    <a href="#concepts">Key concepts</a>
+    {'<a href="#appendix-a">Appendix A - Case actions</a><a href="#appendix-b">Appendix B - Discordance</a><a href="#figures">Figures</a><a href="#concepts">Key concepts</a>' if full else '<a href="#interpretation">Current interpretation</a>'}
     {'<a href="#raw-artifacts">Raw artifacts</a>' if full else ''}
   </nav>
 
@@ -2013,6 +2133,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
     <section class="card" id="executive">
       <h2>Executive summary</h2>
       {dashboard_html}
+      {model_readiness_html}
       {analysis_quality_warnings_html}
       {confidence_gate_table_html}
       {_qc_warning_html}{_snp_warning_html}{_dr_unlinked_warning_html}{_dr_skipped_warning_html}{'<div class="callout callout-alert"><strong>DRAFT REPORT:</strong> Missing reproducibility fields: ' + _safe_html(', '.join(missing_repro)) + '. External circulation is blocked until these are populated.</div>' if missing_repro else '<div class="callout"><strong>Artifact completeness gate passed.</strong> Reproducibility metadata and appendices are present. Operational use still requires MDT, QC, and information-governance review.</div>'}
@@ -2052,6 +2173,8 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
     <section class="card" id="analysis">
       <h2>outbreaker2 analysis summary</h2>
       {analysis_html}
+      {model_readiness_html}
+      {outbreaker_output_assessment_html}
       {analysis_quality_warnings_html}
       <div class="section-note" style="margin-top:.7rem">
         <strong>How to interpret:</strong> Pairs with high posterior transmission probability are model-prioritised hypotheses only.
@@ -2069,18 +2192,19 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
       <h2>Transmission network</h2>
       {network_meta_html}
       <div class="fig-inline">{_figure_card("outbreaker_tree")}</div>
-      <h3>Priority nodes</h3>
+      <h3>Model-prioritised nodes</h3>
       {key_nodes_html}
-      <h3>Transmission links</h3>
+      <h3>High-posterior model edges</h3>
       {network_edges_html}
     </section>
 
     <!-- MODEL-PRIORITISED PAIRS - WITH ADJUDICATION TABLE -->
     <section class="card" id="pairs">
-      <h2>Model-prioritised transmission hypotheses</h2>
+      <h2>High-posterior model hypotheses</h2>
       <div class="callout callout-alert">
-        <strong>Do not escalate model-only or genomically discordant links to field investigation</strong> without genomic and epidemiological corroboration.
-        Posterior probability &ge;0.70 indicates a plausible transmission event, but genomic validation is essential.
+        <strong>Do not treat these model edges as confirmed transmission.</strong>
+        Posterior probability &ge;0.70 is a model signal only; operational escalation requires QC-pass sequence data,
+        SNP &le;12 support, and epidemiological corroboration.
       </div>
       <div style="margin:.6rem 0">
         <span class="tag">{_safe_html(str(len(genomic_pairs)))} SNP-linked</span>
@@ -2093,7 +2217,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
       {adj_model_html}
       {adj_discordant_html}
       {adj_qcunres_html}
-      {('<p class="muted">No high-confidence (&ge;0.70) edges found in transmission network.</p>' if not high_confidence_edges else '')}
+      {('<p class="muted">No high-posterior (&ge;0.70) model edges found in transmission network.</p>' if not high_confidence_edges else '')}
     </section>
 
     <!-- SNP SUMMARY -->
@@ -2121,7 +2245,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
       <h3>Counts and denominators in this report</h3>
       <div class="section-note">Definitions match the denominator box above. All model-prioritised links are hypotheses only - zero SNP-supported links means no validated direct transmission candidates at this time.</div>
       <div class="tbl-wrap"><table><thead><tr><th>Metric</th><th>Count</th><th>Definition</th></tr></thead><tbody>
-        <tr><td>Model-prioritised links &ge;0.70</td><td>{_safe_html(str(high_confidence_all_count))}</td><td>All outbreaker2 edges with posterior probability &ge;0.70</td></tr>
+        <tr><td>High-posterior model links &ge;0.70</td><td>{_safe_html(str(high_confidence_all_count))}</td><td>All outbreaker2 edges with posterior probability &ge;0.70; these are hypotheses, not confirmed transmission links</td></tr>
         <tr><td>Discordant pairs reviewed</td><td>{_safe_html(str(len(discordant_pairs)))}</td><td>All model-linked pairs showing SNP/model discordance requiring adjudication</td></tr>
         <tr><td>Displayed network links</td><td>{_safe_html(str(high_confidence_snapshot_count))}</td><td>Links in network JSON snapshot (may be filtered for display)</td></tr>
       </tbody></table></div>
@@ -2249,44 +2373,9 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
       </tbody></table></div>
     </section>
 
-    <!-- =================================================================== -->
-    <!-- APPENDICES -->
-    <!-- =================================================================== -->
-    <section class="{appendix_a_class}" id="appendix-a">
-      <h2>Appendix A &#8212; Case-level operational actions</h2>
-      {appendix_a_body_html}
-    </section>
-
-    <section class="{appendix_b_class}" id="appendix-b">
-      <h2>Appendix B &#8212; Full discordance review</h2>
-      {appendix_b_body_html}
-    </section>
-
-    <!-- FIGURES -->
-    <section class="card" id="figures">
-      <h2>Figures overview</h2>
-      <p class="muted" style="margin-bottom:.7rem">All generated figures. Click any image to zoom; use the download link to save. Figures are also embedded inline within their relevant report sections above.</p>
-      <div class="figures-grid">{''.join(graphics_html) if graphics_html else '<p class="muted">No outbreak graphics found in exports/. Run the analysis pipeline to generate figures.</p>'}</div>
-    </section>
-
-    <!-- LIGHTBOX DIALOG -->
-    <dialog class="lb" id="lightbox" aria-modal="true" aria-label="Figure zoom view">
-      <div class="lb-inner">
-        <img class="lb-img" id="lb-img" src="" alt="">
-        <div class="lb-bar">
-          <span class="lb-caption" id="lb-caption"></span>
-          <a class="lb-dl" id="lb-dl" href="" download="">&#x2B07; Download</a>
-          <button class="lb-close" onclick="document.getElementById('lightbox').close()" aria-label="Close zoom">&#x2715; Close</button>
-        </div>
-      </div>
-    </dialog>
-
-    <!-- KEY CONCEPTS -->
-    <section class="card" id="concepts">
-      <h2>Key concepts (Appendix D)</h2>
-      <p class="muted" style="margin-bottom:.5rem">Click to expand each definition.</p>
-      {concepts_html}
-    </section>
+    {appendix_sections_html}
+    {figures_section_html}
+    {concepts_section_html}
 
     {raw_artifacts_html}
 

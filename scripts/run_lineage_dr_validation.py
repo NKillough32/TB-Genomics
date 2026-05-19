@@ -1826,6 +1826,17 @@ def main() -> None:
     limitation_codes: list[str] = []
     warnings: list[str] = []
     overall_status = "completed"
+    tbprofiler_effective_available = (
+        tbprofiler["status"] == "installed"
+        or wsl_tbprofiler.get("status") == "installed"
+        or tbprofiler_run["status"] == "completed"
+    )
+    mykrobe_effective_available = (
+        mykrobe["status"] == "installed"
+        or wsl_mykrobe.get("status") == "installed"
+        or mykrobe_run["status"] == "completed"
+    )
+
     if not ready_inputs:
         overall_status = "completed_missing_inputs"
         interpretation_blocking = True
@@ -1836,12 +1847,16 @@ def main() -> None:
         interpretation_blocking = True
         limitation_codes.append("sample_id_mismatch")
         warnings.append(fasta_validation["message"])
-    elif tbprofiler["status"] not in {"installed", "installed_but_unusable"} and mykrobe["status"] != "installed":
+    elif not tbprofiler_effective_available and not mykrobe_effective_available:
         overall_status = "completed_with_warnings"
         interpretation_blocking = True
         limitation_codes.append("no_usable_lineage_dr_tools")
         warnings.append("No usable TBProfiler/Mykrobe executable was detected. Workflow can continue, but lineage/DR validation is limited.")
-    elif tbprofiler["status"] == "installed_but_unusable" and mykrobe["status"] != "installed":
+    elif (
+        tbprofiler["status"] == "installed_but_unusable"
+        and not mykrobe_effective_available
+        and tbprofiler_run["status"] != "completed"
+    ):
         overall_status = "completed_with_warnings"
         interpretation_blocking = True
         limitation_codes.append("tool_dependency_warning")

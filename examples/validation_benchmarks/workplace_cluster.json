@@ -1,0 +1,20 @@
+{
+  "scenario": "workplace_cluster",
+  "expected_classification": "probable transmission",
+  "notes": "Low SNP distance with shared workplace or congregate-setting exposure and plausible temporal overlap.",
+  "pairs": [
+    {
+      "case_a": "CASE-WP-001",
+      "case_b": "CASE-WP-002",
+      "expected_features": {
+        "snp_distance": 1,
+        "shared_household": false,
+        "shared_workplace": true,
+        "shared_congregate_setting": true,
+        "same_region": true,
+        "temporal_overlap": true,
+        "resistance_concordance": "concordant"
+      }
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "scenario": "sparse_epi_data",
+  "expected_classification": "insufficient evidence",
+  "notes": "Sparse epidemiological and genomic fields should not be over-classified as transmission support.",
+  "pairs": [
+    {
+      "case_a": "CASE-SE-001",
+      "case_b": "CASE-SE-002",
+      "expected_features": {
+        "snp_distance": null,
+        "shared_household": null,
+        "shared_workplace": null,
+        "same_region": null,
+        "temporal_overlap": null,
+        "lineage_concordance": "unknown",
+        "resistance_concordance": "unknown"
+      }
+    }
+  ]
+}

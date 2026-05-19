@@ -1,0 +1,20 @@
+{
+  "scenario": "false_genomic_cluster",
+  "expected_classification": "unlikely transmission",
+  "notes": "Cases are grouped under the same nominal genomic cluster but show lineage, resistance, geographic, and temporal contradictions.",
+  "pairs": [
+    {
+      "case_a": "CASE-FG-001",
+      "case_b": "CASE-FG-002",
+      "expected_features": {
+        "snp_distance": 30,
+        "shared_household": false,
+        "shared_workplace": false,
+        "same_region": false,
+        "temporal_overlap": false,
+        "lineage_concordance": "discordant",
+        "resistance_concordance": "discordant"
+      }
+    }
+  ]
+}

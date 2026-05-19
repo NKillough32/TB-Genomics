@@ -46,6 +46,47 @@ class UnionFind:
             self.rank[root_a] += 1
 
 
+def _reconcile_stale_cluster(db, stale_id: str, summary: dict) -> None:
+    """Remove stale computed memberships without deleting investigation evidence."""
+    db.execute(
+        text("DELETE FROM case_clusters WHERE cluster_id = CAST(:cid AS uuid)"),
+        {"cid": stale_id},
+    )
+    has_investigation = bool(
+        db.execute(
+            text(
+                """
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM cluster_investigations
+                    WHERE cluster_id = CAST(:cid AS uuid)
+                )
+                """
+            ),
+            {"cid": stale_id},
+        ).scalar()
+    )
+    if has_investigation:
+        db.execute(
+            text(
+                """
+                UPDATE clusters
+                SET investigation_status = 'superseded',
+                    alert_flag = FALSE
+                WHERE cluster_id = CAST(:cid AS uuid)
+                """
+            ),
+            {"cid": stale_id},
+        )
+        summary["cluster_membership_changes"]["stale_clusters_superseded_with_investigation"] += 1
+    else:
+        db.execute(
+            text("DELETE FROM clusters WHERE cluster_id = CAST(:cid AS uuid)"),
+            {"cid": stale_id},
+        )
+        summary["cluster_membership_changes"]["stale_clusters_deleted"] += 1
+
+
 def main() -> None:
     os.makedirs("exports", exist_ok=True)
     
@@ -134,6 +175,12 @@ def main() -> None:
                 "max": None,
             },
             "pairwise_snp_distance_histogram": {},
+            "cluster_membership_changes": {
+                "stale_clusters_deleted": 0,
+                "stale_clusters_superseded_with_investigation": 0,
+                "surviving_clusters_refreshed": 0,
+                "new_clusters_created": 0,
+            },
             "clusters": [],
         }
 
@@ -245,20 +292,14 @@ def main() -> None:
             ns_key = "seqcluster:" + "|".join(sorted(members))
             new_cluster_uuids.add(str(uuid.uuid5(uuid.NAMESPACE_DNS, ns_key)))
 
-        # Remove clusters that no longer exist and their case_clusters rows.
-        # Preserve cluster_investigations for surviving clusters.
+        # Remove stale computed memberships. If a stale cluster has an
+        # investigation record, keep the cluster row so ON DELETE CASCADE cannot
+        # erase hand-entered assignees, notes, actions, decisions, or overrides.
         stale_cluster_ids = set(existing_clusters.keys()) - new_cluster_uuids
         if stale_cluster_ids:
-            print(f"  Removing {len(stale_cluster_ids)} stale clusters (no longer valid)...")
+            print(f"  Reconciling {len(stale_cluster_ids)} stale clusters (no longer valid)...")
             for stale_id in stale_cluster_ids:
-                db.execute(
-                    text("DELETE FROM case_clusters WHERE cluster_id = CAST(:cid AS uuid)"),
-                    {"cid": stale_id},
-                )
-                db.execute(
-                    text("DELETE FROM clusters WHERE cluster_id = CAST(:cid AS uuid)"),
-                    {"cid": stale_id},
-                )
+                _reconcile_stale_cluster(db, stale_id, summary)
 
         # Remove all case_cluster assignments for surviving clusters so they can be re-inserted
         # (membership may have changed even if UUID is the same when members change).
@@ -268,12 +309,15 @@ def main() -> None:
                 text("DELETE FROM case_clusters WHERE cluster_id = CAST(:cid AS uuid)"),
                 {"cid": surviving_id},
             )
+            summary["cluster_membership_changes"]["surviving_clusters_refreshed"] += 1
 
         assignments = []
         for idx, members in enumerate(sorted(cluster_components, key=len, reverse=True), start=1):
             namespace_key = "seqcluster:" + "|".join(sorted(members))
             cluster_uuid = str(uuid.uuid5(uuid.NAMESPACE_DNS, namespace_key))
             is_new_cluster = cluster_uuid not in existing_clusters
+            if is_new_cluster:
+                summary["cluster_membership_changes"]["new_clusters_created"] += 1
 
             db.execute(
                 text(

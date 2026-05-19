@@ -1,0 +1,18 @@
+{
+  "scenario": "high_snp_contradiction",
+  "expected_classification": "unlikely transmission",
+  "notes": "Cases share geography but SNP distance is implausibly high for recent transmission.",
+  "pairs": [
+    {
+      "case_a": "CASE-HS-001",
+      "case_b": "CASE-HS-002",
+      "expected_features": {
+        "snp_distance": 48,
+        "shared_household": false,
+        "same_region": true,
+        "temporal_overlap": true,
+        "resistance_concordance": "discordant"
+      }
+    }
+  ]
+}

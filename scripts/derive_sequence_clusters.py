@@ -48,13 +48,26 @@ class UnionFind:
 
 def main() -> None:
     os.makedirs("exports", exist_ok=True)
+    
+    # Print startup diagnostics
+    print("=" * 70)
+    print("DERIVE SEQUENCE CLUSTERS - START")
+    print("=" * 70)
+    
     threshold = int(os.getenv("SEQ_CLUSTER_MAX_DISTANCE", "25"))
     min_cluster_size = int(os.getenv("SEQ_CLUSTER_MIN_SIZE", "2"))
     alert_min_cluster_size = int(os.getenv("TB_CLUSTER_ALERT_MIN_CASES", "5"))
     max_sequences = int(os.getenv("SEQ_CLUSTER_MAX_SEQUENCES", "0"))  # 0 = no limit
+    
+    print(f"Configuration:")
+    print(f"  SEQ_CLUSTER_MAX_DISTANCE: {threshold}")
+    print(f"  SEQ_CLUSTER_MIN_SIZE: {min_cluster_size}")
+    print(f"  TB_CLUSTER_ALERT_MIN_CASES: {alert_min_cluster_size}")
+    print(f"  SEQ_CLUSTER_MAX_SEQUENCES: {max_sequences}")
 
     db = SessionLocal()
     try:
+        print("\nConnecting to database...")
         rows = db.execute(
             text(
                 """
@@ -69,6 +82,8 @@ def main() -> None:
                 """
             )
         ).mappings().all()
+        
+        print(f"Loaded {len(rows)} sequence rows from database")
 
         samples = [
             {
@@ -87,7 +102,8 @@ def main() -> None:
                   f"Clustering will be limited to first {max_sequences} samples. "
                   f"To process all, set SEQ_CLUSTER_MAX_SEQUENCES to 0 or higher value.")
             samples = samples[:max_sequences]
-
+        
+        print(f"Processing {len(samples)} valid sequences")
 
         # Preserve investigation records across re-runs using a diff-based approach.
         # Instead of TRUNCATE (which destroys assignee, notes, actions, risk band overrides),
@@ -122,6 +138,7 @@ def main() -> None:
         }
 
         if len(samples) < 2:
+            print("Insufficient samples for clustering (need >= 2)")
             with open("exports/sequence_clustering_summary.json", "w", encoding="utf-8") as f:
                 json.dump(summary, f, indent=2)
             with open("exports/sequence_cluster_assignments.csv", "w", newline="", encoding="utf-8") as f:
@@ -141,6 +158,9 @@ def main() -> None:
                 writer.writeheader()
             db.commit()
             print(json.dumps(summary, indent=2))
+            print("=" * 70)
+            print("DERIVE SEQUENCE CLUSTERS - COMPLETED (no clustering needed)")
+            print("=" * 70)
             return
 
         uf = UnionFind([s["case_id"] for s in samples])
@@ -164,7 +184,16 @@ def main() -> None:
         pairwise_comparable_sites: list[int] = []
         link_pair_comparable_sites: list[int] = []
         snp_distance_histogram: dict[str, int] = {}
+        
+        total_pairs = len(list(combinations(sample_map.keys(), 2)))
+        print(f"\nComputing pairwise SNP distances ({total_pairs} pairs)...")
+        processed = 0
+        
         for a_id, b_id in combinations(sample_map.keys(), 2):
+            processed += 1
+            if processed % max(1, total_pairs // 10) == 0:
+                print(f"  Progress: {processed}/{total_pairs} pairs ({100*processed//total_pairs}%)")
+            
             dist, comparable_sites, _ambiguous_sites, _status = _snp_distance(
                 sample_map[a_id]["sequence"], sample_map[b_id]["sequence"]
             )
@@ -188,6 +217,11 @@ def main() -> None:
             groups.setdefault(root, []).append(case_id)
 
         cluster_components = [sorted(members) for members in groups.values() if len(members) >= min_cluster_size]
+        
+        print(f"\nClustering results:")
+        print(f"  Pairwise links under threshold: {pairwise_links}")
+        print(f"  Components found: {len(groups)}")
+        print(f"  Components >= min_cluster_size ({min_cluster_size}): {len(cluster_components)}")
 
         # Preserve investigation records across re-runs using a diff-based approach.
         # Instead of TRUNCATE (which destroys assignee, notes, actions, risk band overrides),
@@ -196,12 +230,14 @@ def main() -> None:
         # (same UUID derived from same members) keep all their investigation history.
 
         # Load existing cluster memberships keyed by cluster_id
+        print(f"\nLoading existing cluster memberships from database...")
         existing_cluster_rows = db.execute(
             text("SELECT cluster_id::text, sample_id::text FROM case_clusters")
         ).mappings().all()
         existing_clusters: dict[str, set[str]] = {}
         for r in existing_cluster_rows:
             existing_clusters.setdefault(r["cluster_id"], set()).add(r["sample_id"])
+        print(f"  Found {len(existing_clusters)} existing clusters in database")
 
         # Compute new cluster UUIDs upfront (deterministic from members) so we can diff
         new_cluster_uuids: set[str] = set()
@@ -213,6 +249,7 @@ def main() -> None:
         # Preserve cluster_investigations for surviving clusters.
         stale_cluster_ids = set(existing_clusters.keys()) - new_cluster_uuids
         if stale_cluster_ids:
+            print(f"  Removing {len(stale_cluster_ids)} stale clusters (no longer valid)...")
             for stale_id in stale_cluster_ids:
                 db.execute(
                     text("DELETE FROM case_clusters WHERE cluster_id = CAST(:cid AS uuid)"),
@@ -305,8 +342,15 @@ def main() -> None:
         summary["clustered_cases"] = sum(c["case_count"] for c in summary["clusters"])
         summary["unclustered_cases"] = len(samples) - summary["clustered_cases"]
 
+        print(f"\nFinal summary:")
+        print(f"  Total clusters: {summary['cluster_count']}")
+        print(f"  Clustered cases: {summary['clustered_cases']}")
+        print(f"  Unclustered cases: {summary['unclustered_cases']}")
+        print(f"  Assignments to export: {len(assignments)}")
+
         with open("exports/sequence_clustering_summary.json", "w", encoding="utf-8") as f:
             json.dump(summary, f, indent=2)
+        print("  Written: exports/sequence_clustering_summary.json")
 
         with open("exports/sequence_cluster_assignments.csv", "w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(
@@ -325,7 +369,9 @@ def main() -> None:
             writer.writeheader()
             for row in assignments:
                 writer.writerow(row)
+        print("  Written: exports/sequence_cluster_assignments.csv")
 
+        print("\nWriting audit log...")
         db.execute(
             text(
                 "INSERT INTO audit_log (action, user_id, details, timestamp) "
@@ -339,7 +385,21 @@ def main() -> None:
         )
 
         db.commit()
+        print("Database committed successfully")
+        
+        print("\n" + "=" * 70)
+        print("DERIVE SEQUENCE CLUSTERS - COMPLETED SUCCESSFULLY")
+        print("=" * 70)
         print(json.dumps(summary, indent=2))
+    except Exception as e:
+        import traceback
+        print("\n" + "=" * 70)
+        print("DERIVE SEQUENCE CLUSTERS - FAILED")
+        print("=" * 70)
+        print(f"Error: {str(e)}")
+        print("\nFull traceback:")
+        traceback.print_exc()
+        raise
     finally:
         db.close()
 

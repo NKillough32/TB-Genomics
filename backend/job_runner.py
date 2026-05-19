@@ -4,6 +4,7 @@ import sys
 import json
 import shutil
 import glob
+import traceback
 from datetime import datetime
 from sqlalchemy import text
 from backend.database import SessionLocal
@@ -61,6 +62,13 @@ def _log_to_audit(action: str, user_id: str, details: dict):
         print(f"Audit logging failed: {e}")
 
 
+def _write_log(lf, message: str):
+    """Write timestamped message to log file."""
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    lf.write(f"[{timestamp}] {message}\n")
+    lf.flush()
+
+
 def run_job(job_name):
     if job_name not in ALLOWED_JOBS:
         return None
@@ -76,9 +84,20 @@ def run_job(job_name):
         
         with open(log, "w", encoding="utf-8") as lf:
             try:
+                _write_log(lf, "=" * 70)
+                _write_log(lf, f"JOB START: {job_name}")
+                _write_log(lf, f"Job ID: {job_id}")
+                _write_log(lf, "=" * 70)
+                
+                # Log environment and configuration
+                _write_log(lf, f"Python interpreter: {python_exe}")
+                _write_log(lf, f"Working directory: {os.getcwd()}")
+                _write_log(lf, f"DATABASE_URL: {os.getenv('DATABASE_URL', '(not set)')[:50]}...")
+                
                 set_job_state(job_id, progress=40)
                 # Get the project root (parent of backend dir)
                 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                _write_log(lf, f"Project root: {project_root}")
                 
                 # Special handling for R job - fall back to mock if R fails
                 if job_name == "run_outbreaker2":
@@ -110,9 +129,7 @@ def run_job(job_name):
                         except subprocess.TimeoutExpired:
                             if allow_mock_fallback:
                                 use_mock_fallback = True
-                                lf.write(
-                                    f"\n--- R execution timed out after {outbreaker_timeout}s, using mock report generator ---\n"
-                                )
+                                _write_log(lf, f"R execution timed out after {outbreaker_timeout}s, falling back to mock report generator")
                             else:
                                 raise Exception(
                                     f"R outbreaker2 execution timed out after {outbreaker_timeout}s and mock fallback is disabled"
@@ -120,17 +137,18 @@ def run_job(job_name):
                         if result is not None and result.returncode != 0:
                             if allow_mock_fallback:
                                 use_mock_fallback = True
-                                lf.write("\n--- R execution failed, using mock report generator ---\n")
+                                _write_log(lf, f"R execution failed with code {result.returncode}, falling back to mock report generator")
                             else:
-                                raise Exception("R outbreaker2 execution failed and mock fallback is disabled")
+                                raise Exception(f"R outbreaker2 execution failed with code {result.returncode} and mock fallback is disabled")
                     else:
                         if allow_mock_fallback:
                             use_mock_fallback = True
-                            lf.write("\n--- Rscript not found, using mock report generator ---\n")
+                            _write_log(lf, "Rscript not found, falling back to mock report generator")
                         else:
                             raise Exception("Rscript not found and mock fallback is disabled")
 
                     if use_mock_fallback:
+                        _write_log(lf, "Running mock Outbreaker2 generator...")
                         mock_result = subprocess.run(
                             [python_exe, "scripts/generate_mock_outbreaker.py"],
                             stdout=lf,
@@ -140,11 +158,12 @@ def run_job(job_name):
                             env=child_env,
                         )
                         if mock_result.returncode != 0:
-                            raise Exception("Both R and mock generator failed")
+                            raise Exception(f"Mock generator failed with code {mock_result.returncode}")
 
                     # Always render a deterministic transmission tree graphic
                     # from the JSON network artifact so reports include a
                     # non-blank image even when R plotting backends differ.
+                    _write_log(lf, "Rendering transmission tree graphic...")
                     tree_render_result = subprocess.run(
                         [python_exe, "scripts/render_transmission_tree.py"],
                         stdout=lf,
@@ -154,10 +173,10 @@ def run_job(job_name):
                         env=child_env,
                     )
                     if tree_render_result.returncode != 0:
-                        lf.write("\n--- Warning: transmission tree renderer failed ---\n")
+                        _write_log(lf, "Warning: Transmission tree renderer exited with code {tree_render_result.returncode}")
                     
                     # Generate supplementary visualizations without overwriting outbreaker network output.
-                    lf.write("\n--- Generating supplementary visualizations ---\n")
+                    _write_log(lf, "Generating supplementary visualizations...")
                     if use_mock_fallback:
                         child_env["TB_SKIP_PRIORITY_NETWORK"] = "0"
                     else:
@@ -171,8 +190,9 @@ def run_job(job_name):
                         env=child_env,
                     )
                     if priority_result.returncode != 0:
-                        lf.write("Warning: Supplementary visualizations generation had issues\n")
+                        _write_log(lf, f"Warning: Supplementary visualizations exited with code {priority_result.returncode}")
                 else:
+                    _write_log(lf, f"Running job: {' '.join(ALLOWED_JOBS[job_name])}")
                     result = subprocess.run(
                         ALLOWED_JOBS[job_name],
                         stdout=lf,
@@ -182,14 +202,21 @@ def run_job(job_name):
                     if result.returncode != 0:
                         raise Exception(f"{job_name} exited with code {result.returncode}")
                 
+                _write_log(lf, "=" * 70)
+                _write_log(lf, f"JOB COMPLETED SUCCESSFULLY")
+                _write_log(lf, "=" * 70)
                 set_job_state(job_id, progress=100, status="completed")
                 
                 # Log job completion
                 _log_to_audit("job_completed", "system", {"job_id": job_id, "job_name": job_name})
             except Exception as e:
                 set_job_state(job_id, status="failed")
-                lf.write(f"\n=== JOB FAILED ===\n")
-                lf.write(f"Error: {str(e)}\n")
+                _write_log(lf, "=" * 70)
+                _write_log(lf, "JOB FAILED")
+                _write_log(lf, "=" * 70)
+                _write_log(lf, f"Error: {str(e)}")
+                _write_log(lf, "\nFull traceback:")
+                lf.write(traceback.format_exc())
                 lf.flush()
                 
                 # Log job failure
@@ -227,6 +254,13 @@ def run_pipeline():
         _log_to_audit("pipeline_started", "system", {"pipeline_id": pipeline_id, "steps": PIPELINE_STEPS})
 
         with open(log, "w", encoding="utf-8") as lf:
+            _write_log(lf, "=" * 70)
+            _write_log(lf, "PIPELINE START")
+            _write_log(lf, f"Pipeline ID: {pipeline_id}")
+            _write_log(lf, f"Total steps: {len(PIPELINE_STEPS)}")
+            _write_log(lf, f"Steps: {', '.join(PIPELINE_STEPS)}")
+            _write_log(lf, "=" * 70)
+            
             total = len(PIPELINE_STEPS)
             for idx, step in enumerate(PIPELINE_STEPS):
                 set_job_state(
@@ -234,18 +268,20 @@ def run_pipeline():
                     pipeline_step=idx + 1,
                     progress=int((idx / total) * 95),
                 )
-                lf.write(f"\n{'='*60}\nPIPELINE STEP {idx+1}/{total}: {step}\n{'='*60}\n")
-                lf.flush()
+                _write_log(lf, f"\nPIPELINE STEP {idx+1}/{total}: {step}")
+                _write_log(lf, "-" * 70)
 
                 # Re-use existing run_job logic by launching the step as a child job
                 # and blocking until it finishes.
                 child_id = run_job(step)
                 if child_id is None:
                     set_job_state(pipeline_id, status="failed")
-                    lf.write(f"Step {step} is not allowed - aborting pipeline.\n")
+                    _write_log(lf, f"ERROR: Step {step} is not allowed - aborting pipeline")
                     _log_to_audit("pipeline_failed", "system", {"pipeline_id": pipeline_id, "failed_step": step})
                     return
 
+                _write_log(lf, f"Child job ID: {child_id}")
+                
                 # Poll until child completes
                 while True:
                     child = get_job_snapshot(child_id) or {}
@@ -253,14 +289,19 @@ def run_pipeline():
                         break
                     threading.Event().wait(0.5)
 
-                if (get_job_snapshot(child_id) or {}).get("status") == "failed":
+                child_status = (get_job_snapshot(child_id) or {}).get("status")
+                child_progress = (get_job_snapshot(child_id) or {}).get("progress", "?")
+                _write_log(lf, f"Step {step} finished with status: {child_status} (progress: {child_progress}%)")
+                
+                if child_status == "failed":
                     set_job_state(pipeline_id, status="failed")
-                    lf.write(f"Step {step} failed - aborting pipeline.\n")
+                    _write_log(lf, f"ERROR: Step {step} failed - aborting pipeline")
                     _log_to_audit("pipeline_failed", "system", {"pipeline_id": pipeline_id, "failed_step": step})
                     return
 
-                lf.write(f"Step {step} completed OK.\n")
-
+            _write_log(lf, "\n" + "=" * 70)
+            _write_log(lf, "PIPELINE COMPLETED SUCCESSFULLY")
+            _write_log(lf, "=" * 70)
             set_job_state(pipeline_id, progress=100, status="completed")
             _log_to_audit("pipeline_completed", "system", {"pipeline_id": pipeline_id})
 

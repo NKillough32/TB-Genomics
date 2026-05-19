@@ -1841,6 +1841,53 @@ async function loadCalibrationView(){
 	}
 }
 
+async function loadGenomicVsEpiView(){
+	const view=document.getElementById('analyticsPrimaryView');
+	view.textContent='Loading genomic vs epi comparison...';
+	try{
+		const p=_analyticsParams();
+		const url=`${API}/analytics/genomic-vs-epi?snp_threshold=${encodeURIComponent(p.snpThreshold)}&epi_window_days=${encodeURIComponent(p.epiWindowDays)}&posterior_min=${encodeURIComponent(p.posteriorMin)}`;
+		const d=await fetch(url).then(r=>r.json());
+		const s=d.summary||{};
+		let html='<h4>Genomic vs Epidemiological Link Comparison</h4>';
+		html+=`<div class="kpi-strip">
+			Total pairs: ${escapeHtml(s.total_pairs||0)} |
+			Both supported: ${escapeHtml(s.both_supported||0)} |
+			Genomic only: ${escapeHtml(s.genomic_only||0)} |
+			Epi only: ${escapeHtml(s.epi_only||0)} |
+			Neither: ${escapeHtml(s.neither||0)}
+		</div>`;
+		const params=d.parameters||{};
+		html+=`<p class="hint">SNP threshold: ${escapeHtml(params.snp_threshold??p.snpThreshold)} | Epi window: ${escapeHtml(params.epi_window_days??p.epiWindowDays)} days | Posterior min: ${escapeHtml(params.posterior_min??p.posteriorMin)}</p>`;
+		const pairs=d.pairs||[];
+		if(!pairs.length){
+			html+='<p class="hint">No transmission pairs available. Run Outbreaker2 analysis first.</p>';
+		}else{
+			html+='<div class="analytics-table-wrap"><table class="data-table"><thead><tr><th>Pair</th><th>Posterior</th><th>Confidence</th><th>SNP distance</th><th>Genomic</th><th>Epi</th><th>Category</th></tr></thead><tbody>';
+			for(const row of pairs){
+				const cat=row.category||'';
+				const catColor=cat==='both_supported'?'#166534':cat==='genomic_only'?'#1e40af':cat==='epi_only'?'#92400e':'#6b7280';
+				html+=`<tr>
+					<td>${escapeHtml(row.pair||'')}</td>
+					<td>${escapeHtml((row.posterior??'').toString())}</td>
+					<td>${escapeHtml(row.confidence||'')}</td>
+					<td>${row.snp_distance!=null?escapeHtml(row.snp_distance.toString()):'n/a'}</td>
+					<td>${row.genomic_supported?'Yes':'No'}</td>
+					<td>${row.epi_supported?'Yes':'No'}</td>
+					<td style="color:${catColor};font-weight:600">${escapeHtml(cat.replace(/_/g,' '))}</td>
+				</tr>`;
+			}
+			html+='</tbody></table></div>';
+		}
+		if(Array.isArray(d.notes)&&d.notes.length){
+			html+=`<p class="hint">${escapeHtml(d.notes.join(' '))}</p>`;
+		}
+		view.innerHTML=html;
+	}catch(e){
+		view.textContent='Failed to load genomic vs epi view: '+e;
+	}
+}
+
 function exportClusterDossier(format){
 	const cid=_analyticsClusterId();
 	if(!cid){ alert('Enter a cluster UUID first.'); return; }

@@ -53,6 +53,7 @@ Write-Host "DATABASE_URL=$env:DATABASE_URL"
 Write-Host "TBPROFILER_WSL_ENV=$env:TBPROFILER_WSL_ENV"
 Write-Host "TBPROFILER_WSL_FALLBACK=$env:TBPROFILER_WSL_FALLBACK"
 Write-Host "TBPROFILER_DOCKER_FALLBACK=$env:TBPROFILER_DOCKER_FALLBACK"
+Write-Host "TB_OUTBREAKER_TIMEOUT_SEC=3600"
 
 # Create a temporary batch file to launch backend with env vars (Start-Process doesn't inherit env vars)
 $backendBatch = Join-Path $root '.launch_backend.bat'
@@ -63,6 +64,7 @@ set DATABASE_URL=$env:DATABASE_URL
 set TBPROFILER_WSL_ENV=$env:TBPROFILER_WSL_ENV
 set TBPROFILER_WSL_FALLBACK=$env:TBPROFILER_WSL_FALLBACK
 set TBPROFILER_DOCKER_FALLBACK=$env:TBPROFILER_DOCKER_FALLBACK
+set TB_OUTBREAKER_TIMEOUT_SEC=3600
 cd /d "$root"
 "$venvPython" -m uvicorn backend.app:app --reload --reload-dir backend
 endlocal

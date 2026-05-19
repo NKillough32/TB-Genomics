@@ -36,9 +36,13 @@ if "%DATABASE_URL%"=="" (
 set "TB_ENABLE_SYNTHETIC_SEEDING=1"
 set "TB_ALLOW_NON_OPERATIONAL_ACTIONS=1"
 
+if "%TB_OUTBREAKER_TIMEOUT_SEC%"=="" (
+  set "TB_OUTBREAKER_TIMEOUT_SEC=3600"
+)
+
 echo Launching backend and GUI in DEMO MODE...
 
-start "TB Backend (DEMO)" cmd /k "cd /d %CD% && set DATABASE_URL=%DATABASE_URL% && set TB_ENABLE_SYNTHETIC_SEEDING=1 && set TB_ALLOW_NON_OPERATIONAL_ACTIONS=1 && .venv\Scripts\python.exe -m uvicorn backend.app:app --reload"
+start "TB Backend (DEMO)" cmd /k "cd /d %CD% && set DATABASE_URL=%DATABASE_URL% && set TB_ENABLE_SYNTHETIC_SEEDING=1 && set TB_ALLOW_NON_OPERATIONAL_ACTIONS=1 && set TB_OUTBREAKER_TIMEOUT_SEC=%TB_OUTBREAKER_TIMEOUT_SEC% && .venv\Scripts\python.exe -m uvicorn backend.app:app --reload"
 start "TB GUI" cmd /k "cd /d %CD%\gui && python -m http.server 8081"
 
 timeout /t 2 /nobreak >nul

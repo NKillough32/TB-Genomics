@@ -19,9 +19,13 @@ if "%DATABASE_URL%"=="" (
   set "DATABASE_URL=postgresql://tb:tb@localhost/tb_surveillance"
 )
 
+if "%TB_OUTBREAKER_TIMEOUT_SEC%"=="" (
+  set "TB_OUTBREAKER_TIMEOUT_SEC=3600"
+)
+
 echo Launching backend and GUI...
 
-start "TB Backend" cmd /k "cd /d %CD% && set DATABASE_URL=%DATABASE_URL% && .venv\Scripts\python.exe -m uvicorn backend.app:app --reload --reload-dir backend"
+start "TB Backend" cmd /k "cd /d %CD% && set DATABASE_URL=%DATABASE_URL% && set TB_OUTBREAKER_TIMEOUT_SEC=%TB_OUTBREAKER_TIMEOUT_SEC% && .venv\Scripts\python.exe -m uvicorn backend.app:app --reload --reload-dir backend"
 
 start "TB GUI" cmd /k "cd /d %CD%\gui && python -m http.server 8081"
 

@@ -61,11 +61,51 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
     # -- Load export JSON artifacts ---------------------------------------------
     summary_data = _load_export_json("outbreaker_summary.json")
     transmission_data = _load_export_json("transmission_network.json")
+    synthesis_data = _load_export_json("synthesis_output.json")
     lineage_dr_data = _load_export_json("lineage_dr_validation.json")
     resistance_validation_data = _load_export_json("resistance_validation.json")
     secondary_validation_data = _load_export_json("secondary_engine_validation.json")
     method_comparison_data = _load_export_json("cluster_method_comparison.json")
     sequence_summary_data = _load_export_json("sequence_clustering_summary.json")
+
+    synthesis_pairs = synthesis_data.get("pairs") if isinstance(synthesis_data, dict) else []
+    if not isinstance(synthesis_pairs, list):
+        synthesis_pairs = []
+    synthesis_pair_by_directed: dict[tuple[str, str], dict] = {}
+    synthesis_pair_by_unordered: dict[tuple[str, str], dict] = {}
+    for pair in synthesis_pairs:
+        if not isinstance(pair, dict):
+            continue
+        src = str(pair.get("source") or "")
+        tgt = str(pair.get("target") or "")
+        if not src or not tgt:
+            continue
+        synthesis_pair_by_directed[(src, tgt)] = pair
+        synthesis_pair_by_unordered[tuple(sorted([src, tgt]))] = pair
+
+    synthesis_clusters = synthesis_data.get("clusters") if isinstance(synthesis_data, dict) else []
+    if not isinstance(synthesis_clusters, list):
+        synthesis_clusters = []
+    synthesis_cluster_by_id = {
+        str(cluster.get("cluster_id")): cluster
+        for cluster in synthesis_clusters
+        if isinstance(cluster, dict) and cluster.get("cluster_id")
+    }
+
+    def _synthesis_pair_for(source: str, target: str) -> dict:
+        return (
+            synthesis_pair_by_directed.get((source, target))
+            or synthesis_pair_by_unordered.get(tuple(sorted([source, target])))
+            or {}
+        )
+
+    def _lineage_distribution_text(cluster_id: str) -> str:
+        cluster = synthesis_cluster_by_id.get(str(cluster_id or ""))
+        distribution = cluster.get("lineage_distribution") if isinstance(cluster, dict) else {}
+        if not isinstance(distribution, dict) or not distribution:
+            return "n/a"
+        items = sorted(distribution.items(), key=lambda item: (-int(item[1] or 0), str(item[0])))
+        return ", ".join(f"{key}: {value}" for key, value in items[:4])
 
     def _build_analysis_quality_warnings() -> str:
         warnings: list[str] = []
@@ -115,6 +155,12 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
                         "No samples were compared for drug-resistance concordance. "
                         "Resistance heatmaps remain useful for review, but are not externally validated."
                     )
+
+        if not synthesis_pairs:
+            warnings.append(
+                "Transmission synthesis output is missing. Printed confidence categories fall back to "
+                "legacy report heuristics until exports/synthesis_output.json is generated."
+            )
 
         if isinstance(method_comparison_data, dict):
             try:
@@ -737,12 +783,34 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
             else ("QC-unresolved" if qc_problem
                   else ("D1: SNP>12" if pairwise_distance is not None and pairwise_distance > 12 else "Model-only"))
         )
+        synthesis_pair = _synthesis_pair_for(src, tgt)
+        synthesis_confidence = str(
+            synthesis_pair.get("confidence")
+            or synthesis_pair.get("confidence_code")
+            or "Not synthesised"
+        )
+        synthesis_priority = synthesis_pair.get("priority_score")
+        try:
+            synthesis_priority_text = str(int(round(float(synthesis_priority))))
+        except Exception:
+            synthesis_priority_text = "n/a"
+        synthesis_flags = synthesis_pair.get("flags") if isinstance(synthesis_pair.get("flags"), list) else []
+        synthesis_flag_text = ", ".join(str(flag).replace("_", " ") for flag in synthesis_flags[:3]) or "none"
+        concordance_bits = []
+        if synthesis_pair.get("lineage_concordance"):
+            concordance_bits.append(f"Lineage: {synthesis_pair.get('lineage_concordance')}")
+        if synthesis_pair.get("resistance_profile_concordance"):
+            concordance_bits.append(f"DR: {synthesis_pair.get('resistance_profile_concordance')}")
         record = {
             "pair": f"{_short_case_id(src)}\u2192{_short_case_id(tgt)}",
             "posterior": prob,
             "pairwise": str(pairwise_distance) if pairwise_distance is not None else "n/a",
             "qc": f"{src_qc}/{tgt_qc}",
             "validation_flag": validation_flag,
+            "synthesis_confidence": synthesis_confidence,
+            "synthesis_priority": synthesis_priority_text,
+            "synthesis_concordance": "; ".join(concordance_bits) or "n/a",
+            "synthesis_flags": synthesis_flag_text,
         }
         if qc_problem:
             qc_resolution_pairs.append(record)
@@ -876,6 +944,25 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
         }.get(text, "badge-grey")
         return f'<span class="badge {cls}">{_safe_html(text)}</span>'
 
+    def _synthesis_badge(text: str) -> str:
+        label = str(text or "Not synthesised")
+        cls = {
+            "Strong support": "badge-green",
+            "strong_support": "badge-green",
+            "Moderate support": "badge-amber",
+            "moderate_support": "badge-amber",
+            "Genomic-only signal": "badge-amber",
+            "genomic_only_signal": "badge-amber",
+            "Model-only signal": "badge-orange",
+            "model_only_signal": "badge-orange",
+            "Contradictory": "badge-red",
+            "contradictory": "badge-red",
+            "Insufficient evidence": "badge-grey",
+            "insufficient_evidence": "badge-grey",
+            "Not synthesised": "badge-grey",
+        }.get(label, "badge-grey")
+        return f'<span class="badge {cls}">{_safe_html(label.replace("_", " ").title() if "_" in label else label)}</span>'
+
     def _progress(value, label="") -> str:
         if value is None:
             return f'<span class="muted">n/a</span>'
@@ -920,10 +1007,11 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
                      f"<td>{_safe_html(_post)}</td>"
                      f"<td>{_safe_html(item['pairwise'])}</td>"
                      f"<td>{_safe_html(item['qc'])}</td>"
-                     f"<td>{_badge(item['validation_flag'])}</td></tr>")
+                     f"<td>{_badge(item['validation_flag'])}</td>"
+                     f"<td>{_synthesis_badge(item.get('synthesis_confidence'))}</td></tr>")
         return (f"<h4>{_safe_html(title)}</h4>"
                 f"<div class='tbl-wrap'><table><thead><tr><th>Pair</th><th>Posterior</th><th>SNP dist</th>"
-                f"<th>QC src/rec</th><th>Flag</th></tr></thead><tbody>{rows}</tbody></table></div>")
+                f"<th>QC src/rec</th><th>Genomic flag</th><th>Synthesis confidence</th></tr></thead><tbody>{rows}</tbody></table></div>")
 
     # -------------------------------------------------------------------------
     # Computed summary values
@@ -1190,6 +1278,22 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
   Complete these fields in the case management system for MDT review.
 </div>"""
 
+    synthesis_parameters = synthesis_data.get("parameters") if isinstance(synthesis_data, dict) else {}
+    if not isinstance(synthesis_parameters, dict):
+        synthesis_parameters = {}
+    synthesis_method_rows = ""
+    for label, key in [
+        ("Synthesis low-SNP threshold", "low_snp_threshold"),
+        ("Synthesis contradiction SNP threshold", "high_snp_contradiction_threshold"),
+        ("Synthesis temporal window", "temporal_window_days"),
+        ("Synthesis high posterior threshold", "high_posterior_threshold"),
+    ]:
+        if key in synthesis_parameters:
+            synthesis_method_rows += (
+                f"<tr><td>{_safe_html(label)}</td><td>Transmission synthesis</td>"
+                f"<td>{_safe_html(str(synthesis_parameters.get(key)))}</td></tr>"
+            )
+
     # Methods section HTML
     methods_html = f"""
 <div class="tbl-wrap"><table><thead><tr><th>Pipeline component</th><th>Tool / approach</th><th>Version / parameter</th></tr></thead><tbody>
@@ -1209,6 +1313,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
   <tr><td>MCMC iterations</td><td></td><td>{_safe_html(str((summary_data or {{}}).get('n_iter', (summary_data or {{}}).get('n_generations', 'n/a'))))}</td></tr>
   <tr><td>Burn-in</td><td></td><td>{_safe_html(str((summary_data or {{}}).get('burnin', 'n/a')))}</td></tr>
   <tr><td>Posterior samples</td><td></td><td>{_safe_html(str((summary_data or {{}}).get('n_samples', 'n/a')))}</td></tr>
+  {synthesis_method_rows}
 </tbody></table></div>
 <div class="callout callout-warn" style="margin-top:.5rem">
   Fields showing &ldquo;Not recorded&rdquo; must be populated in the <code>sequencing_runs</code>
@@ -1226,8 +1331,18 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
             flag = item["validation_flag"]
             snp  = str(item["pairwise"])
             qc   = item["qc"]
+            synth_conf = item.get("synthesis_confidence", "Not synthesised")
+            synth_priority = item.get("synthesis_priority", "n/a")
+            synth_concordance = item.get("synthesis_concordance", "n/a")
+            synth_flags = item.get("synthesis_flags", "none")
             # Derive final classification
-            if flag == "SNP-linked":
+            if str(synth_conf).lower() in {"contradictory"}:
+                final = "<span class='badge badge-red'>Do not escalate - synthesis contradictory</span>"
+            elif str(synth_conf).lower() in {"strong support", "strong_support"}:
+                final = "<span class='badge badge-green'>Synthesis supported - escalate with epi</span>"
+            elif str(synth_conf).lower() in {"moderate support", "moderate_support"}:
+                final = "<span class='badge badge-amber'>Synthesis moderate - MDT review</span>"
+            elif flag == "SNP-linked":
                 final = "<span class='badge badge-green'>Genomically supported - escalate with epi</span>"
             elif flag == "QC-unresolved":
                 final = "<span class='badge badge-red'>Hold - repeat sequencing required</span>"
@@ -1240,12 +1355,17 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
                      f"<td>{_safe_html(snp)}</td>"
                      f"<td>{_safe_html(qc)}</td>"
                      f"<td>{_badge(flag)}</td>"
+                     f"<td>{_synthesis_badge(synth_conf)}</td>"
+                     f"<td>{_safe_html(str(synth_priority))}</td>"
+                     f"<td>{_safe_html(str(synth_concordance))}</td>"
+                     f"<td>{_safe_html(str(synth_flags))}</td>"
                      f"<td><em class='muted'>Awaiting epi review</em></td>"
                      f"<td>{final}</td></tr>")
         return (f"<h4>{_safe_html(title)}</h4>"
                 f"<div class='tbl-wrap'><table><thead><tr>"
                 f"<th>Pair</th><th>Posterior</th><th>SNP dist</th>"
-                f"<th>QC src/rec</th><th>Genomic flag</th><th>Epidemiological link</th><th>Final classification</th>"
+                f"<th>QC src/rec</th><th>Genomic flag</th><th>Synthesis confidence</th><th>Priority</th>"
+                f"<th>Lineage/DR</th><th>Synthesis flags</th><th>Epidemiological link</th><th>Final classification</th>"
                 f"</tr></thead><tbody>{rows}</tbody></table></div>")
 
     # PH interpretation statement
@@ -1779,15 +1899,17 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
         cepi_rows = ""
         for r in cluster_epi_rows:
             cid = _short_case_id(str(r.get("cluster_id") or ""))
+            lineage_dist = _lineage_distribution_text(str(r.get("cluster_id") or ""))
             rr_mdr = f"{int(r.get('rr_cases') or 0)}/{int(r.get('mdr_cases') or 0)}"
             recent = f"{int(r.get('recent_30d') or 0)}/{int(r.get('recent_60d') or 0)}/{int(r.get('recent_90d') or 0)}"
             cepi_rows += (f"<tr><td class='mono'>{_safe_html(cid)}</td><td>{_safe_html(str(r.get('cases',0)))}</td>"
                           f"<td>{_safe_html(str(r.get('first_specimen','n/a')))}</td><td>{_safe_html(str(r.get('latest_specimen','n/a')))}</td>"
                           f"<td>{_safe_html(str(r.get('median_snp_proxy','n/a')))}</td><td>{_safe_html(str(r.get('max_snp_proxy','n/a')))}</td>"
+                          f"<td>{_safe_html(lineage_dist)}</td>"
                           f"<td>{_safe_html(rr_mdr)}</td><td class='mono'>{_safe_html(_short_case_id(str(r.get('suspected_index_case','n/a'))))}</td>"
                           f"<td>{_safe_html(recent)}</td></tr>")
         cluster_epi_html = (f"<div class='tbl-wrap'><table><thead><tr><th>Cluster</th><th>Cases</th><th>First specimen</th>"
-                            f"<th>Latest specimen</th><th>Median SNP</th><th>Max SNP</th><th>RR/MDR cases</th><th>Index case</th><th>Recent 30/60/90d</th>"
+                            f"<th>Latest specimen</th><th>Median SNP</th><th>Max SNP</th><th>Lineage distribution</th><th>RR/MDR cases</th><th>Index case</th><th>Recent 30/60/90d</th>"
                             f"</tr></thead><tbody>{cepi_rows}</tbody></table></div>")
         # Growth status
         growth_rows = ""

@@ -43,6 +43,7 @@ ALLOWED_JOBS = {
     "export_outbreaker": [python_exe, "scripts/export_outbreaker.py"],
     "run_lineage_dr_validation": [python_exe, "scripts/run_lineage_dr_validation.py"],
     "run_outbreaker2": ["Rscript", "outbreaker2/run_outbreaker2.R"],
+    "run_transmission_synthesis": [python_exe, "scripts/run_transmission_synthesis.py"],
     "run_secondary_validation": [python_exe, "scripts/run_secondary_engine_validation.py"],
 }
 
@@ -257,6 +258,7 @@ PIPELINE_STEPS = [
     "run_lineage_dr_validation",
     "run_outbreaker2",
     "compare_clustering_methods",
+    "run_transmission_synthesis",
 ]
 
 
@@ -338,4 +340,3 @@ def run_pipeline():
 
     threading.Thread(target=_task).start()
     return pipeline_id
-

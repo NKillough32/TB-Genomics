@@ -719,6 +719,10 @@ def _extract_lineage_and_resistance(result_json: Path) -> dict[str, Any]:
 
     lineage: Any = None
     dr_payload: Any = None
+    resistance_mutations: Any = None
+    sublineage: Any = None
+    drtype: Any = None
+    db_version: Any = None
     confidence = None
     summary = None
 
@@ -729,10 +733,17 @@ def _extract_lineage_and_resistance(result_json: Path) -> dict[str, Any]:
             or payload.get("lineage_name")
             or None
         )
+        sublineage = payload.get("sub_lineage") or payload.get("sublineage")
+        drtype = payload.get("drtype")
+        db_version_payload = payload.get("db_version")
+        if isinstance(db_version_payload, dict):
+            db_version = db_version_payload.get("name") or db_version_payload.get("version") or db_version_payload
+        else:
+            db_version = db_version_payload
+        resistance_mutations = payload.get("dr_variants")
         # Keep resistance structure broad because tool schema varies by db/release.
         dr_payload = (
-            payload.get("dr_variants")
-            or payload.get("dr")
+            payload.get("dr")
             or payload.get("drug_resistance")
             or payload.get("resistance")
             or None
@@ -756,11 +767,38 @@ def _extract_lineage_and_resistance(result_json: Path) -> dict[str, Any]:
     else:
         lineage_value = str(lineage)
 
+    resistant_drugs: set[str] = set()
+    if isinstance(resistance_mutations, list):
+        for item in resistance_mutations:
+            if isinstance(item, dict):
+                drug = item.get("drug") or item.get("drugs") or item.get("Drug")
+                if isinstance(drug, list):
+                    resistant_drugs.update(str(d).strip() for d in drug if str(d).strip())
+                elif drug:
+                    resistant_drugs.add(str(drug).strip())
+
+    if drtype is not None or db_version is not None:
+        dr_payload = {
+            "classification": str(drtype) if drtype is not None else None,
+            "catalogue": str(db_version) if db_version is not None else None,
+            "resistant_drugs": sorted(resistant_drugs),
+        }
+
+    summary_parts = []
+    if drtype is not None:
+        summary_parts.append(f"TBProfiler classification: {drtype}")
+    if db_version is not None:
+        summary_parts.append(f"catalogue: {db_version}")
+    if summary is not None:
+        summary_parts.append(str(summary))
+
     return {
         "lineage": lineage_value,
+        "sublineage": str(sublineage) if sublineage is not None else None,
+        "resistance_mutations": resistance_mutations,
         "predicted_drug_resistance": dr_payload,
         "confidence_score": _to_float(str(confidence)) if confidence is not None else None,
-        "interpretation_summary": str(summary) if summary is not None else None,
+        "interpretation_summary": "; ".join(summary_parts) if summary_parts else None,
     }
 
 
@@ -1299,6 +1337,8 @@ def _import_tbprofiler_results(result_json_paths: list[str]) -> dict[str, Any]:
                         sample_id,
                         species_confirmation,
                         lineage,
+                        sublineage,
+                        resistance_mutations,
                         predicted_drug_resistance,
                         confidence_score,
                         interpretation_summary
@@ -1307,12 +1347,16 @@ def _import_tbprofiler_results(result_json_paths: list[str]) -> dict[str, Any]:
                         CAST(:sample_id AS uuid),
                         :species_confirmation,
                         :lineage,
+                        :sublineage,
+                        CAST(:resistance_mutations AS jsonb),
                         CAST(:predicted_drug_resistance AS jsonb),
                         :confidence_score,
                         :interpretation_summary
                     )
                     ON CONFLICT (sample_id) DO UPDATE SET
                         lineage = EXCLUDED.lineage,
+                        sublineage = EXCLUDED.sublineage,
+                        resistance_mutations = EXCLUDED.resistance_mutations,
                         predicted_drug_resistance = EXCLUDED.predicted_drug_resistance,
                         confidence_score = EXCLUDED.confidence_score,
                         interpretation_summary = EXCLUDED.interpretation_summary
@@ -1322,6 +1366,8 @@ def _import_tbprofiler_results(result_json_paths: list[str]) -> dict[str, Any]:
                     "sample_id": case_sample_id,
                     "species_confirmation": "M. tuberculosis complex",
                     "lineage": fields["lineage"],
+                    "sublineage": fields["sublineage"],
+                    "resistance_mutations": json.dumps(fields["resistance_mutations"]) if fields["resistance_mutations"] is not None else "null",
                     "predicted_drug_resistance": json.dumps(fields["predicted_drug_resistance"]) if fields["predicted_drug_resistance"] is not None else "null",
                     "confidence_score": fields["confidence_score"],
                     "interpretation_summary": fields["interpretation_summary"],
@@ -1475,10 +1521,17 @@ def _import_calls_csv(path: Path) -> dict[str, Any]:
 
 
 def _normalise_dr_to_rs(dr: Any) -> dict[str, str]:
-    """Flatten any DR payload shape to {drug: 'R' | 'S'}. Only R and S are kept."""
+    """Flatten any DR payload shape to {drug: 'R' | 'S' | 'N'}."""
     result: dict[str, str] = {}
     if isinstance(dr, dict):
         for drug, val in dr.items():
+            if drug in {"classification", "catalogue"}:
+                continue
+            if drug == "resistant_drugs" and isinstance(val, list):
+                for resistant_drug in val:
+                    if str(resistant_drug).strip():
+                        result[str(resistant_drug).strip()] = "R"
+                continue
             if isinstance(val, str):
                 result[drug] = val.upper()[:1]
             elif isinstance(val, dict):
@@ -1496,14 +1549,14 @@ def _normalise_dr_to_rs(dr: Any) -> dict[str, str]:
                 call = item.get("call") or item.get("prediction") or item.get("type") or "R"
                 if drug:
                     result[drug] = str(call).upper()[:1]
-    return {k: v for k, v in result.items() if v in {"R", "S"}}
+    return {k: v for k, v in result.items() if v in {"R", "S", "N"}}
 
 
 def _detect_dr_discordance(
     tbprofiler_jsons: list[str],
     mykrobe_jsons: list[str],
 ) -> list[dict[str, Any]]:
-    """Compare per-sample DR calls from both tools; return discordances (one says R, other says S)."""
+    """Compare per-sample DR calls from both tools, preserving explicit no-calls."""
     tbp_by_sample: dict[str, dict[str, str]] = {}
     for path_str in tbprofiler_jsons:
         path = Path(path_str)
@@ -1525,7 +1578,16 @@ def _detect_dr_discordance(
         tbp_dr = tbp_by_sample[sample_id]
         mk_dr = mk_by_sample[sample_id]
         discordant_drugs: list[dict[str, str]] = []
+        one_tool_no_call: list[dict[str, str]] = []
+        comparable_drugs = 0
         for drug in set(tbp_dr) & set(mk_dr):
+            if "N" in {tbp_dr[drug], mk_dr[drug]}:
+                if tbp_dr[drug] != mk_dr[drug]:
+                    one_tool_no_call.append(
+                        {"drug": drug, "tbprofiler": tbp_dr[drug], "mykrobe": mk_dr[drug]}
+                    )
+                continue
+            comparable_drugs += 1
             if {tbp_dr[drug], mk_dr[drug]} == {"R", "S"}:
                 discordant_drugs.append(
                     {"drug": drug, "tbprofiler": tbp_dr[drug], "mykrobe": mk_dr[drug]}
@@ -1534,7 +1596,9 @@ def _detect_dr_discordance(
             "sample_id": sample_id,
             "concordant": len(discordant_drugs) == 0,
             "discordant_drugs": discordant_drugs,
-            "drugs_compared": len(set(tbp_dr) & set(mk_dr)),
+            "one_tool_no_call": len(one_tool_no_call) > 0,
+            "no_call_drugs": one_tool_no_call,
+            "drugs_compared": comparable_drugs,
         })
 
     return discordances
@@ -1967,6 +2031,7 @@ def main() -> None:
         limitation_codes.append("no_dr_concordance_samples")
         warnings.append("No samples were compared across DR engines; cross-engine DR concordance is unavailable.")
     comparable_drug_calls = sum(int(d.get("drugs_compared") or 0) for d in dr_concordance)
+    one_tool_no_call_count = sum(1 for d in dr_concordance if d.get("one_tool_no_call"))
     if dr_concordance and comparable_drug_calls == 0:
         interpretation_blocking = True
         limitation_codes.append("no_comparable_drug_calls")
@@ -2027,6 +2092,7 @@ def main() -> None:
             "comparable_drug_calls": comparable_drug_calls,
             "all_concordant": all(d["concordant"] for d in dr_concordance) if dr_concordance else None,
             "discordant_sample_count": sum(1 for d in dr_concordance if not d["concordant"]),
+            "one_tool_no_call_sample_count": one_tool_no_call_count,
             "used_existing_artifacts": concordance_used_existing_artifacts,
             "details": dr_concordance,
         },

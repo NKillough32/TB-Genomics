@@ -45,6 +45,7 @@ from backend.routers.cases import (
     _write_csv_rows,
     get_db,
 )
+from backend.synthesis.transmission_synthesis import _major_lineage
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +127,28 @@ def outbreak_report(db: Session = Depends(get_db)):
     secondary_validation_data = load_json_artifact("secondary_engine_validation.json")
     method_comparison_data = load_json_artifact("cluster_method_comparison.json")
     sequence_summary_data = load_json_artifact("sequence_clustering_summary.json")
+    synthesis_data = load_json_artifact("synthesis_output.json") or {}
+    synthesis_pairs = synthesis_data.get("pairs") if isinstance(synthesis_data, dict) else []
+    if not isinstance(synthesis_pairs, list):
+        synthesis_pairs = []
+    synthesis_pair_by_directed = {}
+    synthesis_pair_by_unordered = {}
+    for pair in synthesis_pairs:
+        if not isinstance(pair, dict):
+            continue
+        source = str(pair.get("source") or "")
+        target = str(pair.get("target") or "")
+        if not source or not target:
+            continue
+        synthesis_pair_by_directed[(source, target)] = pair
+        synthesis_pair_by_unordered[tuple(sorted([source, target]))] = pair
+
+    def _synthesis_pair_for(source: str, target: str) -> dict:
+        return (
+            synthesis_pair_by_directed.get((source, target))
+            or synthesis_pair_by_unordered.get(tuple(sorted([source, target])))
+            or {}
+        )
 
     kpi_data = None
     try:
@@ -1870,7 +1893,12 @@ def outbreak_report(db: Session = Depends(get_db)):
         qc_problem = src_qc.lower() not in ("pass", "passed") or tgt_qc.lower() not in ("pass", "passed") or bool(src_case.get("contamination_flag")) or bool(tgt_case.get("contamination_flag"))
         src_lineage = str(src_case.get("lineage") or "n/a")
         tgt_lineage = str(tgt_case.get("lineage") or "n/a")
-        lineage_match = "yes" if src_lineage != "n/a" and src_lineage == tgt_lineage else ("no" if src_lineage != "n/a" and tgt_lineage != "n/a" else "unknown")
+        src_major_lineage = _major_lineage(src_lineage) if src_lineage != "n/a" else ""
+        tgt_major_lineage = _major_lineage(tgt_lineage) if tgt_lineage != "n/a" else ""
+        lineage_match = (
+            "yes" if src_major_lineage and src_major_lineage == tgt_major_lineage
+            else ("no" if src_major_lineage and tgt_major_lineage else "unknown")
+        )
         src_res = _resistance_profile_text(src_case.get("predicted_drug_resistance"))
         tgt_res = _resistance_profile_text(tgt_case.get("predicted_drug_resistance"))
         resistance_match = "yes" if src_res != "none" and src_res == tgt_res else ("unknown" if src_res == "none" or tgt_res == "none" else "no")
@@ -1885,6 +1913,17 @@ def outbreak_report(db: Session = Depends(get_db)):
         validation_flag = "SNP-linked" if pairwise_distance is not None and pairwise_distance <= 12 and same_cluster and not qc_problem else (
             "QC-unresolved" if qc_problem else ("D1: SNP>12" if pairwise_distance is not None and pairwise_distance > 12 else "Model-only")
         )
+        synthesis_pair = _synthesis_pair_for(source, target)
+        synthesis_confidence = str(
+            synthesis_pair.get("confidence")
+            or synthesis_pair.get("confidence_code")
+            or confidence_tier
+        )
+        synthesis_priority = synthesis_pair.get("priority_score")
+        try:
+            synthesis_priority_text = str(int(round(float(synthesis_priority))))
+        except Exception:
+            synthesis_priority_text = "n/a"
         action_owner = "TB MDT" if not qc_problem else "Laboratory"
         due_date = "next MDT" if not qc_problem else "48h"
 
@@ -1899,6 +1938,8 @@ def outbreak_report(db: Session = Depends(get_db)):
             "action_owner": action_owner,
             "due_date": due_date,
             "confidence_tier": confidence_tier,
+            "synthesis_confidence": synthesis_confidence,
+            "synthesis_priority": synthesis_priority_text,
         }
         if qc_problem:
             qc_resolution_pairs.append(record)
@@ -1909,7 +1950,7 @@ def outbreak_report(db: Session = Depends(get_db)):
         else:
             model_only_pairs.append(record)
 
-    _pairs_csv_rows = [["Category", "Pair", "Posterior", "Pairwise SNP", "QC src/rec", "Lineage/Resistance", "Epi link", "Flag", "Owner", "Due"]]
+    _pairs_csv_rows = [["Category", "Pair", "Posterior", "Pairwise SNP", "QC src/rec", "Lineage/Resistance", "Epi link", "Flag", "Synthesis confidence", "Synthesis priority", "Owner", "Due"]]
 
     def build_pair_rows(records: list[dict], title: str, category: str = ""):
         if not records:
@@ -1920,6 +1961,7 @@ def outbreak_report(db: Session = Depends(get_db)):
             wrap_cell("SNP", cell_hdr_style),
             wrap_cell("QC", cell_hdr_style),
             wrap_cell("Flag", cell_hdr_style),
+            wrap_cell("Synthesis", cell_hdr_style),
         ]]
         for item in records:
             rows.append([
@@ -1928,6 +1970,7 @@ def outbreak_report(db: Session = Depends(get_db)):
                 wrap_cell(item["pairwise"], cell_body_style),
                 wrap_cell(item["qc"], cell_body_style),
                 wrap_cell(item["validation_flag"], cell_body_style),
+                wrap_cell(f"{item.get('synthesis_confidence', 'n/a')} ({item.get('synthesis_priority', 'n/a')})", cell_body_style),
             ])
             _pairs_csv_rows.append([
                 category,
@@ -1938,12 +1981,14 @@ def outbreak_report(db: Session = Depends(get_db)):
                 item.get("lineage_resistance", ""),
                 item.get("epi_link", ""),
                 item["validation_flag"],
+                item.get("synthesis_confidence", ""),
+                item.get("synthesis_priority", ""),
                 item.get("action_owner", ""),
                 item.get("due_date", ""),
             ])
         table = Table(
             rows,
-            colWidths=fit_col_widths([2.0 * inch, 0.65 * inch, 0.65 * inch, 1.0 * inch, 2.9 * inch], fill=True),
+            colWidths=fit_col_widths([1.75 * inch, 0.55 * inch, 0.55 * inch, 0.85 * inch, 1.35 * inch, 1.75 * inch], fill=True),
             repeatRows=1,
         )
         table.setStyle(standard_table_style(font_size=7.0, header=True, valign_top=True))

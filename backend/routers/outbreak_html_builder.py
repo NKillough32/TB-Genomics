@@ -1859,6 +1859,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
         )
     mut_rows_html = ""
     mut_count = 0
+    suppressed_mutations = 0
     for base in mutation_rows_raw:
         case_id_mut = str(base.get("case_id") or "")
         for mut in _iter_resistance_mutations(base.get("resistance_mutations")):
@@ -1870,6 +1871,9 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
             )
             validity = _drug_gene_status_label(drug, gene)
             report_status = _resistance_report_status_label(validation_record, drug, gene)
+            if report_status == "Suppressed":
+                suppressed_mutations += 1
+                continue
             pred_text = _resistance_profile_text(base.get("predicted_drug_resistance"))
             badge_class = "badge-green" if "Valid" in validity else ("badge-red" if "Unusual" in validity else "badge-grey")
             report_badge_class = "badge-red" if report_status == "Suppressed" else ("badge-green" if report_status == "Validated" else "badge-amber")
@@ -1890,8 +1894,20 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
         dr_table_html = (f"{dr_validation_summary_html}<div class='tbl-wrap'><table><thead><tr><th>Case</th><th>Drug</th><th>Mutation</th>"
                          f"<th>Gene</th><th>Gene-drug status</th><th>Report status</th><th>Confidence</th><th>Predicted profile</th>"
                          f"</tr></thead><tbody>{mut_rows_html}</tbody></table></div>")
+        if suppressed_mutations:
+            dr_table_html += (
+                f'<p class="muted" style="margin-top:.4rem">'
+                f'{_safe_html(str(suppressed_mutations))} unusual gene-drug mapping(s) were suppressed from this operational table.'
+                f'</p>'
+            )
     else:
-        dr_table_html = '<p class="muted">No structured resistance-mutation details found.</p>'
+        dr_table_html = '<p class="muted">No reportable resistance-mutation details found.</p>'
+        if suppressed_mutations:
+            dr_table_html += (
+                f'<p class="muted" style="margin-top:.4rem">'
+                f'{_safe_html(str(suppressed_mutations))} unusual gene-drug mapping(s) were suppressed from this operational table.'
+                f'</p>'
+            )
 
     # 13. Cluster epidemiology tables
     cluster_epi_html = ""

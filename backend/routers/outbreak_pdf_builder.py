@@ -2457,6 +2457,7 @@ def outbreak_report(db: Session = Depends(get_db)):
             section_note_style,
         ))
     mutation_rows = [["Case", "Drug", "Mutation", "Gene", "Gene-drug status", "Report status", "Confidence", "Predicted"]]
+    suppressed_mutations = 0
     for base in mutation_rows_raw:
         case_id = str(base.get("case_id") or "")
         predicted = base.get("predicted_drug_resistance")
@@ -2470,6 +2471,9 @@ def outbreak_report(db: Session = Depends(get_db)):
             )
             validity_display = _drug_gene_status_label(drug, gene)
             report_status = _resistance_report_status_label(validation_record, drug, gene)
+            if report_status == "Suppressed":
+                suppressed_mutations += 1
+                continue
             mutation_rows.append([
                 _short_case_id(case_id),
                 drug,
@@ -2502,8 +2506,18 @@ def outbreak_report(db: Session = Depends(get_db)):
             spacer_after=0.0,
             keep_together=False,
         )
+        if suppressed_mutations:
+            story.append(Paragraph(
+                f"<b>{suppressed_mutations}</b> unusual gene-drug mapping(s) were suppressed from the operational table.",
+                section_note_style,
+            ))
     else:
-        story.append(Paragraph("No structured resistance-mutation details found.", styles["Normal"]))
+        story.append(Paragraph("No reportable resistance-mutation details found.", styles["Normal"]))
+        if suppressed_mutations:
+            story.append(Paragraph(
+                f"<b>{suppressed_mutations}</b> unusual gene-drug mapping(s) were suppressed from the operational table.",
+                section_note_style,
+            ))
 
     # -- Phenotypic DST Reconciliation ------------------------------------------
     section_divider()

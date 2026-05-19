@@ -439,6 +439,7 @@ async function loadLineageDrValidation(){
 		const summary=payload.analysis_summary||{};
 		const epi=payload.analysis_epi_summary||{};
 		const engines=payload.engines||{};
+		const effectiveEngines=payload.effective_engines||{};
 		const tbRun=payload.tbprofiler_run||{};
 		const mkRun=payload.mykrobe_run||{};
 		const concordance=payload.dr_concordance||{};
@@ -478,11 +479,13 @@ async function loadLineageDrValidation(){
 		html+='<table class="data-table"><thead><tr><th>Tool</th><th>Status</th><th>Run outcome</th><th>Message</th></tr></thead><tbody>';
 		const tbEng=engines.tb_profiler||{};
 		const mkEng=engines.mykrobe||{};
-		const toolOutcome=(engine,run)=>{
-			const status=String(engine.status||run.status||'unknown');
-			if(['installed','completed','ok','available'].includes(status)){
-				return `${escapeHtml(run.successful_samples??0)}/${escapeHtml(run.attempted_samples??0)} completed`;
+		const toolStatus=(engine,run,effectiveKey)=>{
+			if(run.status==='completed'){
+				return `available via ${escapeHtml(run.runner||'runner')}`;
 			}
+			return effectiveEngines[effectiveKey]||engine.status||run.status||'unknown';
+		};
+		const toolOutcome=(engine,run)=>{
 			if(run.status==='completed'){
 				return `${escapeHtml(run.successful_samples??0)}/${escapeHtml(run.attempted_samples??0)} completed`;
 			}
@@ -491,12 +494,25 @@ async function loadLineageDrValidation(){
 			}
 			return 'not run';
 		};
-		html+=`<tr><td>TBProfiler</td><td>${renderStatusPill(tbEng.status||'unknown')}</td><td>${toolOutcome(tbEng,tbRun)}</td><td>${escapeHtml(tbEng.message||tbRun.message||'')}</td></tr>`;
-		html+=`<tr><td>Mykrobe</td><td>${renderStatusPill(mkEng.status||'unknown')}</td><td>${toolOutcome(mkEng,mkRun)}</td><td>${escapeHtml(mkEng.message||mkRun.message||'')}</td></tr>`;
+		const toolMessage=(engine,run)=>{
+			if(run.status==='completed'){
+				const local=engine.message?` Local: ${engine.message}`:'';
+				return `${run.message||'completed'}${local}`;
+			}
+			return engine.message||run.message||'';
+		};
+		html+=`<tr><td>TBProfiler</td><td>${renderStatusPill(toolStatus(tbEng,tbRun,'tb_profiler'))}</td><td>${toolOutcome(tbEng,tbRun)}</td><td>${escapeHtml(toolMessage(tbEng,tbRun))}</td></tr>`;
+		html+=`<tr><td>Mykrobe</td><td>${renderStatusPill(toolStatus(mkEng,mkRun,'mykrobe'))}</td><td>${toolOutcome(mkEng,mkRun)}</td><td>${escapeHtml(toolMessage(mkEng,mkRun))}</td></tr>`;
 		html+='</tbody></table>';
 
 		html+='<h5>Cross-engine DR concordance</h5>';
-		html+=`<div class="kpi-strip">Samples compared: ${escapeHtml(concordance.samples_compared??0)} | Discordant: ${escapeHtml(concordance.discordant_sample_count??0)}</div>`;
+		const comparableDrugCalls=Number(concordance.comparable_drug_calls??0);
+		const comparedSamples=Number(concordance.samples_compared??0);
+		const concordanceNote=comparedSamples>0&&comparableDrugCalls===0
+			?' | No overlapping per-drug R/S calls available'
+			:'';
+		const artifactNote=concordance.used_existing_artifacts?' | Existing output JSONs used':'';
+		html+=`<div class="kpi-strip">Samples with both engine outputs: ${escapeHtml(comparedSamples)} | Comparable drug calls: ${escapeHtml(comparableDrugCalls)} | Discordant samples: ${escapeHtml(concordance.discordant_sample_count??0)}${concordanceNote}${artifactNote}</div>`;
 
 		if(rvSummary.total_mutation_calls!==undefined){
 			html+='<h5>Resistance call summary</h5>';
@@ -2207,5 +2223,3 @@ async function loadRegions(){
 	}
 }
 (async()=>{try{await fetch(`${API}/`);document.getElementById('status').innerHTML=renderSystemStatusItem('Backend','Running','status-pass','API responded successfully');}catch{document.getElementById('status').innerHTML=renderSystemStatusItem('Backend','Unavailable','status-fail','Unable to reach the API from this session');}refreshDemoModeStatus();loadRegions();loadKPIBanner();loadWorkflowStatus();loadDataSafety();loadDataReadiness();loadAnalyticsClusters();loadTransmissionSynthesisOverview();loadActionableReportSummary();loadFullKpis();loadOutbreakerStatus();loadResistanceValidationStatus();})();
-
-

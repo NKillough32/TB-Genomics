@@ -1510,8 +1510,7 @@ def _detect_dr_discordance(
         sample_id = path.stem.replace(".results", "")
         fields = _extract_lineage_and_resistance(path)
         dr = fields.get("predicted_drug_resistance")
-        if dr is not None:
-            tbp_by_sample[sample_id] = _normalise_dr_to_rs(dr)
+        tbp_by_sample[sample_id] = _normalise_dr_to_rs(dr) if dr is not None else {}
 
     mk_by_sample: dict[str, dict[str, str]] = {}
     for path_str in mykrobe_jsons:
@@ -1519,8 +1518,7 @@ def _detect_dr_discordance(
         sample_id = path.stem.replace("_mykrobe", "")
         fields = _extract_mykrobe_results(path)
         dr = fields.get("predicted_drug_resistance")
-        if dr is not None:
-            mk_by_sample[sample_id] = _normalise_dr_to_rs(dr)
+        mk_by_sample[sample_id] = _normalise_dr_to_rs(dr) if dr is not None else {}
 
     discordances: list[dict[str, Any]] = []
     for sample_id in set(tbp_by_sample) & set(mk_by_sample):
@@ -1540,6 +1538,20 @@ def _detect_dr_discordance(
         })
 
     return discordances
+
+
+def _existing_tbprofiler_jsons(sample_ids: set[str] | None = None) -> list[str]:
+    paths = sorted((EXPORTS / "tbprofiler" / "results").glob("*.results.json"))
+    if sample_ids is not None:
+        paths = [path for path in paths if path.stem.replace(".results", "") in sample_ids]
+    return [str(path) for path in paths]
+
+
+def _existing_mykrobe_jsons(sample_ids: set[str] | None = None) -> list[str]:
+    paths = sorted((EXPORTS / "mykrobe").glob("*_mykrobe.json"))
+    if sample_ids is not None:
+        paths = [path for path in paths if path.stem.replace("_mykrobe", "") in sample_ids]
+    return [str(path) for path in paths]
 
 
 def _log_concordance_to_audit(discordances: list[dict[str, Any]]) -> None:
@@ -1865,9 +1877,16 @@ def main() -> None:
 
     # Discordance check: flag samples where both tools ran but disagree on R/S.
     dr_concordance: list[dict[str, Any]] = []
-    if tbprofiler_run["output_jsons"] and mykrobe_run["output_jsons"]:
+    active_sample_ids = set(inputs.get("attempted_sample_ids") or [])
+    tbprofiler_concordance_jsons = tbprofiler_run["output_jsons"] or _existing_tbprofiler_jsons(active_sample_ids)
+    mykrobe_concordance_jsons = mykrobe_run["output_jsons"] or _existing_mykrobe_jsons(active_sample_ids)
+    concordance_used_existing_artifacts = (
+        (not tbprofiler_run["output_jsons"] and bool(tbprofiler_concordance_jsons))
+        or (not mykrobe_run["output_jsons"] and bool(mykrobe_concordance_jsons))
+    )
+    if tbprofiler_concordance_jsons and mykrobe_concordance_jsons:
         dr_concordance = _detect_dr_discordance(
-            tbprofiler_run["output_jsons"], mykrobe_run["output_jsons"]
+            tbprofiler_concordance_jsons, mykrobe_concordance_jsons
         )
         _log_concordance_to_audit(dr_concordance)
 
@@ -1947,6 +1966,13 @@ def main() -> None:
         interpretation_blocking = True
         limitation_codes.append("no_dr_concordance_samples")
         warnings.append("No samples were compared across DR engines; cross-engine DR concordance is unavailable.")
+    comparable_drug_calls = sum(int(d.get("drugs_compared") or 0) for d in dr_concordance)
+    if dr_concordance and comparable_drug_calls == 0:
+        interpretation_blocking = True
+        limitation_codes.append("no_comparable_drug_calls")
+        warnings.append(
+            "Both DR engines produced sample outputs, but no overlapping per-drug R/S calls were available for concordance."
+        )
 
     payload = {
         "generated_at": _iso_now(),
@@ -1998,8 +2024,10 @@ def main() -> None:
         },
         "dr_concordance": {
             "samples_compared": len(dr_concordance),
+            "comparable_drug_calls": comparable_drug_calls,
             "all_concordant": all(d["concordant"] for d in dr_concordance) if dr_concordance else None,
             "discordant_sample_count": sum(1 for d in dr_concordance if not d["concordant"]),
+            "used_existing_artifacts": concordance_used_existing_artifacts,
             "details": dr_concordance,
         },
         "next_steps": [

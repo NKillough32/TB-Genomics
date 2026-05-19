@@ -1613,6 +1613,37 @@ function _geoToSvg(lon,lat,w,h){
 	return {x,y};
 }
 
+// Simplified continent outline polygons as [lon, lat] arrays.
+// Equirectangular projection matches _geoToSvg.
+const _WORLD_CONTINENTS=[
+	// North America
+	[[-168,72],[-140,70],[-132,56],[-125,49],[-100,49],[-67,47],[-53,47],[-60,23],[-83,10],[-90,16],[-105,22],[-117,29],[-124,37],[-125,49],[-132,56],[-140,70]],
+	// Greenland
+	[[-73,83],[-20,85],[-17,76],[-42,75],[-73,83]],
+	// South America
+	[[-80,12],[-62,11],[-50,5],[-34,-4],[-35,-8],[-38,-13],[-40,-23],[-52,-33],[-72,-42],[-75,-52],[-68,-56],[-65,-42],[-57,-38],[-50,-29],[-48,-27],[-42,-22],[-38,-13],[-34,-4],[-50,5],[-62,11],[-80,12]],
+	// Europe
+	[[-10,36],[28,36],[30,46],[25,48],[20,54],[24,60],[15,69],[5,72],[0,62],[-5,48],[-10,44],[-10,36]],
+	// Africa
+	[[-18,15],[35,15],[50,12],[44,-2],[42,-12],[35,-18],[30,-30],[18,-35],[8,-40],[-18,-35],[-18,15]],
+	// Asia (mainland + peninsula)
+	[[26,36],[42,12],[55,12],[58,22],[72,22],[80,9],[100,1],[108,2],[120,22],[130,32],[140,43],[150,46],[168,70],[140,72],[100,73],[80,73],[60,73],[50,68],[40,65],[30,68],[24,60],[20,54],[25,48],[30,46],[26,36]],
+	// Australia
+	[[114,-22],[122,-18],[130,-12],[138,-16],[142,-10],[148,-18],[152,-24],[152,-28],[149,-38],[144,-38],[136,-35],[128,-32],[114,-22]],
+	// New Zealand (simplified)
+	[[166,-46],[172,-44],[172,-40],[174,-37],[172,-40],[170,-44],[166,-46]],
+];
+
+function _worldMapSvg(w,h){
+	return _WORLD_CONTINENTS.map(poly=>{
+		const pts=poly.map(([lon,lat])=>{
+			const c=_geoToSvg(lon,lat,w,h);
+			return `${c.x.toFixed(1)},${c.y.toFixed(1)}`;
+		}).join(' ');
+		return `<polygon points="${pts}" fill="#d4e8c2" stroke="#9ab88a" stroke-width="0.7" stroke-linejoin="round"/>`;
+	}).join('');
+}
+
 async function loadGeoMapView(){
 	const view=document.getElementById('analyticsPrimaryView');
 	view.textContent='Loading geography map...';
@@ -1625,10 +1656,10 @@ async function loadGeoMapView(){
 		for(const p of points){
 			const c=_geoToSvg(p.lon,p.lat,w,h);
 			const r=3+(Number(p.case_count||0)/max)*10;
-			dots+=`<circle cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="${r.toFixed(1)}" fill="#0ea5e9" fill-opacity="0.55" stroke="#0369a1"><title>${escapeHtml(p.region)}: ${escapeHtml(p.case_count)} cases</title></circle>`;
+			dots+=`<circle cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="${r.toFixed(1)}" fill="#ef4444" fill-opacity="0.75" stroke="#991b1b" stroke-width="1"><title>${escapeHtml(p.region)}: ${escapeHtml(p.case_count)} cases</title></circle>`;
 		}
 		let html='<h4>Geography Map (region centroids)</h4>';
-		html+=`<svg viewBox="0 0 ${w} ${h}" class="analytics-svg map-svg"><rect x="0" y="0" width="${w}" height="${h}" fill="#eff6ff"/>${dots}</svg>`;
+		html+=`<svg viewBox="0 0 ${w} ${h}" class="analytics-svg map-svg"><rect x="0" y="0" width="${w}" height="${h}" fill="#cce4f0"/>${_worldMapSvg(w,h)}${dots}</svg>`;
 		html+='<table class="data-table"><tr><th>Region</th><th>Cases</th><th>Clusters</th><th>Recent 90d</th></tr>';
 		for(const p of points.slice(0,20)){
 			html+=`<tr><td>${escapeHtml(p.region)}</td><td>${escapeHtml(p.case_count)}</td><td>${escapeHtml(p.cluster_count)}</td><td>${escapeHtml(p.recent_cases_90d)}</td></tr>`;

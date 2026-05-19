@@ -336,7 +336,10 @@ def main() -> None:
             }
         summary["pairwise_snp_distance_histogram"] = {
             key: snp_distance_histogram[key]
-            for key in sorted(snp_distance_histogram.keys(), key=lambda v: int(v))
+            for key in sorted(
+                snp_distance_histogram.keys(),
+                key=lambda v: (999, v) if v == ">25" else (int(v.split("-")[0]), v)
+            )
         }
         summary["cluster_count"] = len(summary["clusters"])
         summary["clustered_cases"] = sum(c["case_count"] for c in summary["clusters"])

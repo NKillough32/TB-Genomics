@@ -504,29 +504,40 @@ async function loadLineageDrValidation(){
 function downloadOutbreakReport(){
 	window.open(`${API}/cases/outbreak-report`, '_blank');
 }
-async function openOutbreakReportHtml(){
+
+function _writeReportWindow(win, title, bodyHtml){
+	if(!win) return;
+	win.document.open();
+	win.document.write(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>${escapeHtml(title)}</title><style>body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;margin:2rem;line-height:1.5;color:#1f2937}.msg{max-width:48rem;padding:1rem 1.25rem;border:1px solid #cbd5e1;border-radius:6px;background:#f8fafc}.err{border-color:#fca5a5;background:#fff1f2;color:#7f1d1d;white-space:pre-wrap}</style></head><body>${bodyHtml}</body></html>`);
+	win.document.close();
+}
+
+async function openHtmlReport(endpoint, label){
 	const el=document.getElementById('lineageDrResults');
+	const win=window.open('about:blank', '_blank');
+	if(!win){
+		if(el) el.innerHTML=`<div class="result-panel"><p style="color:#9a3412;"><strong>Cannot open ${escapeHtml(label)} report:</strong> The browser blocked the report window. Allow pop-ups for this page and try again.</p></div>`;
+		return;
+	}
+	_writeReportWindow(win, `Loading ${label} report`, `<div class="msg"><strong>Generating ${escapeHtml(label)} report...</strong><br/>This can take a few seconds for large outbreak reports.</div>`);
 	try{
-		const html=await apiText(`${API}/cases/outbreak-report.html`);
-		const blob=new Blob([html],{type:'text/html'});
-		const url=URL.createObjectURL(blob);
-		const win=window.open(url,'_blank');
-		if(win) setTimeout(()=>URL.revokeObjectURL(url),60000);
+		const html=await apiText(`${API}${endpoint}`);
+		win.document.open();
+		win.document.write(html);
+		win.document.close();
 	}catch(e){
-		if(el) el.innerHTML=`<div class="result-panel"><p style="color:#9a3412;"><strong>Cannot open short report:</strong> ${escapeHtml(e.message)}</p></div>`;
+		const message=escapeHtml(e.message);
+		_writeReportWindow(win, `${label} report failed`, `<div class="msg err"><strong>Cannot open ${escapeHtml(label)} report:</strong>\n${message}</div>`);
+		if(el) el.innerHTML=`<div class="result-panel"><p style="color:#9a3412;"><strong>Cannot open ${escapeHtml(label)} report:</strong> ${message}</p></div>`;
 	}
 }
+
+async function openOutbreakReportHtml(){
+	return openHtmlReport('/cases/outbreak-report.html', 'short');
+}
+
 async function openFullOutbreakReportHtml(){
-	const el=document.getElementById('lineageDrResults');
-	try{
-		const html=await apiText(`${API}/cases/outbreak-report.full.html`);
-		const blob=new Blob([html],{type:'text/html'});
-		const url=URL.createObjectURL(blob);
-		const win=window.open(url,'_blank');
-		if(win) setTimeout(()=>URL.revokeObjectURL(url),60000);
-	}catch(e){
-		if(el) el.innerHTML=`<div class="result-panel"><p style="color:#9a3412;"><strong>Cannot open full report:</strong> ${escapeHtml(e.message)}</p></div>`;
-	}
+	return openHtmlReport('/cases/outbreak-report.full.html', 'full');
 }
 async function loadAuditTrail(){
 	const box=document.getElementById('auditTrail');
@@ -2183,7 +2194,6 @@ async function loadRegions(){
 	}
 }
 (async()=>{try{await fetch(`${API}/`);document.getElementById('status').innerHTML=renderSystemStatusItem('Backend','Running','status-pass','API responded successfully');}catch{document.getElementById('status').innerHTML=renderSystemStatusItem('Backend','Unavailable','status-fail','Unable to reach the API from this session');}refreshDemoModeStatus();loadRegions();loadKPIBanner();loadWorkflowStatus();loadDataSafety();loadDataReadiness();loadAnalyticsClusters();loadTransmissionSynthesisOverview();loadActionableReportSummary();loadFullKpis();loadOutbreakerStatus();loadResistanceValidationStatus();})();
-
 
 
 

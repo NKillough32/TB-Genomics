@@ -7,6 +7,7 @@ import re
 import html as html_lib
 from datetime import datetime
 from itertools import combinations
+from pathlib import Path
 from statistics import median
 
 from sqlalchemy import text
@@ -16,13 +17,26 @@ from backend.quality_gates import build_workflow_status
 from backend.routers.case_overview import surveillance_kpis
 from backend.routers.cases import (
     _confidence_tier,
+    _drug_gene_status_label,
     _export_path,
+    _get_latest_signoff,
     _image_data_uri,
+    _iter_resistance_mutations,
+    _lineage_analysis_summary,
+    _lineage_epi_summary,
     _load_export_csv,
     _load_export_json,
+    _pair_key,
+    _pairwise_matrix,
     _pct,
     _pct_label,
+    _resistance_profile_text,
+    _resistance_report_status_label,
+    _resistance_validation_key,
+    _resistance_validation_lookup,
     _safe_html,
+    _short_case_id,
+    _write_csv_rows,
 )
 
 logger = logging.getLogger(__name__)

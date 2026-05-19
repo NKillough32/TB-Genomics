@@ -1875,6 +1875,23 @@ def main() -> None:
         overall_status = "completed"
         interpretation_blocking = False
 
+    # If either engine completed, dependency-unavailable warnings are stale and should be cleared.
+    if tbprofiler_run["status"] == "completed" or mykrobe_run["status"] == "completed":
+        limitation_codes = [
+            code
+            for code in limitation_codes
+            if code not in {"tool_dependency_warning", "no_usable_lineage_dr_tools"}
+        ]
+        warnings = [
+            w
+            for w in warnings
+            if w
+            not in {
+                "TBProfiler was detected but is not usable, and Mykrobe is unavailable.",
+                "No usable TBProfiler/Mykrobe executable was detected. Workflow can continue, but lineage/DR validation is limited.",
+            }
+        ]
+
     if not dr_concordance:
         interpretation_blocking = True
         limitation_codes.append("no_dr_concordance_samples")

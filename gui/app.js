@@ -782,8 +782,8 @@ function _cicSnpHistogramSummary(pairs){
 	const bins=[
 		{label:'0-5 SNPs', min:0, max:5, count:0},
 		{label:'6-12 SNPs', min:6, max:12, count:0},
-		{label:'13-20 SNPs', min:13, max:20, count:0},
-		{label:'21+ SNPs', min:21, max:Number.POSITIVE_INFINITY, count:0},
+		{label:'13-25 SNPs', min:13, max:25, count:0},
+		{label:'>25 SNPs', min:26, max:Number.POSITIVE_INFINITY, count:0},
 	];
 	for(const pair of (Array.isArray(pairs)?pairs:[])){
 		const snp=Number(pair?.snp_distance);

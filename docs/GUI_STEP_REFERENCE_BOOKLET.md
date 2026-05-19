@@ -150,8 +150,12 @@ Operational workspace for assigning reviewers, recording epi evidence, actions, 
 
 ### Analytics tab interpretation
 - Cluster prioritization reasons: plain-language rationale for why this cluster appears important.
+- Cluster context summary:
+  - Growth windows show recent vs prior case counts over 30/60/90-day periods.
+  - Lineage mix helps spot homogeneous vs mixed-lineage clusters.
+  - SNP distance histogram summarises cluster tightness using 0-5, 6-12, 13-25, and >25 bins.
 - Pair evidence table:
-  - Genomic support, epi support, and temporal plausibility should be read together.
+  - Genomic support, epi support, temporal plausibility, lineage concordance, and resistance concordance should be read together.
   - "Contradictory" or "insufficient evidence" rows require reviewer judgment, not automatic dismissal.
 - Saved pair reviews:
   - Shows reviewer decisions over time.

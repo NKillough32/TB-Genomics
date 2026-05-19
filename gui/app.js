@@ -1734,8 +1734,13 @@ async function loadGeoMapView(){
 		view.innerHTML+='<p style="color:#dc2626">Failed to load map: '+escapeHtml(String(e))+'</p>';
 	}
 }
-	if(value < warnThreshold) return 'warn';
-	return 'pass';
+
+function _agreementBand(value, passThreshold, warnThreshold){
+	if(value===null||value===undefined||Number.isNaN(Number(value))) return 'fail';
+	const v=Number(value);
+	if(v>=passThreshold) return 'pass';
+	if(v>=warnThreshold) return 'warn';
+	return 'fail';
 }
 
 function _safePct(value){

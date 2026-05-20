@@ -37,6 +37,7 @@ python_exe = sys.executable
 JOBS = {}
 JOBS_LOCK = threading.RLock()
 ALLOWED_JOBS = {
+    "audit_schema": [python_exe, "scripts/_audit_schema.py"],
     "derive_sequence_clusters": [python_exe, "scripts/derive_sequence_clusters.py"],
     "compare_clustering_methods": [python_exe, "scripts/compare_clustering_methods.py"],
     "run_clustering": [python_exe, "scripts/run_clustering.py"],

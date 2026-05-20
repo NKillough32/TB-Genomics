@@ -920,10 +920,14 @@ function _cicRenderAnalyticsWhy(data, synthesisCluster, evidenceData){
 	const reasons=Array.isArray(data?.reasons)?data.reasons:[];
 	const metrics=data?.metrics||{};
 	const clusterSummary=synthesisCluster?.summary||{};
+	const tx=clusterSummary.transmission_generations||{};
 	const growthSummary=_cicGrowthWindowSummary(clusterSummary.growth_windows);
 	const lineageSummary=_cicFormatDistribution(synthesisCluster?.lineage_distribution);
 	const snpHistogram=_cicSnpHistogramSummary(evidenceData?.pairs);
 	let html=`<div class="kpi-strip">Cases: ${escapeHtml(metrics.case_count||clusterSummary.member_count||0)} | Recent: ${escapeHtml(metrics.recent_cases||clusterSummary.recent_case_count||0)} | Regions: ${escapeHtml(metrics.region_count||(Array.isArray(clusterSummary.regions)?clusterSummary.regions.length:0)||0)} | High-confidence edges: ${escapeHtml(metrics.high_confidence_edges||0)}</div>`;
+	if(tx.max_generation != null){
+		html+=`<p class="hint">Sustained transmission: ${escapeHtml(tx.sustained_transmission_flag ? 'Yes' : 'No')} | Max generation: ${escapeHtml(tx.max_generation)}</p>`;
+	}
 	if(growthSummary.length){
 		html+=`<p class="hint">Growth windows: ${escapeHtml(growthSummary.join(' | '))}</p>`;
 	}
@@ -1504,10 +1508,14 @@ function _synthesisParams(){
 
 function _renderSynthesisClusterTable(clusters){
 	if(!clusters.length) return '<p class="hint">No synthesis clusters available for the current dataset.</p>';
-	let html='<table class="data-table"><thead><tr><th>Cluster</th><th>Members</th><th>Pairs</th><th>Priority</th><th>Band</th><th>Flags</th><th>Actions</th></tr></thead><tbody>';
+	let html='<table class="data-table"><thead><tr><th>Cluster</th><th>Members</th><th>Pairs</th><th>Priority</th><th>Band</th><th>Sustained/max gen</th><th>Flags</th><th>Actions</th></tr></thead><tbody>';
 	for(const c of clusters.slice(0,10)){
-		const summary=c.summary||{};
-		html+=`<tr><td><code>${escapeHtml(c.cluster_short||String(c.cluster_id||'').slice(0,8))}</code></td><td>${escapeHtml(summary.member_count||0)}</td><td>${escapeHtml(summary.pair_count||0)}</td><td>${escapeHtml(summary.priority_score||0)}</td><td>${escapeHtml(summary.priority_band||'low')}</td><td>${escapeHtml((c.flags||[]).join(', ')||'none')}</td><td>${escapeHtml((c.recommended_investigation_actions||[]).slice(0,3).join(' | ')||'none')}</td></tr>`;
+		const summary=c.summary||c||{};
+		const tx=summary.transmission_generations||{};
+		const maxGeneration=tx.max_generation ?? c.max_generation ?? null;
+		const sustainedFlag=(typeof tx.sustained_transmission_flag==='boolean') ? tx.sustained_transmission_flag : c.sustained_transmission_flag;
+		const txText=maxGeneration==null ? 'n/a' : `${sustainedFlag ? 'Yes' : 'No'} (max ${maxGeneration})`;
+		html+=`<tr><td><code>${escapeHtml(c.cluster_short||String(c.cluster_id||'').slice(0,8))}</code></td><td>${escapeHtml(summary.member_count ?? c.member_count ?? 0)}</td><td>${escapeHtml(summary.pair_count ?? c.pair_count ?? 0)}</td><td>${escapeHtml(summary.priority_score ?? c.priority_score ?? 0)}</td><td>${escapeHtml(summary.priority_band ?? c.priority_band ?? 'low')}</td><td>${escapeHtml(txText)}</td><td>${escapeHtml((c.flags||[]).join(', ')||'none')}</td><td>${escapeHtml((c.recommended_investigation_actions||c.top_recommended_actions||[]).slice(0,3).join(' | ')||'none')}</td></tr>`;
 	}
 	html+='</tbody></table>';
 	return html;

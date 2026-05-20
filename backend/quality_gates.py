@@ -351,6 +351,17 @@ def confidence_gates(db: Session) -> list[dict[str, Any]]:
                 details={"data_provenance": provenance},
             )
         )
+        if provenance == "mock":
+            gates.append(
+                _gate(
+                    "outbreaker2_mock_provenance",
+                    "Outbreaker2 mock provenance",
+                    "review",
+                    "Mock outbreaker2 fallback output is in use. Treat network directionality, posteriors, and generation-depth signals as demonstration-only until a real R run completes.",
+                    interpretation_blocking=True,
+                    details={"data_provenance": provenance},
+                )
+            )
         diagnostic_status = str(summary.get("mcmc_diagnostic_status") or "").lower()
         gates.append(
             _gate(

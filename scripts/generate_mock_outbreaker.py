@@ -10,6 +10,10 @@ from datetime import datetime
 from pathlib import Path
 import sys
 
+
+MOCK_MCMC_ITERATIONS = 50000
+MOCK_BURNIN = 10000
+
 def generate_mock_graphics():
     """Generate simple diagnostic graphics using matplotlib if available."""
     os.makedirs("exports", exist_ok=True)
@@ -20,9 +24,9 @@ def generate_mock_graphics():
         
         # Generate mock trace plot
         fig, ax = plt.subplots(figsize=(12, 8))
-        iterations = np.arange(0, 2500)
+        iterations = np.arange(0, MOCK_MCMC_ITERATIONS)
         # Simulate MCMC chain
-        likelihood = -5000 + np.cumsum(np.random.randn(2500) * 10)
+        likelihood = -5000 + np.cumsum(np.random.randn(MOCK_MCMC_ITERATIONS) * 10)
         likelihood = np.maximum(likelihood, -6000)  # Keep bounded
         ax.plot(iterations, likelihood, linewidth=0.5, alpha=0.7)
         ax.set_xlabel('Iteration')
@@ -38,7 +42,7 @@ def generate_mock_graphics():
         fig.suptitle('Outbreaker2 Posterior Distributions', fontsize=14, fontweight='bold')
         
         # Mock posterior samples (burnin removed)
-        burnin = 500
+        burnin = MOCK_BURNIN
         samples = likelihood[burnin:]
         
         # Plot 1: Likelihood distribution
@@ -227,9 +231,9 @@ def generate_transmission_tree():
 def generate_mock_summary():
     """Generate mock outbreaker2 analysis summary."""
     summary = {
-        "n_generations": 2500,
-        "burnin": 500,
-        "n_samples": 2000,
+        "n_generations": MOCK_MCMC_ITERATIONS,
+        "burnin": MOCK_BURNIN,
+        "n_samples": MOCK_MCMC_ITERATIONS - MOCK_BURNIN,
         "case_count": len([f for f in os.listdir('exports') if f == 'cases.csv']) > 0 and 100 or 0,
         "likelihood_mean": -5250.5,
         "likelihood_sd": 145.3,

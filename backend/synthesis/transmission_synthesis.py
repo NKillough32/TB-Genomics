@@ -30,6 +30,9 @@ from backend.synthesis.scoring import (
 )
 
 
+SYNTHESIS_FORMAT_VERSION = 1
+
+
 @dataclass(frozen=True)
 class SynthesisConfig:
     low_snp_threshold: int = 12
@@ -268,6 +271,7 @@ def build_transmission_synthesis(
     if not case_index:
         return {
             "generated_at": datetime.utcnow().isoformat() + "Z",
+            "format_version": SYNTHESIS_FORMAT_VERSION,
             "cluster_id": cluster_id,
             "summary": {"cluster_count": 0, "pair_count": 0},
             "clusters": [],
@@ -655,6 +659,7 @@ def build_transmission_synthesis(
 
     return {
         "generated_at": datetime.utcnow().isoformat() + "Z",
+        "format_version": SYNTHESIS_FORMAT_VERSION,
         "cluster_id": cluster_id,
         "summary": {
             "cluster_count": len(by_cluster),
@@ -695,6 +700,7 @@ def build_cluster_risk_summary(db: Session, *, config: SynthesisConfig | None = 
     items.sort(key=lambda x: (-int(x.get("priority_score", 0)), str(x.get("cluster_id") or "")))
     return {
         "generated_at": payload.get("generated_at"),
+        "format_version": payload.get("format_version", SYNTHESIS_FORMAT_VERSION),
         "summary": payload.get("summary", {}),
         "clusters": items,
         "parameters": payload.get("parameters", {}),

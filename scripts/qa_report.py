@@ -3,9 +3,25 @@ from pypdf import PdfReader
 reader = PdfReader("exports/outbreaker_investigation_report.pdf")
 print(f"Pages: {len(reader.pages)}")
 full_text = ""
+page_texts = []
 for page in reader.pages:
-    full_text += page.extract_text() or ""
+    page_text = page.extract_text() or ""
+    page_texts.append(page_text)
+    full_text += page_text
 print(f"Total chars extracted: {len(full_text)}")
+
+
+def _find_page_index(phrase: str) -> int | None:
+    for index, page_text in enumerate(page_texts, start=1):
+        if phrase in page_text:
+            return index
+    return None
+
+
+top_actions_page = _find_page_index("Top Actions Due Now")
+interpretation_page = _find_page_index("Current interpretation")
+appendix_a_page = _find_page_index("Table A1a")
+appendix_b_page = _find_page_index("Table A2")
 
 checks = [
     ("No [Error generating interpretation]", "[Error generating interpretation" not in full_text),
@@ -20,6 +36,8 @@ checks = [
     ("Reproducibility metadata (Random seed)", "Random seed" in full_text),
     ("Reproducibility metadata (Reference genome)", "Reference genome" in full_text),
     ("No triple caveat blocks (max 1 per type)", full_text.count("OPERATIONAL SAFETY NOTICE") <= 4),
+    ("Top Actions precedes interpretation section", top_actions_page is not None and interpretation_page is not None and top_actions_page <= interpretation_page),
+    ("Appendix A precedes Appendix B", appendix_a_page is not None and appendix_b_page is not None and appendix_a_page <= appendix_b_page),
 ]
 
 print()

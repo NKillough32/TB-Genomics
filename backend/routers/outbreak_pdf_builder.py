@@ -45,7 +45,7 @@ from backend.routers.cases import (
     _write_csv_rows,
     get_db,
 )
-from backend.synthesis.transmission_synthesis import _major_lineage
+from backend.synthesis.transmission_synthesis import SYNTHESIS_FORMAT_VERSION, _major_lineage
 
 logger = logging.getLogger(__name__)
 
@@ -138,6 +138,8 @@ def outbreak_report(db: Session = Depends(get_db)):
     high_snp_contradiction_threshold = int(synthesis_parameters.get("high_snp_contradiction_threshold") or 20)
     high_posterior_threshold = float(synthesis_parameters.get("high_posterior_threshold") or 0.70)
     high_posterior_label = f"{high_posterior_threshold:.2f}"
+    summary_provenance = str(summary_data.get("data_provenance") or "unknown") if isinstance(summary_data, dict) else "unknown"
+    synthesis_format_version = synthesis_data.get("format_version") if isinstance(synthesis_data, dict) else None
     synthesis_pair_by_directed = {}
     synthesis_pair_by_unordered = {}
     for pair in synthesis_pairs:
@@ -173,6 +175,18 @@ def outbreak_report(db: Session = Depends(get_db)):
             return "n/a"
         items = sorted(distribution.items(), key=lambda item: (-int(item[1] or 0), str(item[0])))
         return ", ".join(f"{key}: {value}" for key, value in items[:4])
+
+    def _cluster_transmission_generation_text(cluster_id: str) -> str:
+        cluster = synthesis_cluster_by_id.get(str(cluster_id or ""))
+        summary = cluster.get("summary") if isinstance(cluster, dict) else {}
+        tx = summary.get("transmission_generations") if isinstance(summary, dict) else {}
+        if not isinstance(tx, dict):
+            return "n/a"
+        max_generation = tx.get("max_generation")
+        sustained = bool(tx.get("sustained_transmission_flag"))
+        if max_generation is None:
+            return "n/a"
+        return f"{'Yes' if sustained else 'No'} (max {max_generation})"
 
     kpi_data = None
     try:
@@ -1268,6 +1282,25 @@ def outbreak_report(db: Session = Depends(get_db)):
         "public health professional. No automated decisions are made.</b>",
         interp_style,
     ))
+    if summary_provenance == "mock":
+        story.append(Paragraph(
+            "<b>Mock outbreaker2 fallback in use.</b> This report was generated from demonstration outbreaker output rather than a real R-based outbreaker2 run. "
+            "Transmission probabilities, network directionality, and generation-depth summaries are illustrative only and must not be treated as operational evidence.",
+            interp_style,
+        ))
+        story.append(Spacer(1, 0.08 * inch))
+    if synthesis_data and synthesis_format_version is None:
+        story.append(Paragraph(
+            "<b>Synthesis output format review required.</b> The loaded synthesis_output.json is missing a format_version field. Compatibility fallbacks are active; regenerate synthesis output before external circulation.",
+            interp_style,
+        ))
+        story.append(Spacer(1, 0.08 * inch))
+    elif synthesis_data and synthesis_format_version != SYNTHESIS_FORMAT_VERSION:
+        story.append(Paragraph(
+            f"<b>Synthesis output version mismatch.</b> This report expects format_version {SYNTHESIS_FORMAT_VERSION} but loaded {synthesis_format_version}. Review synthesis_output.json and regenerate exports before relying on derived cluster metrics.",
+            interp_style,
+        ))
+        story.append(Spacer(1, 0.08 * inch))
     story.append(Spacer(1, 0.1 * inch))
 
     # -- TB Genomics Background - stored for Appendix D -------------------------
@@ -1353,6 +1386,18 @@ def outbreak_report(db: Session = Depends(get_db)):
             interpretation_flags.append(
                 f"Median specimen-to-QC turnaround is elevated: {qc_turnaround} days."
             )
+    if summary_provenance == "mock":
+        interpretation_flags.append(
+            "Outbreaker provenance is mock/demo fallback; network directionality, posterior links, and generation-depth summaries are illustrative only."
+        )
+    if synthesis_data and synthesis_format_version is None:
+        interpretation_flags.append(
+            "synthesis_output.json is missing format_version; compatibility fallbacks are active and the synthesis export should be regenerated."
+        )
+    elif synthesis_data and synthesis_format_version != SYNTHESIS_FORMAT_VERSION:
+        interpretation_flags.append(
+            f"synthesis_output.json format_version {synthesis_format_version} does not match expected version {SYNTHESIS_FORMAT_VERSION}; derived cluster summaries require review."
+        )
     if int(open_clusters or 0) > 0:
         interpretation_flags.append(f"Open clusters requiring investigation: {int(open_clusters)}.")
     if high_confidence_all_count > 0:
@@ -2630,12 +2675,13 @@ def outbreak_report(db: Session = Depends(get_db)):
             if src_cluster and float(edge.get("probability") or 0.0) >= high_posterior_threshold:
                 cluster_outgoing[src_cluster] = cluster_outgoing.get(src_cluster, 0) + 1
 
-        cluster_genomic_rows = [["Cluster", "Cases", "First", "Latest", "Med SNP", "Max SNP", "Lineage distribution", "RR/MDR", "Index case", "Recent 30/60/90d"]]
+        cluster_genomic_rows = [["Cluster", "Cases", "First", "Latest", "Med SNP", "Max SNP", "Lineage distribution", "Sustained/max gen", "RR/MDR", "Index case", "Recent 30/60/90d"]]
         cluster_ops_rows = [["Cluster", "Status", "Lead", "Epi link", "Setting", "Contact tracing", "LTBI screen", "DST status", "Next step"]]
 
         for row in cluster_epi_rows:
             cluster_id = str(row.get("cluster_id") or "")
             lineage_distribution = _cluster_lineage_distribution_text(cluster_id)
+            tx_generations = _cluster_transmission_generation_text(cluster_id)
             rr_mdr = f"{int(row.get('rr_cases') or 0)}/{int(row.get('mdr_cases') or 0)}"
             recent = f"{int(row.get('recent_30d') or 0)}/{int(row.get('recent_60d') or 0)}/{int(row.get('recent_90d') or 0)}"
             status = str(row.get("investigation_status") or "unknown")
@@ -2650,6 +2696,7 @@ def outbreak_report(db: Session = Depends(get_db)):
                 str(row.get("median_snp_proxy") or "n/a"),
                 str(row.get("max_snp_proxy") or "n/a"),
                 lineage_distribution,
+                tx_generations,
                 rr_mdr,
                 _short_case_id(str(row.get("suspected_index_case") or "")),
                 recent,
@@ -2668,13 +2715,13 @@ def outbreak_report(db: Session = Depends(get_db)):
 
         cluster_genomic_table = Table(
             wrap_rows(cluster_genomic_rows),
-            colWidths=fit_col_widths([0.55*inch, 0.42*inch, 0.68*inch, 0.68*inch, 0.52*inch, 0.52*inch, 1.25*inch, 0.52*inch, 0.62*inch, 0.82*inch], fill=True),
+            colWidths=fit_col_widths([0.52*inch, 0.4*inch, 0.62*inch, 0.62*inch, 0.48*inch, 0.48*inch, 1.0*inch, 0.9*inch, 0.45*inch, 0.58*inch, 0.75*inch], fill=True),
             repeatRows=1,
         )
         cluster_genomic_table.setStyle(standard_table_style(font_size=7.2, header=True))
         append_table_with_caption(
             cluster_genomic_table,
-            "Cluster genomic summary: case counts, specimen date range, SNP distance range, synthesis lineage distribution, RR/MDR case burden, index case, and recent case counts (30/60/90 days).",
+            "Cluster genomic summary: case counts, specimen date range, SNP distance range, synthesis lineage distribution, transmission chain depth (sustained transmission flag plus maximum generation), RR/MDR case burden, index case, and recent case counts (30/60/90 days).",
             spacer_after=0.12,
             keep_together=False,
         )

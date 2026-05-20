@@ -38,6 +38,7 @@ from backend.routers.cases import (
     _short_case_id,
     _write_csv_rows,
 )
+from backend.synthesis.transmission_synthesis import SYNTHESIS_FORMAT_VERSION
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +72,15 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
     synthesis_pairs = synthesis_data.get("pairs") if isinstance(synthesis_data, dict) else []
     if not isinstance(synthesis_pairs, list):
         synthesis_pairs = []
+    synthesis_parameters = synthesis_data.get("parameters") if isinstance(synthesis_data, dict) else {}
+    if not isinstance(synthesis_parameters, dict):
+        synthesis_parameters = {}
+    low_snp_threshold = int(synthesis_parameters.get("low_snp_threshold") or 12)
+    high_snp_contradiction_threshold = int(synthesis_parameters.get("high_snp_contradiction_threshold") or 20)
+    high_posterior_threshold = float(synthesis_parameters.get("high_posterior_threshold") or 0.70)
+    high_posterior_label = f"{high_posterior_threshold:.2f}"
+    summary_provenance = str(summary_data.get("data_provenance") or "unknown") if isinstance(summary_data, dict) else "unknown"
+    synthesis_format_version = synthesis_data.get("format_version") if isinstance(synthesis_data, dict) else None
     synthesis_pair_by_directed: dict[tuple[str, str], dict] = {}
     synthesis_pair_by_unordered: dict[tuple[str, str], dict] = {}
     for pair in synthesis_pairs:
@@ -107,6 +117,38 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
         items = sorted(distribution.items(), key=lambda item: (-int(item[1] or 0), str(item[0])))
         return ", ".join(f"{key}: {value}" for key, value in items[:4])
 
+    def _transmission_generation_text(cluster_id: str) -> str:
+        cluster = synthesis_cluster_by_id.get(str(cluster_id or ""))
+        summary = cluster.get("summary") if isinstance(cluster, dict) else {}
+        tx = summary.get("transmission_generations") if isinstance(summary, dict) else {}
+        if not isinstance(tx, dict):
+            return "n/a"
+        max_generation = tx.get("max_generation")
+        sustained = bool(tx.get("sustained_transmission_flag"))
+        if max_generation is None:
+            return "n/a"
+        return f"{'Yes' if sustained else 'No'} (max {max_generation})"
+
+    mock_outbreaker_html = (
+        '<div class="callout callout-alert" style="margin-top:.6rem"><strong>Mock outbreaker2 fallback in use.</strong> '
+        'This report was generated from demonstration outbreaker output rather than a real R-based outbreaker2 run. '
+        'Transmission probabilities, network directionality, and generation-depth signals must not be treated as operational evidence.</div>'
+        if summary_provenance == "mock"
+        else ""
+    )
+    synthesis_version_warning_html = ""
+    if synthesis_data and synthesis_format_version is None:
+        synthesis_version_warning_html = (
+            '<div class="callout callout-warn" style="margin-top:.6rem"><strong>Synthesis output format review required.</strong> '
+            'The loaded synthesis_output.json is missing a format_version field. Report builders are using compatibility fallbacks; regenerate synthesis output before external circulation.</div>'
+        )
+    elif synthesis_data and synthesis_format_version != SYNTHESIS_FORMAT_VERSION:
+        synthesis_version_warning_html = (
+            '<div class="callout callout-warn" style="margin-top:.6rem"><strong>Synthesis output version mismatch.</strong> '
+            f'This report expects format_version {SYNTHESIS_FORMAT_VERSION} but loaded {_safe_html(str(synthesis_format_version))}. '
+            'Review synthesis_output.json and regenerate exports before relying on derived cluster metrics.</div>'
+        )
+
     def _build_analysis_quality_warnings() -> str:
         warnings: list[str] = []
 
@@ -122,6 +164,10 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
                 warnings.append(
                     "MCMC trace is still drifting. Treat transmission probabilities as exploratory "
                     f"and repeat with longer chains before circulation.{drift_text}"
+                )
+            if summary_provenance == "mock":
+                warnings.append(
+                    "Outbreaker output provenance is mock/demo fallback. Directionality, posteriors, and chain-depth summaries are illustrative only until a real outbreaker2 run completes."
                 )
 
         if isinstance(lineage_dr_data, dict):
@@ -160,6 +206,14 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
             warnings.append(
                 "Transmission synthesis output is missing. Printed confidence categories fall back to "
                 "legacy report heuristics until exports/synthesis_output.json is generated."
+            )
+        elif synthesis_format_version is None:
+            warnings.append(
+                "synthesis_output.json has no format_version field. Compatibility fallbacks are active; regenerate synthesis output before external circulation."
+            )
+        elif synthesis_format_version != SYNTHESIS_FORMAT_VERSION:
+            warnings.append(
+                f"synthesis_output.json format_version {synthesis_format_version} does not match expected version {SYNTHESIS_FORMAT_VERSION}. Regenerate synthesis output before relying on cluster summaries."
             )
 
         if isinstance(method_comparison_data, dict):
@@ -358,7 +412,7 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
         if pk not in outbreaker_pair_prob or prob > outbreaker_pair_prob[pk]:
             outbreaker_pair_prob[pk] = prob
 
-    high_confidence_edges = [e for e in transmission_edges if float(e.get("probability") or 0.0) >= 0.70]
+    high_confidence_edges = [e for e in transmission_edges if float(e.get("probability") or 0.0) >= high_posterior_threshold]
     high_confidence_all_count = len(high_confidence_edges)
     high_confidence_snapshot_count = int((transmission_data or {}).get("high_confidence_edges", 0) or 0)
 
@@ -1916,16 +1970,17 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
         for r in cluster_epi_rows:
             cid = _short_case_id(str(r.get("cluster_id") or ""))
             lineage_dist = _lineage_distribution_text(str(r.get("cluster_id") or ""))
+            tx_generations = _transmission_generation_text(str(r.get("cluster_id") or ""))
             rr_mdr = f"{int(r.get('rr_cases') or 0)}/{int(r.get('mdr_cases') or 0)}"
             recent = f"{int(r.get('recent_30d') or 0)}/{int(r.get('recent_60d') or 0)}/{int(r.get('recent_90d') or 0)}"
             cepi_rows += (f"<tr><td class='mono'>{_safe_html(cid)}</td><td>{_safe_html(str(r.get('cases',0)))}</td>"
                           f"<td>{_safe_html(str(r.get('first_specimen','n/a')))}</td><td>{_safe_html(str(r.get('latest_specimen','n/a')))}</td>"
                           f"<td>{_safe_html(str(r.get('median_snp_proxy','n/a')))}</td><td>{_safe_html(str(r.get('max_snp_proxy','n/a')))}</td>"
                           f"<td>{_safe_html(lineage_dist)}</td>"
-                          f"<td>{_safe_html(rr_mdr)}</td><td class='mono'>{_safe_html(_short_case_id(str(r.get('suspected_index_case','n/a'))))}</td>"
+                          f"<td>{_safe_html(tx_generations)}</td><td>{_safe_html(rr_mdr)}</td><td class='mono'>{_safe_html(_short_case_id(str(r.get('suspected_index_case','n/a'))))}</td>"
                           f"<td>{_safe_html(recent)}</td></tr>")
         cluster_epi_html = (f"<div class='tbl-wrap'><table><thead><tr><th>Cluster</th><th>Cases</th><th>First specimen</th>"
-                            f"<th>Latest specimen</th><th>Median SNP</th><th>Max SNP</th><th>Lineage distribution</th><th>RR/MDR cases</th><th>Index case</th><th>Recent 30/60/90d</th>"
+                                                        f"<th>Latest specimen</th><th>Median SNP</th><th>Max SNP</th><th>Lineage distribution</th><th>Sustained/max gen</th><th>RR/MDR cases</th><th>Index case</th><th>Recent 30/60/90d</th>"
                             f"</tr></thead><tbody>{cepi_rows}</tbody></table></div>")
         # Growth status
         growth_rows = ""
@@ -2128,7 +2183,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
     concepts = [
         ("Whole-Genome Sequencing (WGS)", "Reads the complete ~4.4 Mb genome of M. tuberculosis. More informative than conventional typing (MIRU, spoligotyping)."),
         ("SNP", "A single base-pair difference. Closely related strains share few SNPs. Used as a genetic distance metric."),
-        ("SNP threshold for transmission", "<=12 SNPs: potentially linked (UK NICE). <=5 SNPs: recent direct transmission likely. >50 SNPs: recent shared transmission effectively ruled out."),
+        ("SNP threshold for transmission", f"<={low_snp_threshold} SNPs: potentially linked under this run configuration. <=5 SNPs: recent direct transmission likely. >={high_snp_contradiction_threshold} SNPs: synthesis contradiction threshold for recent direct transmission."),
         ("Lineage", "M. tuberculosis classified into 7+ major lineages (L1-L7). Influences drug-resistance patterns and transmissibility."),
         ("Cluster", "Cases genetically similar within the SNP threshold. Does not prove direct transmission - epidemiological linkage required to confirm routes."),
         ("outbreaker2", "Bayesian MCMC method combining SNP distances with collection dates to probabilistically infer who-infected-whom. Posterior probabilities are hypotheses, not proofs."),
@@ -2211,9 +2266,9 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
     # -------------------------------------------------------------------------
 
     # Build the improved pairs section using adjudication table
-    adj_genomic_html    = _adjudication_table(genomic_pairs[:20 if not full else None],    "Genomically supported (SNP <=12, shared cluster)")
+    adj_genomic_html    = _adjudication_table(genomic_pairs[:20 if not full else None],    f"Genomically supported (SNP <={low_snp_threshold}, shared cluster)")
     adj_model_html      = _adjudication_table(model_only_pairs[:20 if not full else None],  "Model-only - no pairwise SNP data")
-    adj_discordant_html = _adjudication_table(genomically_discordant[:20 if not full else None], "Genomically discordant (posterior >=0.70, SNP >12)")
+    adj_discordant_html = _adjudication_table(genomically_discordant[:20 if not full else None], f"Genomically discordant (posterior >={high_posterior_label}, SNP >{low_snp_threshold})")
     adj_qcunres_html    = _adjudication_table(qc_resolution_pairs[:20 if not full else None], "QC-unresolved - hold pending repeat sequencing")
 
     html = f"""<!doctype html>
@@ -2296,6 +2351,8 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
       <h2>About this report</h2>
       <p style="font-size:.87rem">This report is produced by the Northern Ireland TB Genomic Surveillance platform using whole-genome sequencing (WGS) data and epidemiological case records. It supports TB programme staff and public health investigators by providing genomic evidence for transmission clusters, drug-resistance profiles, and programme performance metrics.</p>
       <div class="callout-warn callout" style="margin-top:.6rem"><strong>Decision-support tool only.</strong> All findings must be reviewed and acted on by a qualified clinician or public health professional. No automated decisions are made.</div>
+            {mock_outbreaker_html}
+            {synthesis_version_warning_html}
     </section>
 
     <!-- POPULATION AND DENOMINATORS -->
@@ -2316,7 +2373,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
       {analysis_quality_warnings_html}
       <div class="section-note" style="margin-top:.7rem">
         <strong>How to interpret:</strong> Pairs with high posterior transmission probability are model-prioritised hypotheses only.
-        They should not be interpreted as direct transmission unless supported by pairwise SNP distance <=12, QC pass status, and epidemiological corroboration.
+                They should not be interpreted as direct transmission unless supported by pairwise SNP distance &lt;={low_snp_threshold}, QC pass status, and epidemiological corroboration.
       </div>
       <h3>MCMC diagnostics</h3>
       <div class="figures-grid">
@@ -2341,8 +2398,8 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
       <h2>High-posterior model hypotheses</h2>
       <div class="callout callout-alert">
         <strong>Do not treat these model edges as confirmed transmission.</strong>
-        Posterior probability &ge;0.70 is a model signal only; operational escalation requires QC-pass sequence data,
-        SNP &le;12 support, and epidemiological corroboration.
+                Posterior probability &ge;{high_posterior_label} is a model signal only; operational escalation requires QC-pass sequence data,
+                SNP &le;{low_snp_threshold} support, and epidemiological corroboration.
       </div>
       <div style="margin:.6rem 0">
         <span class="tag">{_safe_html(str(len(genomic_pairs)))} SNP-linked</span>
@@ -2355,15 +2412,15 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
       {adj_model_html}
       {adj_discordant_html}
       {adj_qcunres_html}
-      {('<p class="muted">No high-posterior (&ge;0.70) model edges found in transmission network.</p>' if not high_confidence_edges else '')}
+            {('<p class="muted">No high-posterior (&ge;' + _safe_html(high_posterior_label) + ') model edges found in transmission network.</p>' if not high_confidence_edges else '')}
     </section>
 
     <!-- SNP SUMMARY -->
     <section class="card" id="snp-summary">
       <h2>Pairwise SNP distance summary</h2>
       <div class="section-note">
-        <=12 SNPs = operational threshold for probable recent transmission.
-        &gt;12 SNPs = direct transmission unlikely.
+                &le;{low_snp_threshold} SNPs = operational low-SNP support threshold for this run.
+                &gt;{low_snp_threshold} SNPs = direct transmission less plausible and requires adjudication.
         SNP unavailable = repeat sequencing required before inference.
       </div>
       <div class="tbl-wrap"><table><thead><tr><th>SNP distance category</th><th>Pairs</th><th>Operational implication</th></tr></thead><tbody>
@@ -2383,7 +2440,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
       <h3>Counts and denominators in this report</h3>
       <div class="section-note">Definitions match the denominator box above. All model-prioritised links are hypotheses only - zero SNP-supported links means no validated direct transmission candidates at this time.</div>
       <div class="tbl-wrap"><table><thead><tr><th>Metric</th><th>Count</th><th>Definition</th></tr></thead><tbody>
-        <tr><td>High-posterior model links &ge;0.70</td><td>{_safe_html(str(high_confidence_all_count))}</td><td>All outbreaker2 edges with posterior probability &ge;0.70; these are hypotheses, not confirmed transmission links</td></tr>
+        <tr><td>High-posterior model links &ge;{_safe_html(high_posterior_label)}</td><td>{_safe_html(str(high_confidence_all_count))}</td><td>All outbreaker2 edges with posterior probability &ge;{_safe_html(high_posterior_label)}; these are hypotheses, not confirmed transmission links</td></tr>
         <tr><td>Discordant pairs reviewed</td><td>{_safe_html(str(len(discordant_pairs)))}</td><td>All model-linked pairs showing SNP/model discordance requiring adjudication</td></tr>
         <tr><td>Displayed network links</td><td>{_safe_html(str(high_confidence_snapshot_count))}</td><td>Links in network JSON snapshot (may be filtered for display)</td></tr>
       </tbody></table></div>

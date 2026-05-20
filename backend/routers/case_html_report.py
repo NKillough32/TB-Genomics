@@ -178,6 +178,7 @@ def case_report_html(case_id: str, db: Session = Depends(get_db)):  # noqa: C901
 
     synthesis_pair_by_directed: dict[tuple[str, str], dict] = {}
     synthesis_pair_by_unordered: dict[tuple[str, str], dict] = {}
+    synthesis_cluster_by_id: dict[str, dict] = {}
     synthesis_path = _export_path("synthesis_output.json")
     if os.path.exists(synthesis_path):
         try:
@@ -192,9 +193,13 @@ def case_report_html(case_id: str, db: Session = Depends(get_db)):  # noqa: C901
                     continue
                 synthesis_pair_by_directed[(source, target)] = pair
                 synthesis_pair_by_unordered[tuple(sorted([source, target]))] = pair
+            for cluster in synthesis_data.get("clusters") or []:
+                if isinstance(cluster, dict) and cluster.get("cluster_id"):
+                    synthesis_cluster_by_id[str(cluster.get("cluster_id"))] = cluster
         except Exception:
             synthesis_pair_by_directed = {}
             synthesis_pair_by_unordered = {}
+            synthesis_cluster_by_id = {}
 
     # -- TBProfiler JSON artifact ----------------------------------------------
     tbp_data: dict | None = None
@@ -245,6 +250,22 @@ def case_report_html(case_id: str, db: Session = Depends(get_db)):  # noqa: C901
             or synthesis_pair_by_unordered.get(tuple(sorted([source, target])))
             or {}
         )
+
+    def _cluster_synthesis_summary(cluster_id: str | None) -> dict:
+        if not cluster_id:
+            return {}
+        cluster = synthesis_cluster_by_id.get(str(cluster_id)) or {}
+        return cluster.get("summary") if isinstance(cluster, dict) else {}
+
+    def _cluster_lineage_summary(cluster_id: str | None) -> str:
+        if not cluster_id:
+            return "-"
+        cluster = synthesis_cluster_by_id.get(str(cluster_id)) or {}
+        distribution = cluster.get("lineage_distribution") if isinstance(cluster, dict) else {}
+        if not isinstance(distribution, dict) or not distribution:
+            return "-"
+        items = sorted(distribution.items(), key=lambda item: (-int(item[1] or 0), str(item[0])))
+        return ", ".join(f"{key}: {value}" for key, value in items[:4])
 
     def _resistance_badge(dr) -> str:
         if not dr:
@@ -389,11 +410,18 @@ def case_report_html(case_id: str, db: Session = Depends(get_db)):  # noqa: C901
 
     # 5. Cluster membership
     if core["cluster_id"]:
+        cluster_synthesis_summary = _cluster_synthesis_summary(core["cluster_id"])
+        cluster_tx = cluster_synthesis_summary.get("transmission_generations") if isinstance(cluster_synthesis_summary, dict) else {}
+        max_generation = cluster_tx.get("max_generation") if isinstance(cluster_tx, dict) else None
+        sustained_flag = cluster_tx.get("sustained_transmission_flag") if isinstance(cluster_tx, dict) else None
         cluster_body = _kv_table([
             ("Cluster ID",           _e(core["cluster_id"][:8])),
             ("Cluster Size",         _e(str(core["cluster_size"]))),
             ("SNP Distance (max)",   _e(str(core["snp_distance"]) if core["snp_distance"] is not None else "-")),
             ("Investigation Status", _badge_status(core["cluster_status"])),
+            ("Lineage distribution", _e(_cluster_lineage_summary(core["cluster_id"]))),
+            ("Sustained transmission", _e("Yes" if sustained_flag else ("No" if sustained_flag is not None else "-"))),
+            ("Maximum generation", _e(str(max_generation) if max_generation is not None else "-")),
         ])
         peer_table = _data_table(
             ["Case ID", "Date", "Region", "Lineage", "Resistance", "Status"],

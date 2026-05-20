@@ -3,8 +3,10 @@ import os
 
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
+
 from backend.auth import require_roles
-from backend.database import init_db
+from backend.database import SessionLocal, init_db
 from backend.routers import (
     analytics,
     case_analysis,
@@ -67,3 +69,13 @@ app.include_router(tool_diagnostics.router, dependencies=[Depends(require_roles(
 @app.get("/")
 def root():
     return {"status": "running"}
+
+
+@app.get("/health")
+def health():
+    db = SessionLocal()
+    try:
+        db.execute(text("SELECT 1"))
+        return {"status": "healthy", "database": "ok"}
+    finally:
+        db.close()

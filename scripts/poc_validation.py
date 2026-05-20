@@ -5,6 +5,7 @@ Runs a complete end-to-end test and generates a report.
 """
 
 import json
+import os
 import requests
 import time
 import sys
@@ -14,6 +15,11 @@ from pathlib import Path
 API_BASE = "http://localhost:8000"
 TEST_CASE_COUNT = 100
 DEMO_TIMEOUT = 300  # 5 minutes max for all jobs
+TB_TOKEN = os.getenv("TB_TOKEN", "").strip()
+
+
+def _request_headers() -> dict[str, str]:
+    return {"Authorization": f"Bearer {TB_TOKEN}"} if TB_TOKEN else {}
 
 class PoC_Validator:
     def __init__(self):
@@ -85,6 +91,7 @@ class PoC_Validator:
             lambda: requests.post(
                 f"{API_BASE}/ingest/seed-synthetic",
                 params={"case_count": TEST_CASE_COUNT, "reset": True, "seed": 42},
+                headers=_request_headers(),
             ),
         )
         if resp:
@@ -96,7 +103,7 @@ class PoC_Validator:
         print("\n[3/6] Data Retrieval")
         resp = self.test(
             "List cases via API",
-            lambda: requests.get(f"{API_BASE}/cases/"),
+            lambda: requests.get(f"{API_BASE}/cases/", headers=_request_headers()),
         )
         if resp:
             cases = resp.json()
@@ -106,7 +113,7 @@ class PoC_Validator:
         print("\n[4/6] Analysis Summary")
         resp = self.test(
             "Get case summary",
-            lambda: requests.get(f"{API_BASE}/cases/summary"),
+            lambda: requests.get(f"{API_BASE}/cases/summary", headers=_request_headers()),
         )
         if resp:
             summary = resp.json()
@@ -119,7 +126,7 @@ class PoC_Validator:
         print("\n[5/6] Workflow Execution")
         resp = self.test(
             "Start clustering job",
-            lambda: requests.post(f"{API_BASE}/jobs/run/run_clustering"),
+            lambda: requests.post(f"{API_BASE}/jobs/run/run_clustering", headers=_request_headers()),
         )
         if resp:
             job_data = resp.json()
@@ -131,7 +138,7 @@ class PoC_Validator:
                 # Poll job status
                 start = time.time()
                 while time.time() - start < DEMO_TIMEOUT:
-                    status_resp = requests.get(f"{API_BASE}/jobs/status/{job_id}")
+                    status_resp = requests.get(f"{API_BASE}/jobs/status/{job_id}", headers=_request_headers())
                     if status_resp.status_code == 200:
                         job_status = status_resp.json()
                         if job_status["status"] == "completed":
@@ -146,7 +153,7 @@ class PoC_Validator:
         print("\n[6/6] Governance & Compliance")
         resp = self.test(
             "Retrieve audit trail",
-            lambda: requests.get(f"{API_BASE}/cases/audit-trail?limit=10"),
+            lambda: requests.get(f"{API_BASE}/cases/audit-trail?limit=10", headers=_request_headers()),
         )
         if resp:
             audit = resp.json()

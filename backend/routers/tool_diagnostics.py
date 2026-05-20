@@ -6,10 +6,22 @@ from typing import Any
 from fastapi import APIRouter, Depends
 
 from backend.auth import AuthenticatedUser, require_roles
+from backend.job_runner import run_job
 from scripts import run_lineage_dr_validation as lineage_dr
 
 
 router = APIRouter(prefix="/diagnostics", tags=["diagnostics"])
+
+
+@router.post("/audit-schema")
+def run_audit_schema(
+    _user: AuthenticatedUser = Depends(require_roles("analyst")),
+):
+    """Queue the lightweight schema/data audit script for analyst use."""
+    job_id = run_job("audit_schema")
+    if not job_id:
+        return {"error": "audit_schema job is not available"}
+    return {"job_id": job_id, "job_name": "audit_schema"}
 
 
 def _probe_local_tool(names: list[str], version_args: list[str]) -> dict[str, Any]:

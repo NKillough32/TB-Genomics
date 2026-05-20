@@ -17,7 +17,7 @@ from datetime import datetime
 # Create PDF
 import os; os.makedirs("docs", exist_ok=True)
 pdf_path = "docs/TB_Genomics_PoC_User_Guide.pdf"
-doc = SimpleDocTemplate(pdf_path, pagesize=letter, topMargin=0.5*inch, bottomMargin=0.5*inch)
+doc = SimpleDocTemplate(pdf_path, pagesize=A4, topMargin=0.5*inch, bottomMargin=0.5*inch)
 story = []
 styles = getSampleStyleSheet()
 

@@ -654,10 +654,10 @@ def _resistance_validation_record(
     confidence: object,
     predicted_drug_resistance: object,
     catalogue: str | None,
-    source_tool: str,
-    source_json_path: str,
-    drug_from_tool: bool,
-    drug_inferred_from_sample_level: bool,
+    source_tool: str = "tbprofiler",
+    source_json_path: str = "unknown",
+    drug_from_tool: bool = True,
+    drug_inferred_from_sample_level: bool = False,
 ) -> dict[str, Any]:
     if drug_inferred_from_sample_level:
         mapping_status = "not_assessable_inferred_drug"

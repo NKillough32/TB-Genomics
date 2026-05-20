@@ -748,7 +748,7 @@ async function loadClusterInvestigations(){
 				<td>${escapeHtml(statusLabel)}${signed ? ' [OK]' : ''}</td>
 				<td>${escapeHtml(inv.assigned_to || '-')}</td>
 				<td>${escapeHtml(inv.action_count)}</td>
-				<td><button class="mini-btn" onclick="openCicPanel(${escapeAttr(JSON.stringify(inv.cluster_id))})">Investigate</button></td>
+				<td><button class="mini-btn" onclick="openCicPanel('${escapeHtml(inv.cluster_id)}')">Investigate</button></td>
 			</tr>`;
 		}
 		html += '</tbody></table>';

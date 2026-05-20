@@ -18,7 +18,7 @@ if (-not (Test-Path $venvPython)) {
 }
 
 if (-not $env:DATABASE_URL) {
-    $env:DATABASE_URL = 'postgresql://tb:tb@localhost/tb_surveillance'
+    $env:DATABASE_URL = 'postgresql://tb:tb@localhost:5433/tb_surveillance'
 }
 
 if (-not $env:TBPROFILER_WSL_ENV) {

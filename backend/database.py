@@ -7,7 +7,7 @@ from alembic.config import Config
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://tb:tb@localhost/tb_surveillance").strip()
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://tb:tb@localhost:5433/tb_surveillance").strip()
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()

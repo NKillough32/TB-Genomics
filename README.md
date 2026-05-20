@@ -68,7 +68,7 @@ Quick start:
 4) Load the schema from PowerShell (not from inside the `psql` prompt):
 	& "C:\Program Files\PostgreSQL\18\bin\psql.exe" -U tb -h localhost -d tb_surveillance -f ".\db\schema.sql"
 5) Set the database connection string for the current PowerShell session:
-	$env:DATABASE_URL="postgresql://tb:tb@localhost/tb_surveillance"
+	$env:DATABASE_URL="postgresql://tb:tb@localhost:5433/tb_surveillance"
 6) Start the backend:
 	c:/Users/Nicho/Desktop/TB-Genomics-main/.venv/Scripts/python.exe -m uvicorn backend.app:app --reload
 7) Start the GUI from a second PowerShell window:
@@ -87,7 +87,7 @@ One-click Windows launchers:
 Notes:
 - These launchers expect `.venv` to already exist with dependencies installed.
 - If `DATABASE_URL` is not set, the scripts default to:
-	`postgresql://tb:tb@localhost/tb_surveillance`
+	`postgresql://tb:tb@localhost:5433/tb_surveillance`
 - `Start-Platform-TBTools.bat` enables `TBPROFILER_WSL_FALLBACK=1`, `TBPROFILER_DOCKER_FALLBACK=1`, and `TBPROFILER_WSL_ENV=tbtools` for that session, opens a WSL shell to verify TBProfiler/Mykrobe availability, and refreshes `exports/lineage_dr_validation.json` before opening the browser.
 - Demo launchers set `TB_ENABLE_SYNTHETIC_SEEDING=1` and `TB_ALLOW_NON_OPERATIONAL_ACTIONS=1` for that session only.
 

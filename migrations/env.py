@@ -19,7 +19,7 @@ target_metadata = Base.metadata
 def _database_url() -> str:
     return os.getenv(
         "DATABASE_URL",
-        config.get_main_option("sqlalchemy.url", "postgresql://tb:tb@localhost/tb_surveillance"),
+        config.get_main_option("sqlalchemy.url", "postgresql://tb:tb@localhost:5433/tb_surveillance"),
     ).strip()
 
 

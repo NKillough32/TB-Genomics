@@ -127,6 +127,58 @@ def _export_json(path: str) -> dict | None:
         return None
 
 
+def _float_or_default(value: object, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except Exception:
+        return default
+
+
+def _load_transmission_edges() -> list[dict]:
+    """Load transmission edges from available export artifacts.
+
+    Supports legacy `transmission_network.json` edges and current
+    `synthesis_output.json` pairwise_transmission_evidence payloads.
+    """
+    net = _export_json("exports/transmission_network.json") or {}
+    edges = net.get("edges") or []
+    normalised = []
+    for edge in edges:
+        src = str(edge.get("source") or "")
+        tgt = str(edge.get("target") or "")
+        if not src or not tgt:
+            continue
+        normalised.append({
+            "source": src,
+            "target": tgt,
+            "posterior": _float_or_default(edge.get("probability"), 0.0),
+            "confidence": str(edge.get("confidence") or "unknown"),
+        })
+    if normalised:
+        return normalised
+
+    synthesis = _export_json("exports/synthesis_output.json") or {}
+    fallback_edges: dict[tuple[str, str], dict] = {}
+    for cluster in synthesis.get("clusters") or []:
+        for pair in cluster.get("pairwise_transmission_evidence") or []:
+            src = str(pair.get("source") or "")
+            tgt = str(pair.get("target") or "")
+            if not src or not tgt:
+                continue
+            key = (src, tgt)
+            candidate = {
+                "source": src,
+                "target": tgt,
+                "posterior": _float_or_default(pair.get("posterior_probability"), 0.0),
+                "confidence": str(pair.get("confidence") or pair.get("confidence_code") or "unknown"),
+            }
+            existing = fallback_edges.get(key)
+            if not existing or candidate["posterior"] > existing["posterior"]:
+                fallback_edges[key] = candidate
+
+    return list(fallback_edges.values())
+
+
 def _normalise_uuid(value: str) -> str:
     # Keep this light without importing uuid for every endpoint.
     val = (value or "").strip()
@@ -248,14 +300,13 @@ def _cluster_priority_reasons(
         if "household" in domains:
             household_pairs += 1
 
-    network = _export_json("exports/transmission_network.json") or {}
-    edges = network.get("edges") or []
+    edges = _load_transmission_edges()
     cluster_set = set(case_ids)
     high_conf_edges = 0
     for edge in edges:
         src = str(edge.get("source") or "")
         tgt = str(edge.get("target") or "")
-        if src in cluster_set and tgt in cluster_set and float(edge.get("probability") or 0.0) >= 0.70:
+        if src in cluster_set and tgt in cluster_set and _float_or_default(edge.get("posterior"), 0.0) >= 0.70:
             high_conf_edges += 1
 
     reasons: list[str] = []
@@ -2186,7 +2237,7 @@ def analytics_clusters(db: Session = Depends(get_db)):
 def phylo_tree():
     """Return available phylogenetic/transmission visual assets + lightweight graph."""
     net = _export_json("exports/transmission_network.json") or {}
-    edges = net.get("edges") or []
+    edges = _load_transmission_edges()
     nodes = net.get("all_nodes") or []
 
     graph_nodes = []
@@ -2204,7 +2255,7 @@ def phylo_tree():
         {
             "source": e.get("source"),
             "target": e.get("target"),
-            "posterior": float(e.get("probability") or 0),
+            "posterior": _float_or_default(e.get("posterior"), 0.0),
             "confidence": e.get("confidence", "unknown"),
         }
         for e in edges
@@ -2368,8 +2419,7 @@ def genomic_vs_epi(
     db: Session = Depends(get_db),
 ):
     """Compare genomic model links against simple epidemiological plausibility."""
-    net = _export_json("exports/transmission_network.json") or {}
-    edges = net.get("edges") or []
+    edges = _load_transmission_edges()
 
     rows = _case_rows(db)
     case_index = {
@@ -2388,7 +2438,7 @@ def genomic_vs_epi(
     for e in edges:
         src = str(e.get("source") or "")
         tgt = str(e.get("target") or "")
-        posterior = float(e.get("probability") or 0)
+        posterior = _float_or_default(e.get("posterior"), 0.0)
         if posterior < posterior_min:
             continue
         if not src or not tgt:

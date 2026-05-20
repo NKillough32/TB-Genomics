@@ -281,13 +281,13 @@ def generate_transmission_network():
         high_conf_edges = sum(1 for _, _, d in graph.edges(data=True) if d.get("probability", 0) >= 0.8)
 
         # Render network figure.
-        fig, ax = plt.subplots(figsize=(12.5, 8.5))
+        fig, ax = plt.subplots(figsize=(13.6, 9.6))
 
         # Cluster-centered layout: place each cluster in its own neighborhood,
         # then run local spring layout per cluster for readability.
         positions = {}
         n_clusters = max(1, len(cluster_order))
-        ring_radius = max(2.2, min(4.0, 1.1 * n_clusters))
+        ring_radius = max(2.8, min(5.2, 1.25 * n_clusters))
 
         for idx, cluster_id in enumerate(cluster_order):
             cluster_nodes = [n for n in graph.nodes() if graph.nodes[n].get("cluster_id") == cluster_id]
@@ -304,7 +304,7 @@ def generate_transmission_network():
                 local_pos = nx.spring_layout(subgraph, seed=42 + idx, k=1.6, iterations=120)
                 local_pos_arr = np.array(list(local_pos.values()))
                 max_abs = max(1.0, float(np.max(np.abs(local_pos_arr))))
-                scale = 1.05
+                scale = 0.95
                 for node, xy in local_pos.items():
                     positions[node] = center + (np.array(xy) / max_abs) * scale
 
@@ -352,16 +352,45 @@ def generate_transmission_network():
             connectionstyle="arc3,rad=0.07",
         )
 
-        labels = {n: graph.nodes[n].get("display_case_id", str(n)[:8]) for n in graph.nodes()}
-        nx.draw_networkx_labels(graph, positions, labels=labels, ax=ax, font_size=7.2, font_weight="bold")
+        # Label only priority nodes to avoid unreadable overlap in dense clusters.
+        sorted_by_risk = sorted(
+            graph.nodes(), key=lambda n: graph.nodes[n].get("risk_score", 0.0), reverse=True
+        )
+        top_global = set(sorted_by_risk[:max(12, min(24, graph.number_of_nodes() // 8))])
+        top_per_cluster = set()
+        for cluster_id in cluster_order:
+            cluster_nodes = [n for n in graph.nodes() if graph.nodes[n].get("cluster_id") == cluster_id]
+            if not cluster_nodes:
+                continue
+            cluster_sorted = sorted(
+                cluster_nodes, key=lambda n: graph.nodes[n].get("risk_score", 0.0), reverse=True
+            )
+            top_per_cluster.update(cluster_sorted[:2])
 
-        edge_labels = {(s, t): f"{graph.edges[s, t].get('probability', 0):.2f}" for s, t in graph.edges() if graph.edges[s, t].get("probability", 0) >= 0.7}
-        if edge_labels:
+        label_nodes = top_global | top_per_cluster
+        labels = {n: graph.nodes[n].get("display_case_id", str(n)[:8]) for n in label_nodes}
+        nx.draw_networkx_labels(
+            graph,
+            positions,
+            labels=labels,
+            ax=ax,
+            font_size=7.8,
+            font_weight="bold",
+            bbox=dict(facecolor="white", edgecolor="none", alpha=0.58, boxstyle="round,pad=0.12"),
+        )
+
+        edge_labels = {
+            (s, t): f"{graph.edges[s, t].get('probability', 0):.2f}"
+            for s, t in graph.edges()
+            if graph.edges[s, t].get("probability", 0) >= 0.8
+        }
+        # Draw edge labels only for smaller/sparser networks; dense plots become unreadable.
+        if edge_labels and graph.number_of_edges() <= 45:
             nx.draw_networkx_edge_labels(graph, positions, edge_labels=edge_labels, ax=ax, font_size=6.5, font_color="#334155")
 
         ax.set_title(
             "Posterior Transmission Network\n"
-            f"{graph.number_of_nodes()} cases | {graph.number_of_edges()} links | {high_conf_edges} high-confidence links",
+            f"{graph.number_of_nodes()} cases | {graph.number_of_edges()} links | {high_conf_edges} high-confidence links | labelled priority cases",
             fontsize=15,
             fontweight="bold",
             pad=12,

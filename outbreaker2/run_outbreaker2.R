@@ -71,6 +71,7 @@ tryCatch({
   n_iter_total <- as.integer(Sys.getenv("TB_OUTBREAKER_ITER", "50000"))
   burnin_iters <- as.integer(Sys.getenv("TB_OUTBREAKER_BURNIN", "10000"))
   thin_every <- as.integer(Sys.getenv("TB_OUTBREAKER_THIN", "10"))
+  burnin_rows <- max(0L, as.integer(floor(burnin_iters / max(1L, thin_every))))
   cfg <- create_config(n_iter = n_iter_total, sample_every = thin_every)
   res <- outbreaker(data = out_data, config = cfg)
   chain_df <- as.data.frame(res)
@@ -247,7 +248,7 @@ tryCatch({
     metric_vals <- as.numeric(seq_len(nrow(chain_df)))
   }
 
-  burnin_effective_for_plot <- min(burnin_iters, max(0, length(metric_vals) - 1))
+  burnin_effective_for_plot <- min(burnin_rows, max(0, length(metric_vals) - 1))
   post_metric_vals <- if (burnin_effective_for_plot < length(metric_vals)) {
     metric_vals[(burnin_effective_for_plot + 1):length(metric_vals)]
   } else {
@@ -311,31 +312,70 @@ tryCatch({
 
   png("exports/outbreaker_hist.png", width = 1400, height = 900, res = 140)
   par(mar = c(4.8, 5.2, 4.6, 1.5), family = "sans")
-  hist(
-    post_metric_vals,
-    breaks = 40,
-    col = "#93c5fd",
-    border = "white",
-    main = "Outbreaker2 Posterior Distribution After Burn-in",
-    xlab = metric_label,
-    ylab = "Frequency",
-    cex.main = 1.15,
-    cex.lab = 0.95,
-    cex.axis = 0.85
-  )
-  grid(col = "grey88", lty = "dotted")
-  abline(v = mean(post_metric_vals, na.rm = TRUE), col = "#1d4ed8", lwd = 1.4)
-  legend(
-    "topleft",
-    legend = c("Posterior samples", "Mean"),
-    fill = c("#93c5fd", NA),
-    border = c("white", NA),
-    lty = c(NA, 1),
-    col = c(NA, "#1d4ed8"),
-    lwd = c(NA, 1.4),
-    bty = "n",
-    cex = 0.82
-  )
+  clean_post <- post_metric_vals[is.finite(post_metric_vals)]
+  if (length(clean_post) < 2) {
+    plot.new()
+    title(main = "Outbreaker2 Posterior Distribution After Burn-in")
+    text(
+      0.5,
+      0.55,
+      labels = paste0("Insufficient posterior draws after burn-in (n=", length(clean_post), ")"),
+      cex = 1.0,
+      col = "#334155"
+    )
+    text(
+      0.5,
+      0.45,
+      labels = "Increase MCMC iterations / reduce burn-in before operational interpretation",
+      cex = 0.88,
+      col = "#64748b"
+    )
+  } else {
+    n_bins <- max(8, min(60, floor(sqrt(length(clean_post)))))
+    h <- hist(clean_post, breaks = n_bins, plot = FALSE)
+    plot(
+      h,
+      col = "#93c5fd",
+      border = "white",
+      main = "Outbreaker2 Posterior Distribution After Burn-in",
+      xlab = metric_label,
+      ylab = "Frequency",
+      cex.main = 1.15,
+      cex.lab = 0.95,
+      cex.axis = 0.85
+    )
+    grid(col = "grey88", lty = "dotted")
+    abline(v = mean(clean_post), col = "#1d4ed8", lwd = 1.4)
+    abline(v = median(clean_post), col = "#0f766e", lwd = 1.2, lty = 2)
+    if (length(unique(clean_post)) > 5) {
+      lines(density(clean_post, na.rm = TRUE), col = "#334155", lwd = 1.2)
+    }
+    if (max(h$counts, na.rm = TRUE) <= 1) {
+      mtext(
+        "Sparse posterior draws: histogram bars are single-count; treat diagnostics as low-confidence",
+        side = 3,
+        line = 0.35,
+        cex = 0.78,
+        col = "#b45309"
+      )
+    }
+    legend(
+      "topleft",
+      legend = c(
+        paste0("Posterior draws (n=", length(clean_post), ", bins=", n_bins, ")"),
+        "Mean",
+        "Median",
+        "Density"
+      ),
+      fill = c("#93c5fd", NA, NA, NA),
+      border = c("white", NA, NA, NA),
+      lty = c(NA, 1, 2, 1),
+      col = c(NA, "#1d4ed8", "#0f766e", "#334155"),
+      lwd = c(NA, 1.4, 1.2, 1.2),
+      bty = "n",
+      cex = 0.82
+    )
+  }
   dev.off()
   cat("✓ Histogram saved\n")
 
@@ -370,7 +410,7 @@ tryCatch({
 
   # Export posterior-derived transmission network in JSON format.
   network <- build_transmission_network(
-    res, as.character(cases$case_id), burnin_iters
+    res, as.character(cases$case_id), burnin_rows
   )
   write_json(
     network, "exports/transmission_network.json",
@@ -380,7 +420,7 @@ tryCatch({
 
   # Generate summary statistics
   cat("Generating summary report...\n")
-  burnin_effective <- min(burnin_iters, max(0, nrow(chain_df) - 1))
+  burnin_effective <- min(burnin_rows, max(0, nrow(chain_df) - 1))
   post_start <- burnin_effective + 1
   like_col <- if ("like" %in% names(chain_df)) {
     "like"
@@ -420,7 +460,8 @@ tryCatch({
   }
   summary_stats <- list(
     n_generations = nrow(chain_df),
-    burnin = burnin_effective,
+    burnin = burnin_iters,
+    burnin_rows = burnin_effective,
     n_samples = max(0, nrow(chain_df) - burnin_effective),
     thinning = thin_every,
     case_count = length(cases$case_id),

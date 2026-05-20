@@ -522,7 +522,7 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
     _seq_run_row: dict = {}
     try:
         _seq_run_row = dict(db.execute(text(
-            "SELECT platform, instrument_name, pipeline_version, reference_genome "
+            "SELECT platform, instrument_name, pipeline_version, reference_genome, completed_at "
             "FROM sequencing_runs ORDER BY created_at DESC NULLS LAST LIMIT 1"
         )).mappings().first() or {})
     except Exception:
@@ -531,7 +531,7 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
     _prov_row_db: dict = {}
     try:
         _prov_row_db = dict(db.execute(text(
-            "SELECT pipeline_name, pipeline_version, reference_genome, software_versions, parameters "
+            "SELECT pipeline_name, pipeline_version, reference_genome, software_versions, parameters, generated_at "
             "FROM analysis_provenance ORDER BY generated_at DESC NULLS LAST LIMIT 1"
         )).mappings().first() or {})
     except Exception:
@@ -574,6 +574,8 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
     gen_time_mean  = str(_params.get("gen_time_mean") or _params.get("generation_time_mean") or "")
     gen_time_sd    = str(_params.get("gen_time_sd") or _params.get("generation_time_sd") or "")
     sampling_prob  = str(_params.get("sampling_prob") or _params.get("pi") or "")
+    pipeline_run_date = str(_seq_run_row.get("completed_at") or "").strip() or None
+    analysis_provenance_date = str(_prov_row_db.get("generated_at") or "").strip() or None
 
     # -- Pipeline validation sign-off -------------------------------------------
     _signoff = _get_latest_signoff(db)
@@ -723,6 +725,8 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
         ("Lineage-calling tool/version", lineage_tool),
         ("outbreaker2 version", outbreaker_ver),
         ("Random seed", random_seed),
+        ("Pipeline run date", pipeline_run_date),
+        ("Analysis provenance date", analysis_provenance_date),
     ]
     missing_repro = [label for label, v in required_repro_metadata if v is None or (isinstance(v, str) and not v.strip())]
     circulation_ok = not missing_repro
@@ -2176,8 +2180,6 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
         ("Generation time mean (d)",  gen_time_mean,  False),
         ("Generation time SD (d)",    gen_time_sd,    False),
         ("Sampling probability (pi)",  sampling_prob,  False),
-        ("Pipeline run date",         str(_seq_run_row.get("completed_at", "") or _prov_row_db.get("run_at", "") or "") or None, False),
-        ("Analysis provenance date",  str(_prov_row_db.get("generated_at", "") or _prov_row_db.get("run_at", "") or "") or None, False),
     ]
     prov_rows += "".join(_prov_row(lbl, v, required=req) for lbl, v, req in extended_prov)
     prov_html = f"<table class='kv-table'><tbody>{prov_rows}</tbody></table>"

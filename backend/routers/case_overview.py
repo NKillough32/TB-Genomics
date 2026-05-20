@@ -6,7 +6,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from backend.data_safety import get_data_safety_status
-from backend.models import Case
+from backend.models import Case, TbInterpretation
 from backend.routers.dependencies import get_db
 
 
@@ -226,7 +226,36 @@ def list_cases(
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ):
-    return db.query(Case).offset(offset).limit(limit).all()
+    """List cases with lineage and interpretation data joined."""
+    rows = db.execute(
+        text("""
+            SELECT 
+                c.pseudonymised_case_id,
+                c.local_lab_sample_id,
+                c.specimen_date,
+                c.geographic_region,
+                c.case_status,
+                c.created_at,
+                c.symptom_onset_date,
+                c.treatment_start_date,
+                c.smear_status,
+                c.cavitation_status,
+                c.culture_status,
+                c.culture_positivity_duration_days,
+                c.infectiousness_notes,
+                COALESCE(ti.lineage, 'Unknown') AS lineage,
+                COALESCE(ti.sublineage, 'Unknown') AS sublineage,
+                ti.species_confirmation,
+                ti.predicted_drug_resistance
+            FROM cases c
+            LEFT JOIN tb_interpretation ti ON ti.sample_id = c.pseudonymised_case_id
+            ORDER BY c.created_at DESC
+            LIMIT :limit OFFSET :offset
+        """),
+        {"limit": limit, "offset": offset}
+    ).mappings().all()
+    
+    return [dict(row) for row in rows]
 
 
 @router.get("/kpis")

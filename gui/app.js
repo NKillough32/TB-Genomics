@@ -406,10 +406,20 @@ async function loadCases(){
 		html+='</ul></div></div>';
 		
 		// Table
-		html+='<table style="width:100%;border-collapse:collapse;font-size:0.9rem"><thead style="background:var(--surface-soft);border-bottom:2px solid var(--line)"><tr style="text-align:left"><th style="padding:0.75rem;font-weight:700">Case ID</th><th style="padding:0.75rem;font-weight:700">Specimen Date</th><th style="padding:0.75rem;font-weight:700">Status</th><th style="padding:0.75rem;font-weight:700">Region</th><th style="padding:0.75rem;font-weight:700">Lineage</th><th style="padding:0.75rem;font-weight:700">DR Profile</th></tr></thead><tbody>';
+		html+='<table style="width:100%;border-collapse:collapse;font-size:0.9rem"><thead style="background:var(--surface-soft);border-bottom:2px solid var(--line)"><tr style="text-align:left"><th style="padding:0.75rem;font-weight:700">Case ID</th><th style="padding:0.75rem;font-weight:700">Specimen Date</th><th style="padding:0.75rem;font-weight:700">Status</th><th style="padding:0.75rem;font-weight:700">Region</th><th style="padding:0.75rem;font-weight:700">Lineage</th><th style="padding:0.75rem;font-weight:700">DR Status</th></tr></thead><tbody>';
 		cases.slice(0,50).forEach(c=>{
 			const statusColor=c.case_status==='confirmed'?'var(--ok)':c.case_status==='unconfirmed'?'var(--warn)':'var(--muted)';
-			html+='<tr style="border-bottom:1px solid var(--line);transition:background 0.2s"><td style="padding:0.75rem"><code style="background:var(--surface-soft);padding:0.25rem 0.5rem;border-radius:4px;font-size:0.85rem">'+escapeHtml(c.pseudonymised_case_id||'—')+'</code></td><td style="padding:0.75rem">'+escapeHtml(c.specimen_date||'—')+'</td><td style="padding:0.75rem"><span style="color:'+statusColor+';font-weight:600">'+escapeHtml(c.case_status||'—')+'</span></td><td style="padding:0.75rem">'+escapeHtml(c.geographic_region||'—')+'</td><td style="padding:0.75rem">'+escapeHtml(c.lineage||'—')+'</td><td style="padding:0.75rem">'+escapeHtml(c.dr_profile||'—')+'</td></tr>';
+			// Extract DR profile from predicted_drug_resistance JSONB field
+			let drProfile='—';
+			if(c.predicted_drug_resistance){
+				try{
+					const dr=typeof c.predicted_drug_resistance==='string'?JSON.parse(c.predicted_drug_resistance):c.predicted_drug_resistance;
+					const drugsResistant=Object.entries(dr).filter(([k,v])=>v==='R'||v===true).map(([k])=>k.replace(/_/g,' ').substring(0,3).toUpperCase());
+					if(drugsResistant.length>0)drProfile=drugsResistant.slice(0,2).join(', ')+(drugsResistant.length>2?'+':'');
+					else drProfile='S';
+				}catch(e){drProfile='—';}
+			}
+			html+='<tr style="border-bottom:1px solid var(--line);transition:background 0.2s"><td style="padding:0.75rem"><code style="background:var(--surface-soft);padding:0.25rem 0.5rem;border-radius:4px;font-size:0.85rem">'+escapeHtml(c.pseudonymised_case_id||'—')+'</code></td><td style="padding:0.75rem">'+escapeHtml(c.specimen_date||'—')+'</td><td style="padding:0.75rem"><span style="color:'+statusColor+';font-weight:600">'+escapeHtml(c.case_status||'—')+'</span></td><td style="padding:0.75rem">'+escapeHtml(c.geographic_region||'—')+'</td><td style="padding:0.75rem"><span style="font-weight:600">'+escapeHtml(c.lineage||'Unknown')+'</span></td><td style="padding:0.75rem">'+escapeHtml(drProfile)+'</td></tr>';
 		});
 		html+='</tbody></table>';
 		if(cases.length>50)html+='<p style="color:var(--muted);font-size:0.9rem;margin-top:1rem">Showing 50 of '+cases.length+' cases. Use advanced search above for detailed filtering.</p>';

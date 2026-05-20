@@ -790,8 +790,9 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
         safe_caption = _safe_html(caption)
         dl_name = f"{stem}.png"
         thumb_cls = "fig-thumb" if show_in_gallery else "fig-full"
+        wide_cls = " fig-wide" if stem in {"outbreaker_resistance"} else ""
         return (
-            f'<figure class="fig-card {thumb_cls}" data-stem="{_safe_html(stem)}">'
+            f'<figure class="fig-card {thumb_cls}{wide_cls}" data-stem="{_safe_html(stem)}">'
             f'<div class="fig-img-wrap">'
             f'<img src="{uri}" alt="{safe_title}" loading="lazy" class="fig-img" '
             f'     onclick="openLightbox(\'{_safe_html(stem)}\')">'
@@ -1198,6 +1199,8 @@ details > div{padding:.9rem 1rem}
 .fig-inline{margin:.75rem 0}
 .fig-full .fig-img-wrap{max-height:none;overflow:auto}
 .fig-full .fig-img{object-fit:contain;max-height:720px;width:100%;padding:.35rem}
+.fig-card.fig-wide .fig-img-wrap{overflow-x:auto;overflow-y:hidden}
+.fig-card.fig-wide .fig-img{width:auto;max-width:none;min-width:100%;max-height:680px}
 .fig-thumb .fig-img-wrap{height:240px}
 .fig-thumb .fig-img{height:240px;object-fit:contain;padding:.35rem}
 

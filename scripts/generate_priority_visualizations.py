@@ -76,6 +76,48 @@ def _title_case_drug(value: str) -> str:
     return str(value).replace("_", " ").replace("-", " ").title()
 
 
+_DRUG_KEY_ALIASES = {
+    "isoniazid": "isoniazid",
+    "inh": "isoniazid",
+    "rifampicin": "rifampicin",
+    "rifampin": "rifampicin",
+    "rif": "rifampicin",
+    "ethambutol": "ethambutol",
+    "emb": "ethambutol",
+    "pyrazinamide": "pyrazinamide",
+    "pza": "pyrazinamide",
+    "fluoroquinolones": "fluoroquinolones",
+    "fluoroquinolone": "fluoroquinolones",
+    "fqs": "fluoroquinolones",
+    "quinolones": "fluoroquinolones",
+    "aminoglycosides": "aminoglycosides / injectables",
+    "aminoglycoside": "aminoglycosides / injectables",
+    "injectables": "aminoglycosides / injectables",
+    "aminoglycosides / injectables": "aminoglycosides / injectables",
+}
+
+_DRUG_DISPLAY_ORDER = [
+    "isoniazid",
+    "rifampicin",
+    "ethambutol",
+    "pyrazinamide",
+    "fluoroquinolones",
+    "aminoglycosides / injectables",
+]
+
+
+def _normalise_resistance_drug_key(value: str) -> str | None:
+    cleaned = str(value or "").strip().lower().replace("-", " ").replace("_", " ")
+    cleaned = " ".join(cleaned.split())
+    return _DRUG_KEY_ALIASES.get(cleaned)
+
+
+def _display_resistance_drug(value: str) -> str:
+    if value == "aminoglycosides / injectables":
+        return "Injectables"
+    return _title_case_drug(value)
+
+
 def _estimate_transmission_probability(source: dict, target: dict) -> float:
     score = 0.55
 
@@ -537,12 +579,18 @@ def generate_resistance_heatmap():
                 print("[warn] Not enough cases for resistance heatmap")
                 return
 
-            # Extract resistance info
+            # Extract resistance info using only canonical drug-class keys.
             all_drugs = set()
             for case in cases_data:
-                all_drugs.update(case['resistance'].keys())
+                normalised = {}
+                for key, value in case['resistance'].items():
+                    canonical_key = _normalise_resistance_drug_key(key)
+                    if canonical_key:
+                        normalised[canonical_key] = value
+                case['resistance'] = normalised
+                all_drugs.update(normalised.keys())
 
-            all_drugs = sorted(list(all_drugs))[:8]  # Limit to 8 drugs for clarity
+            all_drugs = [drug for drug in _DRUG_DISPLAY_ORDER if drug in all_drugs][:8]
             cases_data.sort(key=lambda c: (-c["resistant_count"], c["region"], c["case_id"]))
 
             # Build matrix: rows=cases, cols=drugs
@@ -582,7 +630,7 @@ def generate_resistance_heatmap():
             # Set labels
             ax.set_xticks(np.arange(len(all_drugs)))
             ax.set_yticks(np.arange(len(case_ids)))
-            ax.set_xticklabels([_title_case_drug(d) for d in all_drugs], rotation=35, ha='right')
+            ax.set_xticklabels([_display_resistance_drug(d) for d in all_drugs], rotation=35, ha='right')
             ax.set_yticklabels(case_ids, fontsize=8)
             ax.set_xticks(np.arange(-.5, len(all_drugs), 1), minor=True)
             ax.set_yticks(np.arange(-.5, len(case_ids), 1), minor=True)

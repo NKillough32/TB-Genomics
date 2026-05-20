@@ -712,6 +712,7 @@ function generateCaseReport(caseIdOverride){
 let _cicCurrentCluster = null;
 let _cicCurrentMembers = [];
 let _cicLatestReviewsData = null;
+let _cicVisiblePairs = [];
 
 const _CIC_BAND_COLOUR = {
 	critical: '#b91c1c',
@@ -1013,6 +1014,7 @@ function _cicRenderPairEvidence(data, synthesisCluster){
 	const pairSelect=document.getElementById('cicReviewPairSelect');
 	if(!box) return;
 	const pairs=Array.isArray(data?.pairs)?data.pairs:[];
+	_cicVisiblePairs = pairs.slice(0,25);
 	const synthesisPairIndex=_cicBuildSynthesisPairIndex(synthesisCluster);
 	if(!pairs.length){
 		box.innerHTML='<p class="hint">No pair evidence available for this cluster.</p>';
@@ -1021,7 +1023,7 @@ function _cicRenderPairEvidence(data, synthesisCluster){
 	}
 	if(pairSelect){
 		let selectHtml='<option value="">Select a pair from the loaded evidence</option>';
-		for(const pair of pairs.slice(0,50)){
+		for(const [index,pair] of _cicVisiblePairs.entries()){
 			const optionValue=JSON.stringify({caseA: pair.case_a || '', caseB: pair.case_b || ''});
 			selectHtml+=`<option value="${escapeAttr(optionValue)}">${escapeHtml(pair.pair||'')}  |  ${escapeHtml(pair.overall_interpretation||'')}</option>`;
 		}
@@ -1033,7 +1035,7 @@ function _cicRenderPairEvidence(data, synthesisCluster){
 		html+=`<p class="hint">${summary.join(' | ')}</p>`;
 	}
 	html+='<div class="analytics-table-wrap"><table class="data-table"><thead><tr><th>Pair</th><th>Genomic</th><th>Epi</th><th>Temporal</th><th>Lineage</th><th>Resistance</th><th>Interpretation</th><th>Evidence</th><th>Review</th><th></th><th></th><th></th></tr></thead><tbody>';
-	for(const pair of pairs.slice(0,25)){
+	for(const [index,pair] of _cicVisiblePairs.entries()){
 		const genomic=pair.genomic_plausibility||{};
 		const epi=pair.epidemiological_support||{};
 		const temporal=pair.temporal_plausibility||{};
@@ -1055,9 +1057,9 @@ function _cicRenderPairEvidence(data, synthesisCluster){
 			<td>${escapeHtml(pair.overall_interpretation||'')}</td>
 			<td>${escapeHtml([evidence.basis, Array.isArray(evidence.supports) && evidence.supports.length ? evidence.supports.slice(0,3).join(', ') : ''].filter(Boolean).join(' | '))}</td>
 			<td>${escapeHtml(reviewText)}</td>
-			<td><button class="mini-btn" onclick="cicPrefillPairReview(${escapeAttr(JSON.stringify(pair.case_a||''))}, ${escapeAttr(JSON.stringify(pair.case_b||''))})">Use</button></td>
-			<td><button class="mini-btn" onclick="cicCopyPairIds(${escapeAttr(JSON.stringify(pair.case_a||''))}, ${escapeAttr(JSON.stringify(pair.case_b||''))})">Copy IDs</button></td>
-			<td><button class="mini-btn" onclick="cicShowEvidenceCard(${escapeAttr(JSON.stringify(pair))})">Evidence</button></td>
+			<td><button class="mini-btn" onclick="cicPairEvidenceAction('use', ${index})">Use</button></td>
+			<td><button class="mini-btn" onclick="cicPairEvidenceAction('copy', ${index})">Copy IDs</button></td>
+			<td><button class="mini-btn" onclick="cicPairEvidenceAction('evidence', ${index})">Evidence</button></td>
 		</tr>`;
 	}
 	html+='</tbody></table></div>';
@@ -1065,6 +1067,22 @@ function _cicRenderPairEvidence(data, synthesisCluster){
 		html += `<p class="hint">Showing the first 25 pairs of ${escapeHtml(pairs.length)}.</p>`;
 	}
 	box.innerHTML=html;
+}
+
+async function cicPairEvidenceAction(action, index){
+	const pair=_cicVisiblePairs[Number(index)];
+	if(!pair) return;
+	if(action==='use'){
+		cicPrefillPairReview(pair.case_a||'', pair.case_b||'');
+		return;
+	}
+	if(action==='copy'){
+		await cicCopyPairIds(pair.case_a||'', pair.case_b||'');
+		return;
+	}
+	if(action==='evidence'){
+		cicShowEvidenceCard(pair);
+	}
 }
 
 function _cicRenderPairReviews(data){
@@ -1577,6 +1595,19 @@ function _renderSynthesisClusterTable(clusters){
 	return html;
 }
 
+function _renderClusterRiskSummaryTable(clusters){
+	if(!clusters.length) return '<p class="hint">No cluster risk summaries are available for the current dataset.</p>';
+	let html='<table class="data-table"><thead><tr><th>Rank</th><th>Cluster</th><th>Priority score</th><th>Band</th><th>Members</th><th>Pairs</th><th>Top flags</th><th>Action focus</th></tr></thead><tbody>';
+	for(const [index,c] of clusters.slice(0,15).entries()){
+		const priorityScore=c.priority_score ?? 0;
+		const flags=(c.flags||[]).slice(0,2).join(', ') || 'none';
+		const actions=(c.top_recommended_actions||[]).slice(0,2).join(' | ') || 'review dossier';
+		html+=`<tr><td>${escapeHtml(index+1)}</td><td><code>${escapeHtml(c.cluster_short||String(c.cluster_id||'').slice(0,8))}</code></td><td>${escapeHtml(priorityScore)}</td><td>${escapeHtml(c.priority_band||'low')}</td><td>${escapeHtml(c.member_count ?? 0)}</td><td>${escapeHtml(c.pair_count ?? 0)}</td><td>${escapeHtml(flags)}</td><td>${escapeHtml(actions)}</td></tr>`;
+	}
+	html+='</tbody></table>';
+	return html;
+}
+
 async function loadTransmissionSynthesisOverview(){
 	const summary=document.getElementById('synthesisSummary');
 	const view=document.getElementById('synthesisPrimaryView');
@@ -1642,8 +1673,12 @@ async function loadClusterRiskSummaryView(){
 			</div>${d.warning?`<p class="hint">${escapeHtml(d.warning)}</p>`:''}`;
 		}
 		if(view){
+			const clusters=d.clusters||[];
+			const highPriority=clusters.filter(c=>(c.priority_band||'').toLowerCase()==='high').length;
 			let html='<h4>Cluster risk summary</h4>';
-			html+=_renderSynthesisClusterTable(d.clusters||[]);
+			html+='<p class="hint">Operational triage view: ranked clusters for immediate review planning.</p>';
+			html+=`<div class="kpi-strip">High-priority clusters: ${escapeHtml(highPriority)} | Top 5 average score: ${escapeHtml((clusters.slice(0,5).reduce((acc,c)=>acc+Number(c.priority_score||0),0)/(Math.min(clusters.length,5)||1)).toFixed(1))}</div>`;
+			html+=_renderClusterRiskSummaryTable(clusters);
 			view.innerHTML=html;
 		}
 	}catch(e){
@@ -2135,8 +2170,17 @@ async function loadOutbreakerStatus(){
 	if(!box) return;
 	box.textContent='Loading outbreaker status...';
 	try{
-		const d=await apiJson(`${API}/cases/outbreaker-status`);
-		box.innerHTML=`<div class="kpi-strip">Cases export: ${d.cases_export?'available':'missing'} | DNA export: ${d.dna_export?'available':'missing'} | Results RDS: ${d.results_rds?'available':'missing'} | Provenance: ${escapeHtml(d.provenance||'unknown')} | Mock: ${escapeHtml(d.is_mock)}</div>`;
+		let apiBase=API;
+		let d;
+		try{
+			d=await apiJson(`${apiBase}/cases/outbreaker-status`);
+		}catch(firstError){
+			const alternateApiBase=(apiBase===API_FALLBACK)?'http://localhost:8000':API_FALLBACK;
+			d=await apiJson(`${alternateApiBase}/cases/outbreaker-status`);
+			apiBase=alternateApiBase;
+			API=alternateApiBase;
+		}
+		box.innerHTML=`<div class="kpi-strip">Cases export: ${d.cases_export?'available':'missing'} | DNA export: ${d.dna_export?'available':'missing'} | Results RDS: ${d.results_rds?'available':'missing'} | Provenance: ${escapeHtml(d.provenance||'unknown')} | Mock: ${escapeHtml(d.is_mock)} | API: ${escapeHtml(apiBase)}</div>`;
 	}catch(e){
 		box.textContent='Failed to load outbreaker status: '+e;
 	}

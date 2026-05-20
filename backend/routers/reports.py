@@ -188,23 +188,49 @@ def build_actionable_surveillance_report(
     cluster_dossiers = []
     for cluster in ranked_clusters:
         cluster_id = cluster.get("cluster_id")
+        summary_fallback = {
+            "member_count": cluster.get("member_count", 0),
+            "pair_count": cluster.get("pair_count", 0),
+            "priority_score": cluster.get("priority_score", 0),
+            "priority_band": cluster.get("priority_band", "low"),
+            "regions": [],
+            "resistance_case_count": 0,
+            "first_specimen": None,
+            "last_specimen": None,
+        }
+        dossier: dict[str, Any] = {
+            "cluster_id": cluster_id,
+            "cluster_short": cluster.get("cluster_short") or str(cluster_id or "")[:8],
+            "summary": summary_fallback,
+            "flags": list(cluster.get("flags") or []),
+            "recommended_actions": list(cluster.get("top_recommended_actions") or []),
+            "confidence_counts": {},
+            "top_pairs": [],
+        }
+
         if not cluster_id or not _is_uuid(cluster_id):
+            dossier["note"] = "Detailed synthesis is unavailable because this cluster identifier is not a UUID-backed investigation cluster."
+            cluster_dossiers.append(dossier)
             continue
-        synthesis = build_transmission_synthesis(db=db, cluster_id=cluster_id, config=cfg)
-        details = (synthesis.get("clusters") or [{}])[0]
-        summary = details.get("summary") or {}
-        top_pairs = list(details.get("pairwise_transmission_evidence") or [])[:5]
-        cluster_dossiers.append(
-            {
-                "cluster_id": cluster_id,
-                "cluster_short": cluster.get("cluster_short") or str(cluster_id)[:8],
-                "summary": summary,
-                "flags": details.get("flags", []),
-                "recommended_actions": details.get("recommended_investigation_actions", []),
-                "confidence_counts": details.get("confidence_counts", {}),
-                "top_pairs": top_pairs,
-            }
-        )
+
+        try:
+            synthesis = build_transmission_synthesis(db=db, cluster_id=cluster_id, config=cfg)
+            details = (synthesis.get("clusters") or [{}])[0]
+            summary = details.get("summary") or summary_fallback
+            top_pairs = list(details.get("pairwise_transmission_evidence") or [])[:5]
+            dossier.update(
+                {
+                    "summary": summary,
+                    "flags": details.get("flags", dossier["flags"]),
+                    "recommended_actions": details.get("recommended_investigation_actions", dossier["recommended_actions"]),
+                    "confidence_counts": details.get("confidence_counts", {}),
+                    "top_pairs": top_pairs,
+                }
+            )
+        except Exception:
+            dossier["note"] = "Detailed synthesis could not be loaded for this cluster at report time; summary-level triage data is shown instead."
+
+        cluster_dossiers.append(dossier)
 
     urgent_clusters = [
         c
@@ -363,6 +389,7 @@ def render_actionable_surveillance_report_html(report: dict[str, Any]) -> str:
               <p><strong>Period:</strong> {_h(_fmt_date(ds.get("first_specimen")))} to {_h(_fmt_date(ds.get("last_specimen")))}</p>
               <p><strong>Flags:</strong> {_h(", ".join(dossier.get("flags") or []) or "None")}</p>
               <p><strong>Recommended actions:</strong> {_h("; ".join(dossier.get("recommended_actions") or []) or "Continue review")}</p>
+              {f'<p class="muted"><strong>Note:</strong> {_h(dossier.get("note"))}</p>' if dossier.get("note") else ''}
               {_simple_table(pair_rows, [
                   ("Pair", "pair"),
                   ("Confidence", "confidence"),

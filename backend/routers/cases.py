@@ -303,13 +303,17 @@ def _iter_resistance_mutations(mutations: object):
     if isinstance(mutations, dict):
         for drug, value in mutations.items():
             if isinstance(value, list):
-                for item in value:
+                for idx, item in enumerate(value):
                     if isinstance(item, dict):
+                        has_drug_from_tool = bool(item.get("drug"))
                         yield {
                             "drug": str(item.get("drug") or drug),
                             "mutation": str(item.get("mutation") or item.get("variant") or item.get("change") or item),
                             "gene": str(item.get("gene") or "n/a"),
                             "confidence": str(item.get("confidence") or item.get("support") or "n/a"),
+                            "source_json_path": str(item.get("source_json_path") or f"{drug}[{idx}]"),
+                            "drug_from_tool": has_drug_from_tool,
+                            "drug_inferred_from_sample_level": not has_drug_from_tool,
                         }
                     else:
                         yield {
@@ -317,13 +321,20 @@ def _iter_resistance_mutations(mutations: object):
                             "mutation": str(item),
                             "gene": "n/a",
                             "confidence": "n/a",
+                            "source_json_path": f"{drug}[{idx}]",
+                            "drug_from_tool": False,
+                            "drug_inferred_from_sample_level": True,
                         }
             elif isinstance(value, dict):
+                has_drug_from_tool = bool(value.get("drug"))
                 yield {
                     "drug": str(value.get("drug") or drug),
                     "mutation": str(value.get("mutation") or value.get("variant") or value.get("change") or value),
                     "gene": str(value.get("gene") or "n/a"),
                     "confidence": str(value.get("confidence") or value.get("support") or "n/a"),
+                    "source_json_path": str(value.get("source_json_path") or str(drug)),
+                    "drug_from_tool": has_drug_from_tool,
+                    "drug_inferred_from_sample_level": not has_drug_from_tool,
                 }
             else:
                 yield {
@@ -331,17 +342,24 @@ def _iter_resistance_mutations(mutations: object):
                     "mutation": str(value),
                     "gene": "n/a",
                     "confidence": "n/a",
+                    "source_json_path": str(drug),
+                    "drug_from_tool": False,
+                    "drug_inferred_from_sample_level": True,
                 }
         return
 
     if isinstance(mutations, list):
-        for item in mutations:
+        for idx, item in enumerate(mutations):
             if isinstance(item, dict):
+                has_drug_from_tool = bool(item.get("drug"))
                 yield {
                     "drug": str(item.get("drug") or "n/a"),
                     "mutation": str(item.get("mutation") or item.get("variant") or item.get("change") or item),
                     "gene": str(item.get("gene") or "n/a"),
                     "confidence": str(item.get("confidence") or item.get("support") or "n/a"),
+                    "source_json_path": str(item.get("source_json_path") or f"[{idx}]"),
+                    "drug_from_tool": has_drug_from_tool,
+                    "drug_inferred_from_sample_level": not has_drug_from_tool,
                 }
             else:
                 yield {
@@ -349,6 +367,9 @@ def _iter_resistance_mutations(mutations: object):
                     "mutation": str(item),
                     "gene": "n/a",
                     "confidence": "n/a",
+                    "source_json_path": f"[{idx}]",
+                    "drug_from_tool": False,
+                    "drug_inferred_from_sample_level": True,
                 }
 
 
@@ -484,6 +505,8 @@ def _resistance_validation_lookup(validation_data: object) -> dict[tuple[str, st
 def _resistance_report_status_label(validation_record: object, drug: object, gene: object) -> str:
     if isinstance(validation_record, dict):
         status = str(validation_record.get("report_status") or "").strip().lower()
+        if status == "not_assessable":
+            return "Not assessable"
         if status == "suppressed":
             return "Suppressed"
         if status == "validated":

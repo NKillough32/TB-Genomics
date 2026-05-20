@@ -1921,9 +1921,13 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
     mut_rows_html = ""
     mut_count = 0
     suppressed_mutations = 0
+    inferred_drug_associations = 0
     for base in mutation_rows_raw:
         case_id_mut = str(base.get("case_id") or "")
         for mut in _iter_resistance_mutations(base.get("resistance_mutations")):
+            if bool(mut.get("drug_inferred_from_sample_level")):
+                inferred_drug_associations += 1
+                continue
             drug = str(mut.get("drug") or "n/a")
             gene = str(mut.get("gene") or "n/a")
             mutation = str(mut.get("mutation") or "n/a")
@@ -1961,12 +1965,24 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
                 f'{_safe_html(str(suppressed_mutations))} unusual gene-drug mapping(s) were suppressed from this operational table.'
                 f'</p>'
             )
+        if inferred_drug_associations:
+            dr_table_html += (
+                f'<p class="muted" style="margin-top:.4rem">'
+                f'{_safe_html(str(inferred_drug_associations))} mutation row(s) were excluded because drug association was inferred from sample-level summaries rather than tool-level mutation-drug calls.'
+                f'</p>'
+            )
     else:
         dr_table_html = '<p class="muted">No reportable resistance-mutation details found.</p>'
         if suppressed_mutations:
             dr_table_html += (
                 f'<p class="muted" style="margin-top:.4rem">'
                 f'{_safe_html(str(suppressed_mutations))} unusual gene-drug mapping(s) were suppressed from this operational table.'
+                f'</p>'
+            )
+        if inferred_drug_associations:
+            dr_table_html += (
+                f'<p class="muted" style="margin-top:.4rem">'
+                f'{_safe_html(str(inferred_drug_associations))} mutation row(s) were excluded because drug association was inferred from sample-level summaries rather than tool-level mutation-drug calls.'
                 f'</p>'
             )
 

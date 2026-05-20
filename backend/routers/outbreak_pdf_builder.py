@@ -488,6 +488,8 @@ def outbreak_report(db: Session = Depends(get_db)):
     for row in mutation_rows_raw:
         predicted_text = _resistance_profile_text(row.get("predicted_drug_resistance"))
         for mut in _iter_resistance_mutations(row.get("resistance_mutations")):
+            if bool(mut.get("drug_inferred_from_sample_level")):
+                continue
             gene = str(mut.get("gene") or "n/a")
             drug = str(mut.get("drug") or "n/a")
             mutation = str(mut.get("mutation") or "n/a")
@@ -2503,11 +2505,15 @@ def outbreak_report(db: Session = Depends(get_db)):
         ))
     mutation_rows = [["Case", "Drug", "Mutation", "Gene", "Gene-drug status", "Report status", "Confidence", "Predicted"]]
     suppressed_mutations = 0
+    inferred_drug_associations = 0
     for base in mutation_rows_raw:
         case_id = str(base.get("case_id") or "")
         predicted = base.get("predicted_drug_resistance")
         predicted_text = _resistance_profile_text(predicted)
         for mut in _iter_resistance_mutations(base.get("resistance_mutations")):
+            if bool(mut.get("drug_inferred_from_sample_level")):
+                inferred_drug_associations += 1
+                continue
             drug = str(mut.get("drug") or "n/a")
             gene = str(mut.get("gene") or "n/a")
             mutation = str(mut.get("mutation") or "n/a")
@@ -2556,11 +2562,21 @@ def outbreak_report(db: Session = Depends(get_db)):
                 f"<b>{suppressed_mutations}</b> unusual gene-drug mapping(s) were suppressed from the operational table.",
                 section_note_style,
             ))
+        if inferred_drug_associations:
+            story.append(Paragraph(
+                f"<b>{inferred_drug_associations}</b> mutation row(s) were excluded because drug association was inferred from sample-level summaries rather than tool-level mutation-drug calls.",
+                section_note_style,
+            ))
     else:
         story.append(Paragraph("No reportable resistance-mutation details found.", styles["Normal"]))
         if suppressed_mutations:
             story.append(Paragraph(
                 f"<b>{suppressed_mutations}</b> unusual gene-drug mapping(s) were suppressed from the operational table.",
+                section_note_style,
+            ))
+        if inferred_drug_associations:
+            story.append(Paragraph(
+                f"<b>{inferred_drug_associations}</b> mutation row(s) were excluded because drug association was inferred from sample-level summaries rather than tool-level mutation-drug calls.",
                 section_note_style,
             ))
 

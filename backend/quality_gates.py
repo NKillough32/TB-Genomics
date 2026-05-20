@@ -309,23 +309,16 @@ def confidence_gates(db: Session) -> list[dict[str, Any]]:
     suppressed = int(rv_summary.get("suppressed_calls") or 0) if rv_summary else 0
     validated = int(rv_summary.get("validated_calls") or 0) if rv_summary else 0
     rv_catalogue = str(resistance.get("catalogue_version") or "").lower()
-    using_who_catalogue = "who" in rv_catalogue
-    # When a WHO catalogue is in use, TBProfiler/Mykrobe calls are already WHO-graded.
-    # The local gene-drug mapping screen is a secondary cross-check only; it should not
-    # block interpretation — the WHO catalogue is the authoritative source of truth.
-    # Downgrade from interpretation-blocking "review" to non-blocking "warn" in that case.
     if suppressed == 0 and rv_summary:
         rv_gate_status = "pass"
         rv_message = "Resistance mapping safety screen found no suppressed calls."
-    elif suppressed and using_who_catalogue:
-        rv_gate_status = "warn"
-        rv_message = (
-            f"{suppressed} resistance call(s) have unusual local gene-drug mappings but are covered "
-            f"by the WHO catalogue ({resistance.get('catalogue_version')}); no interpretation block applied."
-        )
     elif suppressed:
         rv_gate_status = "review"
-        rv_message = f"{suppressed} resistance calls are suppressed pending mapping review."
+        rv_message = (
+            f"{suppressed} resistance call(s) are suppressed due to unusual gene-drug mappings. "
+            f"Interpretation remains blocked until manually reconciled against source tool JSON, "
+            f"curated catalogue evidence, and phenotypic DST."
+        )
     else:
         rv_gate_status = "incomplete"
         rv_message = "Resistance validation artifact is missing."
@@ -335,7 +328,7 @@ def confidence_gates(db: Session) -> list[dict[str, Any]]:
             "Resistance mapping safety",
             rv_gate_status,
             rv_message,
-            interpretation_blocking=suppressed > 0 and not using_who_catalogue,
+            interpretation_blocking=suppressed > 0,
             details={"suppressed_calls": suppressed, "validated_calls": validated, "catalogue_version": resistance.get("catalogue_version")},
         )
     )
@@ -371,6 +364,59 @@ def confidence_gates(db: Session) -> list[dict[str, Any]]:
                 str(summary.get("mcmc_diagnostic_status") or "No strong late drift flag in summary."),
                 interpretation_blocking="drifting" in diagnostic_status,
                 details={"mcmc_late_drift_fraction": summary.get("mcmc_late_drift_fraction")},
+            )
+        )
+
+        # Explicit posterior depth/ESS gate for interpretation reliability.
+        posterior_samples_raw = summary.get("posterior_samples", summary.get("n_samples"))
+        ess_raw = summary.get("mcmc_effective_sample_size")
+        alpha_ess_raw = summary.get("alpha_mcmc_effective_sample_size_min")
+
+        def _to_float_or_none(value: Any) -> float | None:
+            try:
+                if value is None:
+                    return None
+                txt = str(value).strip().lower()
+                if txt in {"", "na", "none", "null"}:
+                    return None
+                return float(value)
+            except Exception:
+                return None
+
+        posterior_samples = _to_float_or_none(posterior_samples_raw)
+        ess_value = _to_float_or_none(ess_raw)
+        alpha_ess_min_value = _to_float_or_none(alpha_ess_raw)
+
+        posterior_depth_fail = posterior_samples is None or posterior_samples < 1000
+        ess_fail = ess_value is None or ess_value < 200
+        alpha_ess_fail = alpha_ess_min_value is None or alpha_ess_min_value < 100
+        reasons: list[str] = []
+        if posterior_depth_fail:
+            reasons.append(f"posterior_samples={posterior_samples_raw}")
+        if ess_fail:
+            reasons.append(f"mcmc_ess={ess_raw}")
+        if alpha_ess_fail:
+            reasons.append(f"alpha_ess_min={alpha_ess_raw}")
+
+        gates.append(
+            _gate(
+                "mcmc_posterior_depth",
+                "MCMC posterior depth",
+                "pass" if not (posterior_depth_fail or ess_fail or alpha_ess_fail) else "review",
+                "Posterior depth/ESS thresholds passed."
+                if not (posterior_depth_fail or ess_fail or alpha_ess_fail)
+                else "Posterior reliability thresholds not met: " + ", ".join(reasons),
+                interpretation_blocking=posterior_depth_fail or ess_fail or alpha_ess_fail,
+                details={
+                    "posterior_samples": posterior_samples_raw,
+                    "mcmc_effective_sample_size": ess_raw,
+                    "alpha_mcmc_effective_sample_size_min": alpha_ess_raw,
+                    "thresholds": {
+                        "posterior_samples_min": 1000,
+                        "mcmc_effective_sample_size_min": 200,
+                        "alpha_mcmc_effective_sample_size_min": 100,
+                    },
+                },
             )
         )
 

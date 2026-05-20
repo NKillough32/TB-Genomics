@@ -92,7 +92,7 @@ tryCatch({
     max(1, min(n, ess))
   }
 
-  build_transmission_network <- function(result, ids, burnin_iter) {
+  build_transmission_network <- function(result, ids, burnin_iter, posterior_reliable = TRUE, reliability_status = "reliable", reliability_reasons = c()) {
     chain_local <- as.data.frame(result)
     alpha_cols <- grep("^alpha_", names(chain_local), value = TRUE)
 
@@ -160,9 +160,11 @@ tryCatch({
           target = dst,
           probability = round(edge_prob, 4),
           confidence = ifelse(
-            edge_prob >= 0.8, "high",
-            ifelse(edge_prob >= 0.6, "medium", "low")
+            posterior_reliable,
+            ifelse(edge_prob >= 0.8, "high", ifelse(edge_prob >= 0.6, "medium", "low")),
+            "not_assessable"
           ),
+          posterior_reliability = reliability_status,
           inference = "posterior_marginal_mode",
           alternative_ancestors = alternative_ancestors
         )
@@ -215,6 +217,9 @@ tryCatch({
       generated_at = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"),
       inference_source = "outbreaker2_posterior",
       provenance = "real",
+      posterior_reliable = posterior_reliable,
+      posterior_reliability_status = reliability_status,
+      posterior_reliability_reasons = as.list(reliability_reasons),
       node_count = length(node_list),
       edge_count = length(edge_list),
       high_confidence_edges = as.integer(high_conf_count),
@@ -408,9 +413,62 @@ tryCatch({
     }
   )
 
+  # Reliability gate for posterior interpretation depth/ESS.
+  # Confidence bands are only exposed when depth + ESS + drift checks pass.
+  burnin_effective_for_gate <- min(burnin_rows, max(0, nrow(chain_df) - 1))
+  post_start_for_gate <- burnin_effective_for_gate + 1
+  like_col_for_gate <- if ("like" %in% names(chain_df)) {
+    "like"
+  } else if ("post" %in% names(chain_df)) {
+    "post"
+  } else {
+    NA_character_
+  }
+  like_values_for_gate <- if (!is.na(like_col_for_gate) && post_start_for_gate <= nrow(chain_df)) {
+    as.numeric(chain_df[[like_col_for_gate]][post_start_for_gate:nrow(chain_df)])
+  } else {
+    numeric(0)
+  }
+  alpha_cols_for_gate <- grep("^alpha_", names(chain_df), value = TRUE)
+  alpha_ess_values_for_gate <- numeric(0)
+  if (length(alpha_cols_for_gate) > 0 && post_start_for_gate <= nrow(chain_df)) {
+    alpha_post_for_gate <- chain_df[post_start_for_gate:nrow(chain_df), alpha_cols_for_gate, drop = FALSE]
+    if (nrow(alpha_post_for_gate) > 2) {
+      for (col_name in names(alpha_post_for_gate)) {
+        ess_local <- estimate_ess(alpha_post_for_gate[[col_name]])
+        if (is.finite(ess_local)) {
+          alpha_ess_values_for_gate <- c(alpha_ess_values_for_gate, ess_local)
+        }
+      }
+    }
+  }
+  like_ess_for_gate <- if (length(like_values_for_gate) > 2) estimate_ess(like_values_for_gate) else NA_real_
+  alpha_ess_min_for_gate <- if (length(alpha_ess_values_for_gate) > 0) min(alpha_ess_values_for_gate) else NA_real_
+  posterior_samples_for_gate <- max(0, nrow(chain_df) - burnin_effective_for_gate)
+  reliability_reasons <- c()
+  if (posterior_samples_for_gate < 1000) {
+    reliability_reasons <- c(reliability_reasons, sprintf("posterior_samples_below_minimum(%s<1000)", posterior_samples_for_gate))
+  }
+  if (!is.finite(like_ess_for_gate) || like_ess_for_gate < 200) {
+    reliability_reasons <- c(reliability_reasons, sprintf("mcmc_ess_inadequate(%s)", ifelse(is.finite(like_ess_for_gate), round(like_ess_for_gate, 2), "NA")))
+  }
+  if (!is.finite(alpha_ess_min_for_gate) || alpha_ess_min_for_gate < 100) {
+    reliability_reasons <- c(reliability_reasons, sprintf("alpha_ess_min_inadequate(%s)", ifelse(is.finite(alpha_ess_min_for_gate), round(alpha_ess_min_for_gate, 2), "NA")))
+  }
+  if (!is.na(late_drift) && late_drift > 0.10) {
+    reliability_reasons <- c(reliability_reasons, sprintf("late_drift_exceeds_threshold(%.4f)", late_drift))
+  }
+  posterior_reliable <- length(reliability_reasons) == 0
+  reliability_status <- if (posterior_reliable) "reliable" else "not_assessable"
+
   # Export posterior-derived transmission network in JSON format.
   network <- build_transmission_network(
-    res, as.character(cases$case_id), burnin_rows
+    res,
+    as.character(cases$case_id),
+    burnin_rows,
+    posterior_reliable = posterior_reliable,
+    reliability_status = reliability_status,
+    reliability_reasons = reliability_reasons
   )
   write_json(
     network, "exports/transmission_network.json",
@@ -478,6 +536,9 @@ tryCatch({
       round(estimate_ess(like_values), 2),
       NA_real_
     ),
+    posterior_reliable = posterior_reliable,
+    posterior_reliability_status = reliability_status,
+    posterior_reliability_reasons = as.list(reliability_reasons),
     alpha_column_count = length(alpha_cols),
     alpha_mcmc_effective_sample_size_mean = ifelse(
       length(alpha_ess_values) > 0,

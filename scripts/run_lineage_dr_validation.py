@@ -569,38 +569,80 @@ def _iter_resistance_mutations(mutations: object):
     if isinstance(mutations, dict):
         for drug, value in mutations.items():
             if isinstance(value, list):
-                for item in value:
+                for idx, item in enumerate(value):
                     if isinstance(item, dict):
+                        has_drug_from_tool = bool(item.get("drug"))
                         yield {
                             "drug": str(item.get("drug") or drug),
                             "mutation": str(item.get("mutation") or item.get("variant") or item.get("change") or item),
                             "gene": str(item.get("gene") or "n/a"),
                             "confidence": item.get("confidence") or item.get("support"),
+                            "source_tool": str(item.get("source_tool") or "tbprofiler"),
+                            "source_json_path": str(item.get("source_json_path") or f"{drug}[{idx}]"),
+                            "drug_from_tool": has_drug_from_tool,
+                            "drug_inferred_from_sample_level": not has_drug_from_tool,
                         }
                     else:
-                        yield {"drug": str(drug), "mutation": str(item), "gene": "n/a", "confidence": None}
+                        yield {
+                            "drug": str(drug),
+                            "mutation": str(item),
+                            "gene": "n/a",
+                            "confidence": None,
+                            "source_tool": "tbprofiler",
+                            "source_json_path": f"{drug}[{idx}]",
+                            "drug_from_tool": False,
+                            "drug_inferred_from_sample_level": True,
+                        }
             elif isinstance(value, dict):
+                has_drug_from_tool = bool(value.get("drug"))
                 yield {
                     "drug": str(value.get("drug") or drug),
                     "mutation": str(value.get("mutation") or value.get("variant") or value.get("change") or value),
                     "gene": str(value.get("gene") or "n/a"),
                     "confidence": value.get("confidence") or value.get("support"),
+                    "source_tool": str(value.get("source_tool") or "tbprofiler"),
+                    "source_json_path": str(value.get("source_json_path") or str(drug)),
+                    "drug_from_tool": has_drug_from_tool,
+                    "drug_inferred_from_sample_level": not has_drug_from_tool,
                 }
             else:
-                yield {"drug": str(drug), "mutation": str(value), "gene": "n/a", "confidence": None}
+                yield {
+                    "drug": str(drug),
+                    "mutation": str(value),
+                    "gene": "n/a",
+                    "confidence": None,
+                    "source_tool": "tbprofiler",
+                    "source_json_path": str(drug),
+                    "drug_from_tool": False,
+                    "drug_inferred_from_sample_level": True,
+                }
         return
 
     if isinstance(mutations, list):
-        for item in mutations:
+        for idx, item in enumerate(mutations):
             if isinstance(item, dict):
+                has_drug_from_tool = bool(item.get("drug"))
                 yield {
                     "drug": str(item.get("drug") or "n/a"),
                     "mutation": str(item.get("mutation") or item.get("variant") or item.get("change") or item),
                     "gene": str(item.get("gene") or "n/a"),
                     "confidence": item.get("confidence") or item.get("support"),
+                    "source_tool": str(item.get("source_tool") or "tbprofiler"),
+                    "source_json_path": str(item.get("source_json_path") or f"[{idx}]"),
+                    "drug_from_tool": has_drug_from_tool,
+                    "drug_inferred_from_sample_level": not has_drug_from_tool,
                 }
             else:
-                yield {"drug": "n/a", "mutation": str(item), "gene": "n/a", "confidence": None}
+                yield {
+                    "drug": "n/a",
+                    "mutation": str(item),
+                    "gene": "n/a",
+                    "confidence": None,
+                    "source_tool": "tbprofiler",
+                    "source_json_path": f"[{idx}]",
+                    "drug_from_tool": False,
+                    "drug_inferred_from_sample_level": True,
+                }
 
 
 def _resistance_validation_record(
@@ -612,17 +654,26 @@ def _resistance_validation_record(
     confidence: object,
     predicted_drug_resistance: object,
     catalogue: str | None,
+    source_tool: str,
+    source_json_path: str,
+    drug_from_tool: bool,
+    drug_inferred_from_sample_level: bool,
 ) -> dict[str, Any]:
-    mapping_status = _drug_gene_mapping_status(drug, gene)
-    if mapping_status == "unusual_gene_drug_mapping":
-        report_status = "suppressed"
-        clinical_status = "do_not_report_mapping_error"
-    elif mapping_status == "expected_gene":
-        report_status = "not_validated"
-        clinical_status = "requires_phenotypic_dst_confirmation"
+    if drug_inferred_from_sample_level:
+        mapping_status = "not_assessable_inferred_drug"
+        report_status = "not_assessable"
+        clinical_status = "requires_tool_level_drug_mapping_review"
     else:
-        report_status = "not_validated"
-        clinical_status = "requires_catalogue_review"
+        mapping_status = _drug_gene_mapping_status(drug, gene)
+        if mapping_status == "unusual_gene_drug_mapping":
+            report_status = "suppressed"
+            clinical_status = "do_not_report_mapping_error"
+        elif mapping_status == "expected_gene":
+            report_status = "not_validated"
+            clinical_status = "requires_phenotypic_dst_confirmation"
+        else:
+            report_status = "not_validated"
+            clinical_status = "requires_catalogue_review"
 
     return {
         "sample_id": sample_id,
@@ -635,6 +686,10 @@ def _resistance_validation_record(
         "mapping_status": mapping_status,
         "report_status": report_status,
         "clinical_status": clinical_status,
+        "source_tool": source_tool,
+        "source_json_path": source_json_path,
+        "drug_from_tool": bool(drug_from_tool),
+        "drug_inferred_from_sample_level": bool(drug_inferred_from_sample_level),
     }
 
 
@@ -669,6 +724,10 @@ def _generate_resistance_validation_artifact(catalogue: str | None = None) -> di
                         confidence=mut.get("confidence") or row.get("confidence_score"),
                         predicted_drug_resistance=row.get("predicted_drug_resistance"),
                         catalogue=catalogue,
+                        source_tool=str(mut.get("source_tool") or "tbprofiler"),
+                        source_json_path=str(mut.get("source_json_path") or "unknown"),
+                        drug_from_tool=bool(mut.get("drug_from_tool")),
+                        drug_inferred_from_sample_level=bool(mut.get("drug_inferred_from_sample_level")),
                     )
                 )
 
@@ -677,7 +736,9 @@ def _generate_resistance_validation_artifact(catalogue: str | None = None) -> di
             "expected_gene_calls": sum(1 for r in records if r["mapping_status"] == "expected_gene"),
             "unusual_gene_drug_mapping_calls": sum(1 for r in records if r["mapping_status"] == "unusual_gene_drug_mapping"),
             "unknown_mapping_calls": sum(1 for r in records if r["mapping_status"] == "unknown_catalogue_mapping"),
+            "not_assessable_inferred_drug_calls": sum(1 for r in records if r["mapping_status"] == "not_assessable_inferred_drug"),
             "suppressed_calls": sum(1 for r in records if r["report_status"] == "suppressed"),
+            "not_assessable_calls": sum(1 for r in records if r["report_status"] == "not_assessable"),
             "validated_calls": 0,
         }
         payload = {
@@ -702,7 +763,9 @@ def _generate_resistance_validation_artifact(catalogue: str | None = None) -> di
                 "expected_gene_calls": 0,
                 "unusual_gene_drug_mapping_calls": 0,
                 "unknown_mapping_calls": 0,
+                "not_assessable_inferred_drug_calls": 0,
                 "suppressed_calls": 0,
+                "not_assessable_calls": 0,
                 "validated_calls": 0,
             },
             "records": [],
@@ -2090,7 +2153,12 @@ def main() -> None:
         "dr_concordance": {
             "samples_compared": len(dr_concordance),
             "comparable_drug_calls": comparable_drug_calls,
-            "all_concordant": all(d["concordant"] for d in dr_concordance) if dr_concordance else None,
+            "all_concordant": (
+                all(d["concordant"] for d in dr_concordance)
+                if dr_concordance and comparable_drug_calls > 0
+                else None
+            ),
+            "concordance_interpretable": comparable_drug_calls > 0,
             "discordant_sample_count": sum(1 for d in dr_concordance if not d["concordant"]),
             "one_tool_no_call_sample_count": one_tool_no_call_count,
             "used_existing_artifacts": concordance_used_existing_artifacts,

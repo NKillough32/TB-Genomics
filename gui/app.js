@@ -372,7 +372,53 @@ async function runJob(job){
 	poll();
 }
 async function poll(){if(!activeJob)return;const r=await fetch(`${API}/jobs/status/${activeJob}`);const d=await r.json();document.getElementById('jobStatus').textContent=JSON.stringify(d,null,2);const bar=document.getElementById('progressBar');bar.style.width=(d.progress||0)+'%';bar.textContent=(d.progress||0)+'%';bar.classList.toggle('progress-bar--failed',d.status==='failed');if(d.status!=='completed'&&d.status!=='failed'){setTimeout(poll,1500);} }
-async function loadCases(){const r=await fetch(`${API}/cases`);document.getElementById('cases').textContent=JSON.stringify(await r.json(),null,2);} 
+async function loadCases(){
+	const box=document.getElementById('cases');
+	box.textContent='Loading cases...';
+	try{
+		const r=await fetch(`${API}/cases`);
+		const cases=await r.json();
+		if(!Array.isArray(cases)){box.textContent='Error: unexpected response format';return;}
+		
+		// Summary stats
+		const byStatus={};
+		const byLineage={};
+		const byRegion={};
+		cases.forEach(c=>{
+			byStatus[c.case_status||'Unknown']=(byStatus[c.case_status||'Unknown']||0)+1;
+			byLineage[c.lineage||'Unknown']=(byLineage[c.lineage||'Unknown']||0)+1;
+			byRegion[c.geographic_region||'Unknown']=(byRegion[c.geographic_region||'Unknown']||0)+1;
+		});
+		
+		let html='<div class="result-panel"><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;margin-bottom:1.5rem">';
+		html+='<div style="background:var(--surface-soft);padding:1rem;border-radius:8px;border-left:4px solid var(--brand)"><div style="font-size:0.85rem;color:var(--muted);margin-bottom:0.25rem">Total cases</div><div style="font-size:1.8rem;font-weight:700">'+cases.length+'</div></div>';
+		html+='<div style="background:var(--surface-soft);padding:1rem;border-radius:8px;border-left:4px solid var(--ok)"><div style="font-size:0.85rem;color:var(--muted);margin-bottom:0.25rem">Confirmed</div><div style="font-size:1.8rem;font-weight:700">'+(byStatus['confirmed']||0)+'</div></div>';
+		html+='<div style="background:var(--surface-soft);padding:1rem;border-radius:8px;border-left:4px solid var(--warn)"><div style="font-size:0.85rem;color:var(--muted);margin-bottom:0.25rem">Unconfirmed</div><div style="font-size:1.8rem;font-weight:700">'+(byStatus['unconfirmed']||0)+'</div></div>';
+		html+='</div>';
+		
+		// Distribution summary
+		html+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:1rem;margin-bottom:1.5rem"><div><strong>By Status:</strong><ul style="margin:0.5rem 0;padding-left:1.5rem">';
+		Object.entries(byStatus).sort((a,b)=>b[1]-a[1]).forEach(([s,n])=>html+='<li>'+s+': <strong>'+n+'</strong></li>');
+		html+='</ul></div><div><strong>By Lineage:</strong><ul style="margin:0.5rem 0;padding-left:1.5rem">';
+		Object.entries(byLineage).sort((a,b)=>b[1]-a[1]).slice(0,5).forEach(([l,n])=>html+='<li>'+l+': <strong>'+n+'</strong></li>');
+		html+='</ul></div><div><strong>By Region:</strong><ul style="margin:0.5rem 0;padding-left:1.5rem">';
+		Object.entries(byRegion).sort((a,b)=>b[1]-a[1]).forEach(([r,n])=>html+='<li>'+r+': <strong>'+n+'</strong></li>');
+		html+='</ul></div></div>';
+		
+		// Table
+		html+='<table style="width:100%;border-collapse:collapse;font-size:0.9rem"><thead style="background:var(--surface-soft);border-bottom:2px solid var(--line)"><tr style="text-align:left"><th style="padding:0.75rem;font-weight:700">Case ID</th><th style="padding:0.75rem;font-weight:700">Specimen Date</th><th style="padding:0.75rem;font-weight:700">Status</th><th style="padding:0.75rem;font-weight:700">Region</th><th style="padding:0.75rem;font-weight:700">Lineage</th><th style="padding:0.75rem;font-weight:700">DR Profile</th></tr></thead><tbody>';
+		cases.slice(0,50).forEach(c=>{
+			const statusColor=c.case_status==='confirmed'?'var(--ok)':c.case_status==='unconfirmed'?'var(--warn)':'var(--muted)';
+			html+='<tr style="border-bottom:1px solid var(--line);transition:background 0.2s"><td style="padding:0.75rem"><code style="background:var(--surface-soft);padding:0.25rem 0.5rem;border-radius:4px;font-size:0.85rem">'+escapeHtml(c.pseudonymised_case_id||'—')+'</code></td><td style="padding:0.75rem">'+escapeHtml(c.specimen_date||'—')+'</td><td style="padding:0.75rem"><span style="color:'+statusColor+';font-weight:600">'+escapeHtml(c.case_status||'—')+'</span></td><td style="padding:0.75rem">'+escapeHtml(c.geographic_region||'—')+'</td><td style="padding:0.75rem">'+escapeHtml(c.lineage||'—')+'</td><td style="padding:0.75rem">'+escapeHtml(c.dr_profile||'—')+'</td></tr>';
+		});
+		html+='</tbody></table>';
+		if(cases.length>50)html+='<p style="color:var(--muted);font-size:0.9rem;margin-top:1rem">Showing 50 of '+cases.length+' cases. Use advanced search above for detailed filtering.</p>';
+		html+='</div>';
+		box.innerHTML=html;
+	}catch(e){box.textContent='Error loading cases: '+e.message;}
+}
+
+function escapeHtml(text){const div=document.createElement('div');div.textContent=text;return div.innerHTML;} 
 async function loadOutbreakerResults(){
 	const box=document.getElementById('outbreakerResults');
 	box.textContent='Loading analysis...';

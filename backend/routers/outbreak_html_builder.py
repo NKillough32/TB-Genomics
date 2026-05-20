@@ -2291,12 +2291,14 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
   <nav class="sidebar" aria-label="Report sections">
     <h3>Overview</h3>
     <a href="#executive">Executive summary</a>
-    <a href="#denominators">Denominators</a>
     <a href="#actions-now">Top actions due now</a>
     <a href="#mdt">MDT governance</a>
+    <a href="#about">About this report</a>
+    <a href="#denominators">Denominators</a>
     <h3>Analysis</h3>
     <a href="#analysis">outbreaker2 analysis</a>
     <a href="#transmission">Transmission network</a>
+    <a href="#pairs">High-posterior model hypotheses</a>
     <a href="#snp-summary">Pairwise SNP summary</a>
     <a href="#interpretation">Outbreak interpretation</a>
     <h3>Sequencing &amp; QC</h3>

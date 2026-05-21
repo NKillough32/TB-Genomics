@@ -13,12 +13,14 @@ tryCatch({
   library(ape)
   library(jsonlite)
 
-  # Create outputs directory
-  dir.create("exports", showWarnings = FALSE)
+  # Create outputs directory. Defaults preserve the Windows/local layout.
+  exports_dir <- Sys.getenv("TB_EXPORTS_DIR", "exports")
+  export_file <- function(...) file.path(exports_dir, ...)
+  dir.create(exports_dir, showWarnings = FALSE, recursive = TRUE)
 
   # Read input data
-  cases <- read.csv("exports/cases.csv", stringsAsFactors = FALSE)
-  dna <- read.dna("exports/dna.fasta", format = "fasta")
+  cases <- read.csv(export_file("cases.csv"), stringsAsFactors = FALSE)
+  dna <- read.dna(export_file("dna.fasta"), format = "fasta")
 
   # TB serial interval defaults (long-tailed compared with acute infections).
   # Defaults can be tuned per deployment using environment variables.
@@ -231,8 +233,8 @@ tryCatch({
   }
 
   # Save R object
-  saveRDS(res, "exports/outbreaker2_results.rds")
-  cat("Results saved to exports/outbreaker2_results.rds\n")
+  saveRDS(res, export_file("outbreaker2_results.rds"))
+  cat("Results saved to ", export_file("outbreaker2_results.rds"), "\n", sep = "")
 
   # Generate plots
   cat("Generating diagnostic plots...\n")
@@ -284,7 +286,7 @@ tryCatch({
     "No strong late drift by simple mean check"
   }
 
-  png("exports/outbreaker_trace.png", width = 1400, height = 900, res = 140)
+  png(export_file("outbreaker_trace.png"), width = 1400, height = 900, res = 140)
   par(mar = c(4.8, 5.2, 4.6, 1.5), family = "sans")
   plot(
     metric_vals,
@@ -315,7 +317,7 @@ tryCatch({
   dev.off()
   cat("✓ Trace plot saved\n")
 
-  png("exports/outbreaker_hist.png", width = 1400, height = 900, res = 140)
+  png(export_file("outbreaker_hist.png"), width = 1400, height = 900, res = 140)
   par(mar = c(4.8, 5.2, 4.6, 1.5), family = "sans")
   clean_post <- post_metric_vals[is.finite(post_metric_vals)]
   if (length(clean_post) < 2) {
@@ -388,7 +390,7 @@ tryCatch({
   cat("Generating transmission tree...\n")
   tryCatch(
     {
-      png("exports/outbreaker_tree.png", width = 1400, height = 1000)
+      png(export_file("outbreaker_tree.png"), width = 1400, height = 1000)
       tryCatch(
         {
           plot(res, type = "tree")
@@ -405,8 +407,8 @@ tryCatch({
     },
     error = function(e) {
       try(dev.off(), silent = TRUE)
-      if (file.exists("exports/outbreaker_tree.png")) {
-        file.remove("exports/outbreaker_tree.png")
+      if (file.exists(export_file("outbreaker_tree.png"))) {
+        file.remove(export_file("outbreaker_tree.png"))
       }
       cat("⚠ Could not generate transmission tree plot:\n")
       cat("  ", as.character(e), "\n")
@@ -471,7 +473,7 @@ tryCatch({
     reliability_reasons = reliability_reasons
   )
   write_json(
-    network, "exports/transmission_network.json",
+    network, export_file("transmission_network.json"),
     pretty = TRUE, auto_unbox = TRUE
   )
   cat("✓ Transmission network JSON saved\n")
@@ -577,7 +579,7 @@ tryCatch({
 
   # Save summary as JSON
   write_json(
-    summary_stats, "exports/outbreaker_summary.json",
+    summary_stats, export_file("outbreaker_summary.json"),
     pretty = TRUE, auto_unbox = TRUE
   )
   cat("✓ Summary saved\n")

@@ -10,6 +10,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from sqlalchemy import text
 
 from backend.database import SessionLocal
+from scripts.runtime_paths import EXPORTS
 
 
 def _write_json_with_fallback(preferred_path: str, payload: dict) -> str:
@@ -48,7 +49,7 @@ def _write_csv_with_fallback(preferred_path: str, rows: list[dict]) -> str:
 
 
 def main() -> None:
-    os.makedirs("exports", exist_ok=True)
+    EXPORTS.mkdir(parents=True, exist_ok=True)
     db = SessionLocal()
 
     try:
@@ -96,7 +97,7 @@ def main() -> None:
             ],
         }
 
-        summary_path = _write_json_with_fallback("exports/clustering_summary.json", summary)
+        summary_path = _write_json_with_fallback(str(EXPORTS / "clustering_summary.json"), summary)
 
         assignment_rows = [
             {
@@ -107,7 +108,7 @@ def main() -> None:
             }
             for row in assignments
         ]
-        assignments_path = _write_csv_with_fallback("exports/cluster_assignments.csv", assignment_rows)
+        assignments_path = _write_csv_with_fallback(str(EXPORTS / "cluster_assignments.csv"), assignment_rows)
 
         summary["output_files"] = {
             "summary_json": summary_path,

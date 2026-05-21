@@ -13,9 +13,10 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from backend.database import SessionLocal
 from backend.synthesis.transmission_synthesis import build_transmission_synthesis
+from scripts.runtime_paths import EXPORTS
 
 
-EXPORT_PATH = Path("exports") / "synthesis_output.json"
+EXPORT_PATH = EXPORTS / "synthesis_output.json"
 
 
 def _json_default(value: Any) -> str | float:

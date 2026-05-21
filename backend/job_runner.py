@@ -9,8 +9,9 @@ import logging
 from datetime import datetime
 from sqlalchemy import text
 from backend.database import SessionLocal
+from backend.runtime_paths import ensure_runtime_dirs, log_path
 
-os.makedirs("logs", exist_ok=True)
+ensure_runtime_dirs()
 
 # Setup logging for job runner
 logger = logging.getLogger(__name__)
@@ -95,7 +96,7 @@ def run_job(job_name):
     if job_name not in ALLOWED_JOBS:
         return None
     job_id = str(uuid.uuid4())
-    log = f"logs/{job_id}.log"
+    log = log_path(f"{job_id}.log")
     _create_job(job_id, {"job": job_name, "status": "queued", "progress": 0, "logfile": log})
     logger.debug(f"Job queued: {job_name} ({job_id})")
 
@@ -266,7 +267,7 @@ PIPELINE_STEPS = [
 def run_pipeline():
     """Run all analysis steps sequentially under a single pipeline job ID."""
     pipeline_id = str(uuid.uuid4())
-    log = f"logs/{pipeline_id}.log"
+    log = log_path(f"{pipeline_id}.log")
     _create_job(pipeline_id, {
         "job": "full_pipeline",
         "status": "running",

@@ -1,3 +1,9 @@
+[project]
+name = "tb-genomics"
+version = "0.6.0"
+description = "TB genomic surveillance FastAPI platform with outbreak reporting workflows."
+requires-python = ">=3.11,<3.12"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]

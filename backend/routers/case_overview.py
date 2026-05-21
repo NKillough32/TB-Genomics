@@ -8,16 +8,14 @@ from sqlalchemy.orm import Session
 from backend.data_safety import get_data_safety_status
 from backend.models import Case, TbInterpretation
 from backend.routers.dependencies import get_db
+from backend.runtime_paths import export_path
 
 
 router = APIRouter(prefix="/cases", tags=["cases"])
 
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-
-
 def _export_path(*parts: str) -> str:
     """Return an absolute path under the repository export directory."""
-    return os.path.join(PROJECT_ROOT, "exports", *parts)
+    return export_path(*parts)
 
 
 def _to_int(value: object) -> int:
@@ -485,4 +483,3 @@ def audit_trail(limit: int = 50, db: Session = Depends(get_db)):
             for row in rows
         ],
     }
-

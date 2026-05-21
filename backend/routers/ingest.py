@@ -7,12 +7,13 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, UploadFile
 
+from backend.runtime_paths import UPLOADS_DIR
 from backend.synthetic_seed import seed_synthetic_dataset
 from scripts.load_ingest_bundle import load_bundle
 from scripts.validate_ingest_files import validate_bundle
 
 router = APIRouter(prefix="/ingest", tags=["ingest"])
-os.makedirs("uploads", exist_ok=True)
+UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def _require_ingest_api_key(x_api_key: str = Header(default="")):
@@ -43,7 +44,7 @@ def ingest_file(
 ):
     # Path.name avoids directory traversal from crafted upload filenames.
     safe_name = Path(file.filename).name
-    path = Path("uploads") / safe_name
+    path = UPLOADS_DIR / safe_name
     with open(path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 

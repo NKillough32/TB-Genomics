@@ -5,8 +5,10 @@ suppressWarnings(suppressMessages({
   library(jsonlite)
 }))
 
-out_path <- file.path("exports", "secondary_engine_validation.json")
-dir.create("exports", showWarnings = FALSE)
+exports_dir <- Sys.getenv("TB_EXPORTS_DIR", "exports")
+export_file <- function(...) file.path(exports_dir, ...)
+out_path <- export_file("secondary_engine_validation.json")
+dir.create(exports_dir, showWarnings = FALSE, recursive = TRUE)
 
 pkg_status <- function(pkg_name) {
   ok <- requireNamespace(pkg_name, quietly = TRUE)
@@ -30,8 +32,8 @@ pkg_status <- function(pkg_name) {
   )
 }
 
-has_tree <- file.exists(file.path("exports", "outbreaker_phylo.nwk"))
-has_dates <- file.exists(file.path("exports", "cases.csv"))
+has_tree <- file.exists(export_file("outbreaker_phylo.nwk"))
+has_dates <- file.exists(export_file("cases.csv"))
 
 transphylo <- pkg_status("TransPhylo")
 bactdating <- pkg_status("BactDating")
@@ -40,8 +42,10 @@ if (transphylo$status == "installed") {
   if (!has_tree || !has_dates) {
     transphylo$status <- "ready_missing_inputs"
     transphylo$message <- paste0(
-      "TransPhylo installed but needs exports/",
-      "outbreaker_phylo.nwk and exports/cases.csv"
+      "TransPhylo installed but needs ",
+      export_file("outbreaker_phylo.nwk"),
+      " and ",
+      export_file("cases.csv")
     )
   } else {
     transphylo$status <- "ready"
@@ -53,8 +57,10 @@ if (bactdating$status == "installed") {
   if (!has_tree || !has_dates) {
     bactdating$status <- "ready_missing_inputs"
     bactdating$message <- paste0(
-      "BactDating installed but needs exports/",
-      "outbreaker_phylo.nwk and exports/cases.csv"
+      "BactDating installed but needs ",
+      export_file("outbreaker_phylo.nwk"),
+      " and ",
+      export_file("cases.csv")
     )
   } else {
     bactdating$status <- "ready"
@@ -78,8 +84,8 @@ payload <- list(
   prerequisites = list(
     has_tree_newick = has_tree,
     has_cases_csv = has_dates,
-    tree_path = "exports/outbreaker_phylo.nwk",
-    dates_path = "exports/cases.csv"
+    tree_path = export_file("outbreaker_phylo.nwk"),
+    dates_path = export_file("cases.csv")
   ),
   consensus = list(
     status = consensus_status,

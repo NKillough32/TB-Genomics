@@ -32,14 +32,14 @@ from typing import Any
 from sqlalchemy import text
 
 ROOT = Path(__file__).resolve().parent.parent
-EXPORTS = ROOT / "exports"
-UPLOADS = ROOT / "uploads"
+# Add project root to import path for direct script execution.
+sys.path.insert(0, str(ROOT))
+
+from scripts.runtime_paths import EXPORTS, UPLOADS
+
 OUT_JSON = EXPORTS / "lineage_dr_validation.json"
 RESISTANCE_VALIDATION_JSON = EXPORTS / "resistance_validation.json"
 MAX_FASTA_SAMPLES = 10
-
-# Add project root to import path for direct script execution.
-sys.path.insert(0, str(ROOT))
 
 from backend.database import SessionLocal
 

@@ -12,14 +12,14 @@ from itertools import combinations
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from backend.routers.dependencies import get_db
+from backend.runtime_paths import export_path
 
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 logger = logging.getLogger(__name__)
 
 
 def _export_path(*parts: str) -> str:
     """Return an absolute path under the repository export directory."""
-    return os.path.join(PROJECT_ROOT, "exports", *parts)
+    return export_path(*parts)
 
 
 # -- Pipeline validation sign-off helpers --------------------------------------

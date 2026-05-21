@@ -7,8 +7,9 @@ Generates mock analysis plots and summary for demo when R is unavailable.
 import json
 import os
 from datetime import datetime
-from pathlib import Path
 import sys
+
+from scripts.runtime_paths import EXPORTS
 
 
 MOCK_MCMC_ITERATIONS = 50000
@@ -16,7 +17,7 @@ MOCK_BURNIN = 10000
 
 def generate_mock_graphics():
     """Generate simple diagnostic graphics using matplotlib if available."""
-    os.makedirs("exports", exist_ok=True)
+    EXPORTS.mkdir(parents=True, exist_ok=True)
     
     try:
         import matplotlib.pyplot as plt
@@ -33,7 +34,7 @@ def generate_mock_graphics():
         ax.set_ylabel('Log-likelihood')
         ax.set_title('Outbreaker2 MCMC Trace - Likelihood')
         ax.grid(True, alpha=0.3)
-        fig.savefig('exports/outbreaker_trace.png', dpi=100, bbox_inches='tight')
+        fig.savefig(EXPORTS / "outbreaker_trace.png", dpi=100, bbox_inches='tight')
         plt.close()
         print("[OK] Mock trace plot generated")
         
@@ -69,7 +70,7 @@ def generate_mock_graphics():
         axes[1, 1].set_xlabel('P(sampling)')
         
         fig.tight_layout()
-        fig.savefig('exports/outbreaker_hist.png', dpi=100, bbox_inches='tight')
+        fig.savefig(EXPORTS / "outbreaker_hist.png", dpi=100, bbox_inches='tight')
         plt.close()
         print("[OK] Mock histogram generated")
         
@@ -79,7 +80,7 @@ def generate_mock_graphics():
 
 def generate_transmission_tree():
     """Generate transmission tree network diagram from clustered cases."""
-    os.makedirs("exports", exist_ok=True)
+    EXPORTS.mkdir(parents=True, exist_ok=True)
     
     try:
         import matplotlib.pyplot as plt
@@ -220,7 +221,7 @@ def generate_transmission_tree():
                     fontsize=14, fontweight='bold', pad=20)
         ax.axis('off')
         fig.tight_layout()
-        fig.savefig('exports/outbreaker_tree.png', dpi=100, bbox_inches='tight')
+        fig.savefig(EXPORTS / "outbreaker_tree.png", dpi=100, bbox_inches='tight')
         plt.close()
         print("[OK] Transmission tree generated with probabilities")
         
@@ -234,7 +235,7 @@ def generate_mock_summary():
         "n_generations": MOCK_MCMC_ITERATIONS,
         "burnin": MOCK_BURNIN,
         "n_samples": MOCK_MCMC_ITERATIONS - MOCK_BURNIN,
-        "case_count": len([f for f in os.listdir('exports') if f == 'cases.csv']) > 0 and 100 or 0,
+        "case_count": len([f for f in os.listdir(EXPORTS) if f == 'cases.csv']) > 0 and 100 or 0,
         "likelihood_mean": -5250.5,
         "likelihood_sd": 145.3,
         "transmission_probability": 0.085,
@@ -247,7 +248,7 @@ def generate_mock_summary():
         "generated_at": datetime.now().isoformat(),
     }
     
-    with open("exports/outbreaker_summary.json", "w") as f:
+    with (EXPORTS / "outbreaker_summary.json").open("w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2)
     print("[OK] Mock summary generated")
 

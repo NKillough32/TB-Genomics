@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from backend.data_safety import get_data_safety_status
 from backend.routers.dependencies import get_db
 from backend.routers.case_overview import data_readiness, surveillance_kpis
+from backend.runtime_paths import export_path
 from backend.synthesis.transmission_synthesis import (
     SynthesisConfig,
     build_cluster_risk_summary,
@@ -22,11 +23,8 @@ from backend.synthesis.transmission_synthesis import (
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-
-
 def _export_path(*parts: str) -> str:
-    return os.path.join(PROJECT_ROOT, "exports", *parts)
+    return export_path(*parts)
 
 
 def _h(value: Any) -> str:
@@ -566,4 +564,3 @@ def actionable_surveillance_report_html(
     with open(_export_path("actionable_surveillance_report.html"), "w", encoding="utf-8") as handle:
         handle.write(html)
     return HTMLResponse(content=html)
-

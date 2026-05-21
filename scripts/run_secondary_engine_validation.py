@@ -15,8 +15,9 @@ import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
+from scripts.runtime_paths import EXPORTS
+
 ROOT = Path(__file__).resolve().parent.parent
-EXPORTS = ROOT / "exports"
 R_SCRIPT = ROOT / "outbreaker2" / "run_secondary_engines.R"
 OUT_JSON = EXPORTS / "secondary_engine_validation.json"
 

@@ -13,6 +13,7 @@ from sqlalchemy import text
 
 from backend.database import SessionLocal
 from backend.snp_validation import validated_snp_distance
+from scripts.runtime_paths import EXPORTS
 
 
 def _snp_distance(seq_a: str, seq_b: str) -> tuple[int, int, int, str]:
@@ -88,7 +89,7 @@ def _reconcile_stale_cluster(db, stale_id: str, summary: dict) -> None:
 
 
 def main() -> None:
-    os.makedirs("exports", exist_ok=True)
+    EXPORTS.mkdir(parents=True, exist_ok=True)
     
     # Print startup diagnostics
     print("=" * 70)
@@ -186,9 +187,9 @@ def main() -> None:
 
         if len(samples) < 2:
             print("Insufficient samples for clustering (need >= 2)")
-            with open("exports/sequence_clustering_summary.json", "w", encoding="utf-8") as f:
+            with (EXPORTS / "sequence_clustering_summary.json").open("w", encoding="utf-8") as f:
                 json.dump(summary, f, indent=2)
-            with open("exports/sequence_cluster_assignments.csv", "w", newline="", encoding="utf-8") as f:
+            with (EXPORTS / "sequence_cluster_assignments.csv").open("w", newline="", encoding="utf-8") as f:
                 writer = csv.DictWriter(
                     f,
                     fieldnames=[
@@ -395,11 +396,11 @@ def main() -> None:
         print(f"  Unclustered cases: {summary['unclustered_cases']}")
         print(f"  Assignments to export: {len(assignments)}")
 
-        with open("exports/sequence_clustering_summary.json", "w", encoding="utf-8") as f:
+        with (EXPORTS / "sequence_clustering_summary.json").open("w", encoding="utf-8") as f:
             json.dump(summary, f, indent=2)
-        print("  Written: exports/sequence_clustering_summary.json")
+        print(f"  Written: {EXPORTS / 'sequence_clustering_summary.json'}")
 
-        with open("exports/sequence_cluster_assignments.csv", "w", newline="", encoding="utf-8") as f:
+        with (EXPORTS / "sequence_cluster_assignments.csv").open("w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(
                 f,
                 fieldnames=[
@@ -416,7 +417,7 @@ def main() -> None:
             writer.writeheader()
             for row in assignments:
                 writer.writerow(row)
-        print("  Written: exports/sequence_cluster_assignments.csv")
+        print(f"  Written: {EXPORTS / 'sequence_cluster_assignments.csv'}")
 
         print("\nWriting audit log...")
         db.execute(

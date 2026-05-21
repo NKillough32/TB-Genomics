@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from backend.auth import AuthenticatedUser, require_roles
 from backend.routers.dependencies import get_db
+from backend.runtime_paths import EXPORTS_DIR
 from backend.snp_validation import validated_snp_distance
 from backend.synthesis.transmission_synthesis import (
     SynthesisConfig,
@@ -140,7 +141,7 @@ def _load_transmission_edges() -> list[dict]:
     Supports legacy `transmission_network.json` edges and current
     `synthesis_output.json` pairwise_transmission_evidence payloads.
     """
-    net = _export_json("exports/transmission_network.json") or {}
+    net = _export_json(str(EXPORTS_DIR / "transmission_network.json")) or {}
     edges = net.get("edges") or []
     normalised = []
     for edge in edges:
@@ -157,7 +158,7 @@ def _load_transmission_edges() -> list[dict]:
     if normalised:
         return normalised
 
-    synthesis = _export_json("exports/synthesis_output.json") or {}
+    synthesis = _export_json(str(EXPORTS_DIR / "synthesis_output.json")) or {}
     fallback_edges: dict[tuple[str, str], dict] = {}
     for cluster in synthesis.get("clusters") or []:
         for pair in cluster.get("pairwise_transmission_evidence") or []:
@@ -2236,7 +2237,7 @@ def analytics_clusters(db: Session = Depends(get_db)):
 @router.get("/phylo-tree")
 def phylo_tree():
     """Return available phylogenetic/transmission visual assets + lightweight graph."""
-    net = _export_json("exports/transmission_network.json") or {}
+    net = _export_json(str(EXPORTS_DIR / "transmission_network.json")) or {}
     edges = _load_transmission_edges()
     nodes = net.get("all_nodes") or []
 

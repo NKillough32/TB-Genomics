@@ -5,6 +5,7 @@ from backend.job_runner import get_job_snapshot, run_job, run_pipeline, PIPELINE
 from backend.data_safety import enforce_operational_dataset, get_data_safety_status
 from backend.routers.dependencies import get_db
 from backend.quality_gates import build_workflow_status
+from backend.runtime_paths import EXPORTS_DIR
 from sqlalchemy.orm import Session
 import os
 import glob
@@ -61,10 +62,10 @@ def logs(job_id: str):
 def last_run_times():
     """Return modification times for key export artifacts so the UI can show data freshness."""
     artifacts = {
-        "lineage_dr_validation": "exports/lineage_dr_validation.json",
-        "sequence_clusters": "exports/sequence_clustering_summary.json",
-        "outbreaker2": "exports/outbreaker_summary.json",
-        "cluster_comparison": "exports/cluster_method_comparison.json",
+        "lineage_dr_validation": EXPORTS_DIR / "lineage_dr_validation.json",
+        "sequence_clusters": EXPORTS_DIR / "sequence_clustering_summary.json",
+        "outbreaker2": EXPORTS_DIR / "outbreaker_summary.json",
+        "cluster_comparison": EXPORTS_DIR / "cluster_method_comparison.json",
     }
     result = {}
     for key, path in artifacts.items():
@@ -87,7 +88,7 @@ def download_all_exports(db: Session = Depends(get_db)):
     """Stream a ZIP of all files in the exports/ directory."""
     enforce_operational_dataset(db, "jobs/download-all-exports")
 
-    exports_dir = "exports"
+    exports_dir = str(EXPORTS_DIR)
     if not os.path.isdir(exports_dir):
         return {"error": "exports directory not found"}
 
@@ -104,4 +105,3 @@ def download_all_exports(db: Session = Depends(get_db)):
         media_type="application/zip",
         headers={"Content-Disposition": "attachment; filename=tb_genomics_exports.zip"},
     )
-

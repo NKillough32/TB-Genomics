@@ -11,6 +11,7 @@ from sqlalchemy import text
 
 from backend.database import SessionLocal
 from backend.data_safety import get_data_safety_status
+from scripts.runtime_paths import EXPORTS
 
 
 def generate_consensus_sequence(case_id: str, length: int = 2000) -> str:
@@ -26,7 +27,7 @@ def generate_consensus_sequence(case_id: str, length: int = 2000) -> str:
 
 
 def main() -> None:
-    os.makedirs("exports", exist_ok=True)
+    EXPORTS.mkdir(parents=True, exist_ok=True)
 
     db = SessionLocal()
     try:
@@ -52,7 +53,10 @@ def main() -> None:
             )
         ).mappings().all()
 
-        with open("exports/cases.csv", "w", newline="", encoding="utf-8") as csv_file:
+        cases_path = EXPORTS / "cases.csv"
+        fasta_path = EXPORTS / "dna.fasta"
+
+        with cases_path.open("w", newline="", encoding="utf-8") as csv_file:
             writer = csv.DictWriter(csv_file, fieldnames=["case_id", "sample_date", "symptom_onset_date"])
             writer.writeheader()
 
@@ -75,14 +79,14 @@ def main() -> None:
 
         # outbreaker2 assumes all sequences are aligned to the same length.
         min_len = min((len(seq) for _, seq in raw_sequences), default=0)
-        with open("exports/dna.fasta", "w", encoding="utf-8") as fasta_file:
+        with fasta_path.open("w", encoding="utf-8") as fasta_file:
             for case_id, sequence in raw_sequences:
                 normalized = sequence[:min_len] if min_len else sequence
                 fasta_file.write(f">{case_id}\n")
                 fasta_file.write(f"{normalized}\n")
 
         print(
-            f"Exported {len(rows)} records to exports/cases.csv and exports/dna.fasta"
+            f"Exported {len(rows)} records to {cases_path} and {fasta_path}"
         )
     finally:
         db.close()

@@ -11,9 +11,10 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-EXPORTS = PROJECT_ROOT / "exports"
-UPLOADS = PROJECT_ROOT / "uploads"
+from backend.runtime_paths import EXPORTS_DIR, PROJECT_ROOT, UPLOADS_DIR
+
+EXPORTS = EXPORTS_DIR
+UPLOADS = UPLOADS_DIR
 
 
 def _iso_now() -> str:
@@ -550,4 +551,3 @@ def build_workflow_status(db: Session) -> dict[str, Any]:
         "gates": gates,
         "stages": stages,
     }
-

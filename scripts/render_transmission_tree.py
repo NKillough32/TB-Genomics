@@ -4,8 +4,6 @@
 from __future__ import annotations
 
 import json
-import os
-from pathlib import Path
 
 import matplotlib
 
@@ -13,9 +11,11 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import networkx as nx
 
+from scripts.runtime_paths import EXPORTS
+
 
 def main() -> int:
-    exports_dir = Path("exports")
+    exports_dir = EXPORTS
     exports_dir.mkdir(parents=True, exist_ok=True)
 
     network_path = exports_dir / "transmission_network.json"

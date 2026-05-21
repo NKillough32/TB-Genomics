@@ -5,7 +5,6 @@ Generate enhanced outbreak visualizations from TB case data.
 
 import sys
 import os
-from pathlib import Path
 
 # Get project root
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -20,6 +19,7 @@ from matplotlib.patches import Patch
 from scipy.cluster.hierarchy import dendrogram, linkage
 from sqlalchemy import text
 from backend.database import SessionLocal
+from scripts.runtime_paths import EXPORTS
 
 plt.rcParams.update({
     "figure.facecolor": "white",
@@ -152,7 +152,7 @@ def _estimate_transmission_probability(source: dict, target: dict) -> float:
 
 def generate_transmission_network():
     """Generate enhanced transmission network image and structured JSON insights."""
-    os.makedirs("exports", exist_ok=True)
+    EXPORTS.mkdir(parents=True, exist_ok=True)
 
     db = SessionLocal()
     try:
@@ -423,7 +423,7 @@ def generate_transmission_network():
         )
 
         fig.subplots_adjust(left=0.02, right=0.98, top=0.88, bottom=0.19)
-        fig.savefig("exports/outbreaker_tree.png", dpi=140, bbox_inches="tight", pad_inches=0.12)
+        fig.savefig(EXPORTS / "outbreaker_tree.png", dpi=140, bbox_inches="tight", pad_inches=0.12)
         plt.close(fig)
 
         key_nodes = sorted(graph.nodes(), key=lambda n: graph.nodes[n].get("risk_score", 0), reverse=True)[:10]
@@ -469,7 +469,7 @@ def generate_transmission_network():
             ],
         }
 
-        with open("exports/transmission_network.json", "w", encoding="utf-8") as f:
+        with (EXPORTS / "transmission_network.json").open("w", encoding="utf-8") as f:
             json.dump(insights, f, indent=2)
 
         print("[ok] Enhanced transmission network generated")
@@ -481,13 +481,13 @@ def generate_transmission_network():
 
 def generate_phylogenetic_tree():
     """Generate phylogenetic tree from DNA sequences."""
-    os.makedirs("exports", exist_ok=True)
+    EXPORTS.mkdir(parents=True, exist_ok=True)
 
     try:
         # Read DNA sequences from FASTA
         sequences = {}
-        if os.path.exists("exports/dna.fasta"):
-            with open("exports/dna.fasta", "r") as f:
+        if (EXPORTS / "dna.fasta").exists():
+            with (EXPORTS / "dna.fasta").open("r", encoding="utf-8") as f:
                 current_id = None
                 for line in f:
                     line = line.strip()
@@ -548,7 +548,7 @@ def generate_phylogenetic_tree():
                 label.set_rotation(55)
                 label.set_ha("right")
 
-            fig.savefig('exports/outbreaker_phylo.png', dpi=140, bbox_inches='tight', pad_inches=0.12)
+            fig.savefig(EXPORTS / "outbreaker_phylo.png", dpi=140, bbox_inches='tight', pad_inches=0.12)
             plt.close()
 
             print("[ok] Phylogenetic tree generated")
@@ -559,7 +559,7 @@ def generate_phylogenetic_tree():
 
 def generate_resistance_heatmap():
     """Generate resistance profile heatmap."""
-    os.makedirs("exports", exist_ok=True)
+    EXPORTS.mkdir(parents=True, exist_ok=True)
 
     try:
         import matplotlib.pyplot as plt
@@ -680,7 +680,7 @@ def generate_resistance_heatmap():
             cbar.ax.set_yticklabels(['No call', 'Susceptible', 'Intermediate', 'Resistant'])
             cbar.ax.tick_params(labelsize=8)
 
-            fig.savefig('exports/outbreaker_resistance.png', dpi=140, bbox_inches='tight', pad_inches=0.12)
+            fig.savefig(EXPORTS / "outbreaker_resistance.png", dpi=140, bbox_inches='tight', pad_inches=0.12)
             plt.close()
 
             print("[ok] Resistance profile heatmap generated")
@@ -700,4 +700,3 @@ if __name__ == "__main__":
         print("Skipping transmission network generation due to TB_SKIP_PRIORITY_NETWORK=1")
     generate_phylogenetic_tree()
     generate_resistance_heatmap()
-

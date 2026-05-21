@@ -15,6 +15,8 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from itertools import combinations
 
+from scripts.runtime_paths import EXPORTS
+
 
 def _load_sequence_assignments(path: str):
     assignments = {}
@@ -109,11 +111,11 @@ def _same_cluster_pairs(mapping: dict):
 
 
 def main():
-    os.makedirs("exports", exist_ok=True)
+    EXPORTS.mkdir(parents=True, exist_ok=True)
 
-    seq_path = "exports/sequence_cluster_assignments.csv"
-    network_path = "exports/transmission_network.json"
-    out_path = "exports/cluster_method_comparison.json"
+    seq_path = EXPORTS / "sequence_cluster_assignments.csv"
+    network_path = EXPORTS / "transmission_network.json"
+    out_path = EXPORTS / "cluster_method_comparison.json"
 
     seq_assignments = _load_sequence_assignments(seq_path)
     net_assignments = _load_network_assignments(network_path)
@@ -135,8 +137,8 @@ def main():
     result = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "inputs": {
-            "sequence_assignments": seq_path,
-            "outbreaker_network": network_path,
+            "sequence_assignments": str(seq_path),
+            "outbreaker_network": str(network_path),
         },
         "coverage": {
             "sequence_assigned_cases": len(seq_assignments),
@@ -158,7 +160,7 @@ def main():
         ],
     }
 
-    with open(out_path, "w", encoding="utf-8") as f:
+    with out_path.open("w", encoding="utf-8") as f:
         json.dump(result, f, indent=2)
 
     print(json.dumps(result, indent=2))

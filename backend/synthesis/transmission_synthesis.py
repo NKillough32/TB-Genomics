@@ -10,6 +10,7 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from backend.runtime_paths import EXPORTS_DIR
 from backend.synthesis.epi_evidence import compute_epi_evidence, load_epi_records_for_cases
 from backend.synthesis.explanations import category_display, interpretation_text, recommended_actions
 from backend.synthesis.flags import (
@@ -75,9 +76,9 @@ def _export_csv_map(path: str) -> dict[str, dict[str, str]]:
 
 
 def _load_sequence_proxy() -> tuple[dict[str, dict[str, str]], int, float]:
-    assignments = _export_csv_map("exports/sequence_cluster_assignments.csv")
-    summary = _export_json("exports/sequence_clustering_summary.json")
-    comparison = _export_json("exports/cluster_method_comparison.json")
+    assignments = _export_csv_map(str(EXPORTS_DIR / "sequence_cluster_assignments.csv"))
+    summary = _export_json(str(EXPORTS_DIR / "sequence_clustering_summary.json"))
+    comparison = _export_json(str(EXPORTS_DIR / "cluster_method_comparison.json"))
     threshold = int(summary.get("threshold_snp_distance") or 25)
     agreement = comparison.get("agreement") or {}
     precision = float(agreement.get("pairwise_precision_outbreaker_vs_sequence") or 1.0)
@@ -284,7 +285,7 @@ def build_transmission_synthesis(
             **_validation_notice(),
         }
 
-    net = _export_json("exports/transmission_network.json")
+    net = _export_json(str(EXPORTS_DIR / "transmission_network.json"))
     edges = net.get("edges") or []
 
     # Issue #11: Compute transmission generation depth via BFS from index/import cases.

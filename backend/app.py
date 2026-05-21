@@ -7,6 +7,7 @@ from sqlalchemy import text
 
 from backend.auth import require_roles
 from backend.database import SessionLocal, init_db
+from backend.runtime_paths import ensure_runtime_dirs
 from backend.routers import (
     analytics,
     case_analysis,
@@ -26,6 +27,7 @@ from backend.routers import (
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    ensure_runtime_dirs()
     init_db()
     yield
 

@@ -1,7 +1,7 @@
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import FileResponse, StreamingResponse
-from backend.job_runner import get_job_snapshot, run_job, run_pipeline, PIPELINE_STEPS
+from backend.job_runner import cancel_job, get_job_snapshot, run_job, run_pipeline, PIPELINE_STEPS
 from backend.data_safety import enforce_operational_dataset, get_data_safety_status
 from backend.routers.dependencies import get_db
 from backend.quality_gates import build_workflow_status
@@ -50,6 +50,11 @@ def jobs_data_safety(db: Session = Depends(get_db)):
 @router.get("/status/{job_id}")
 def status(job_id: str):
     return get_job_snapshot(job_id) or {"status": "unknown"}
+
+
+@router.post("/cancel/{job_id}")
+def cancel(job_id: str):
+    return cancel_job(job_id)
 
 @router.get("/logs/{job_id}")
 def logs(job_id: str):

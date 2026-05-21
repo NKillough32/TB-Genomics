@@ -510,6 +510,26 @@ input[type="file"] {
 	border: 1px solid #cedce8;
 }
 
+.pipeline-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.6rem;
+	align-items: center;
+}
+
+.btn-danger {
+	background: #b91c1c;
+	color: #fff;
+	border-color: #991b1b;
+}
+
+.btn-danger:disabled {
+	background: #d7dee7;
+	color: #667085;
+	border-color: #c8d2dc;
+	cursor: not-allowed;
+}
+
 .progress-bar {
 	width: 0%;
 	height: 22px;
@@ -524,6 +544,33 @@ input[type="file"] {
 
 .progress-bar--failed {
 	background: linear-gradient(90deg, #b91c1c, #ef4444);
+}
+
+.progress-bar--cancelled {
+	background: linear-gradient(90deg, #64748b, #94a3b8);
+}
+
+.job-progress-details {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+	gap: 0.5rem;
+	margin-top: 0.65rem;
+}
+
+.job-progress-details div {
+	background: #f8fbfd;
+	border: 1px solid #dbe4ed;
+	border-radius: 8px;
+	padding: 0.55rem 0.65rem;
+}
+
+.job-progress-details strong {
+	display: block;
+	font-size: 0.72rem;
+	text-transform: uppercase;
+	color: var(--muted);
+	letter-spacing: 0.04em;
+	margin-bottom: 0.2rem;
 }
 
 .workflow-status-header {
@@ -1693,4 +1740,3 @@ footer {
 		width: 100%;
 	}
 }
-

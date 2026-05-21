@@ -189,16 +189,20 @@ async function loadWorkflowStatus(){
 
 async function runFullPipeline(){
 	const btn = document.getElementById('runPipelineBtn');
+	const cancelBtn = document.getElementById('cancelJobBtn');
 	btn.disabled = true;
+	cancelBtn.disabled = false;
 	btn.textContent = 'Pipeline running...';
 	document.getElementById('jobStatus').textContent = 'Starting full pipeline...';
 	document.getElementById('pipelineStepLabel').textContent = '';
+	document.getElementById('jobProgressDetails').innerHTML = '';
 	try{
 		const r = await fetch(`${API}/jobs/run-pipeline`, {method:'POST'});
 		const d = await r.json();
 		if(!d.job_id){
 			document.getElementById('jobStatus').textContent = JSON.stringify(d, null, 2);
 			btn.disabled = false;
+			cancelBtn.disabled = true;
 			btn.textContent = '> Run full pipeline (all steps)';
 			return;
 		}
@@ -207,29 +211,89 @@ async function runFullPipeline(){
 	}catch(e){
 		document.getElementById('jobStatus').textContent = `Pipeline start failed: ${e}`;
 		btn.disabled = false;
+		cancelBtn.disabled = true;
 		btn.textContent = '> Run full pipeline (all steps)';
 	}
 }
+
+function terminalJobStatus(status){
+	return ['completed','failed','cancelled','unknown'].includes(status);
+}
+
+function secondsSince(iso){
+	if(!iso) return null;
+	const ts = Date.parse(iso);
+	if(Number.isNaN(ts)) return null;
+	return Math.max(0, Math.round((Date.now()-ts)/1000));
+}
+
+function fmtDuration(seconds){
+	if(seconds == null) return 'n/a';
+	const mins = Math.floor(seconds/60);
+	const secs = seconds % 60;
+	return mins ? `${mins}m ${secs}s` : `${secs}s`;
+}
+
+function renderJobProgress(d, steps=[]){
+	const progress = Math.max(0, Math.min(100, Number(d.progress||0)));
+	const bar = document.getElementById('progressBar');
+	bar.style.width = progress+'%';
+	bar.textContent = `${progress}%`;
+	bar.classList.toggle('progress-bar--failed', d.status === 'failed');
+	bar.classList.toggle('progress-bar--cancelled', d.status === 'cancelled' || d.status === 'cancelling');
+
+	const stepIdx = d.pipeline_step || 0;
+	const total = d.pipeline_total || steps.length || 0;
+	const currentStep = d.current_step || (stepIdx > 0 && stepIdx <= steps.length ? steps[stepIdx-1] : d.job || 'Job');
+	document.getElementById('pipelineStepLabel').textContent =
+		total ? `Step ${stepIdx || 0} of ${total}: ${currentStep || 'waiting'}` : currentStep;
+
+	const elapsed = fmtDuration(secondsSince(d.started_at || d.created_at));
+	const child = d.active_child_id ? `${d.child_status || 'running'}${d.child_progress != null ? ` (${d.child_progress}%)` : ''}` : 'none';
+	document.getElementById('jobProgressDetails').innerHTML = `
+		<div><strong>Status</strong><span>${escapeHtml(d.status || 'unknown')}</span></div>
+		<div><strong>Overall</strong><span>${progress}%</span></div>
+		<div><strong>Completed</strong><span>${escapeHtml(String(d.completed_steps ?? 0))}/${escapeHtml(String(total || '-'))}</span></div>
+		<div><strong>Current child</strong><span>${escapeHtml(child)}</span></div>
+		<div><strong>Elapsed</strong><span>${escapeHtml(elapsed)}</span></div>
+	`;
+
+	document.getElementById('jobStatus').textContent =
+		`Status: ${d.status || 'unknown'}\n`+
+		`Job: ${d.job || 'unknown'}\n`+
+		`Progress: ${progress}%\n`+
+		`Current step: ${currentStep || 'n/a'}\n`+
+		`Active child: ${d.active_child_id || 'none'}\n`+
+		`Log file: ${d.logfile || 'n/a'}`;
+}
+
+async function cancelActiveJob(){
+	if(!activeJob) return;
+	const btn = document.getElementById('cancelJobBtn');
+	btn.disabled = true;
+	btn.textContent = 'Cancelling...';
+	try{
+		await fetch(`${API}/jobs/cancel/${encodeURIComponent(activeJob)}`, {method:'POST'});
+	}catch(e){
+		document.getElementById('jobStatus').textContent = `Cancel request failed: ${e}`;
+		btn.disabled = false;
+		btn.textContent = 'Cancel run';
+	}
+}
+
 async function pollPipeline(steps){
 	if(!activeJob) return;
 	const r = await fetch(`${API}/jobs/status/${activeJob}`);
 	const d = await r.json();
-	const bar = document.getElementById('progressBar');
-	bar.style.width = (d.progress||0)+'%';
-	bar.textContent = (d.progress||0)+'%';
-	bar.classList.toggle('progress-bar--failed', d.status === 'failed');
-	const stepIdx = d.pipeline_step || 0;
-	const total = d.pipeline_total || steps.length;
-	if(stepIdx > 0 && stepIdx <= steps.length){
-		document.getElementById('pipelineStepLabel').textContent =
-			`Step ${stepIdx} of ${total}: ${steps[stepIdx-1]}`;
-	}
-	document.getElementById('jobStatus').textContent = JSON.stringify(d, null, 2);
-	if(d.status !== 'completed' && d.status !== 'failed'){
+	renderJobProgress(d, steps);
+	if(!terminalJobStatus(d.status)){
 		setTimeout(()=>pollPipeline(steps), 1500);
 	} else {
 		const btn = document.getElementById('runPipelineBtn');
+		const cancelBtn = document.getElementById('cancelJobBtn');
 		btn.disabled = false;
+		cancelBtn.disabled = true;
+		cancelBtn.textContent = 'Cancel run';
 		btn.textContent = '> Run full pipeline (all steps)';
 		if(d.status === 'completed'){
 			loadKPIBanner();
@@ -347,6 +411,8 @@ async function seedSyntheticData(){
 }
 async function runJob(job){
 	document.getElementById('jobStatus').textContent='Starting '+job;
+	const cancelBtn=document.getElementById('cancelJobBtn');
+	if(cancelBtn) cancelBtn.disabled=false;
 	let r=await fetch(`${API}/jobs/run/${job}`,{method:'POST'});
 	let d=await r.json();
 
@@ -366,12 +432,27 @@ async function runJob(job){
 
 	if(!d.job_id){
 		document.getElementById('jobStatus').textContent=JSON.stringify(d,null,2);
+		if(cancelBtn) cancelBtn.disabled=true;
 		return;
 	}
 	activeJob=d.job_id;
 	poll();
 }
-async function poll(){if(!activeJob)return;const r=await fetch(`${API}/jobs/status/${activeJob}`);const d=await r.json();document.getElementById('jobStatus').textContent=JSON.stringify(d,null,2);const bar=document.getElementById('progressBar');bar.style.width=(d.progress||0)+'%';bar.textContent=(d.progress||0)+'%';bar.classList.toggle('progress-bar--failed',d.status==='failed');if(d.status!=='completed'&&d.status!=='failed'){setTimeout(poll,1500);} }
+async function poll(){
+	if(!activeJob)return;
+	const r=await fetch(`${API}/jobs/status/${activeJob}`);
+	const d=await r.json();
+	renderJobProgress(d, []);
+	if(!terminalJobStatus(d.status)){
+		setTimeout(poll,1500);
+	}else{
+		const cancelBtn=document.getElementById('cancelJobBtn');
+		if(cancelBtn){
+			cancelBtn.disabled=true;
+			cancelBtn.textContent='Cancel run';
+		}
+	}
+}
 async function loadCases(){
 	const box=document.getElementById('cases');
 	box.textContent='Loading cases...';

@@ -129,7 +129,10 @@
   <section class="card">
     <h2>Step 3 - Run analysis</h2>
     <p class="hint">Primary action for routine use. The full pipeline runs lineage/DR validation, sequence clustering, outbreaker2 export and inference, and method comparison in order.</p>
-    <button id="runPipelineBtn" class="btn-primary" onclick="runFullPipeline()">&#9654; Run full pipeline (all steps)</button>
+    <div class="pipeline-actions">
+      <button id="runPipelineBtn" class="btn-primary" onclick="runFullPipeline()">&#9654; Run full pipeline (all steps)</button>
+      <button id="cancelJobBtn" class="btn-danger" onclick="cancelActiveJob()" disabled>Cancel run</button>
+    </div>
     <details class="individual-steps">
       <summary class="hint">Or run individual steps...</summary>
       <div class="individual-steps-inner">
@@ -143,6 +146,7 @@
     </details>
     <div class="progress-container"><div id="progressBar" class="progress-bar">0%</div></div>
     <div id="pipelineStepLabel" class="hint"></div>
+    <div id="jobProgressDetails" class="job-progress-details"></div>
     <div class="workflow-status-header">
       <h3>Workflow confidence</h3>
       <button type="button" class="mini-btn" onclick="loadWorkflowStatus()">Refresh status</button>
@@ -670,6 +674,5 @@
 <script src="app.js?v=4"></script>
 </body>
 </html>
-
 
 

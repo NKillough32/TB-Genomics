@@ -37,6 +37,11 @@ python_exe = sys.executable
 
 JOBS = {}
 JOBS_LOCK = threading.RLock()
+JOB_PROCESSES = {}
+
+
+class JobCancelled(Exception):
+    pass
 ALLOWED_JOBS = {
     "audit_schema": [python_exe, "scripts/_audit_schema.py"],
     "derive_sequence_clusters": [python_exe, "scripts/derive_sequence_clusters.py"],
@@ -55,6 +60,7 @@ def set_job_state(job_id: str, **fields):
         current = JOBS.get(job_id)
         if current is None:
             return
+        fields.setdefault("updated_at", datetime.utcnow().isoformat() + "Z")
         current.update(fields)
 
 
@@ -66,7 +72,60 @@ def get_job_snapshot(job_id: str) -> dict | None:
 
 def _create_job(job_id: str, payload: dict):
     with JOBS_LOCK:
+        now = datetime.utcnow().isoformat() + "Z"
+        payload.setdefault("created_at", now)
+        payload.setdefault("updated_at", now)
+        payload.setdefault("cancel_requested", False)
         JOBS[job_id] = payload
+
+
+def _is_cancel_requested(job_id: str) -> bool:
+    with JOBS_LOCK:
+        current = JOBS.get(job_id)
+        return bool(isinstance(current, dict) and current.get("cancel_requested"))
+
+
+def _terminate_process(job_id: str) -> bool:
+    with JOBS_LOCK:
+        process = JOB_PROCESSES.get(job_id)
+    if process is None or process.poll() is not None:
+        return False
+
+    try:
+        if os.name == "nt":
+            subprocess.run(
+                ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=10,
+            )
+        else:
+            process.terminate()
+        return True
+    except Exception:
+        try:
+            process.kill()
+            return True
+        except Exception:
+            return False
+
+
+def cancel_job(job_id: str) -> dict:
+    with JOBS_LOCK:
+        current = JOBS.get(job_id)
+        if current is None:
+            return {"status": "unknown", "message": "Job not found"}
+        if current.get("status") in {"completed", "failed", "cancelled"}:
+            return {"status": current.get("status"), "message": "Job is no longer running"}
+        current["cancel_requested"] = True
+        current["status"] = "cancelling"
+        current["updated_at"] = datetime.utcnow().isoformat() + "Z"
+        active_child_id = current.get("active_child_id")
+
+    terminated = _terminate_process(job_id)
+    if active_child_id:
+        cancel_job(str(active_child_id))
+    return {"status": "cancelling", "terminated_process": terminated, "active_child_id": active_child_id}
 
 def _log_to_audit(action: str, user_id: str, details: dict):
     """Log an action to the audit trail."""
@@ -92,6 +151,28 @@ def _write_log(lf, message: str):
     lf.flush()
 
 
+def _run_process(job_id: str, args: list[str], *, stdout, stderr, cwd: str, timeout: int | None = None, env: dict | None = None) -> int:
+    started = datetime.utcnow()
+    process = subprocess.Popen(args, stdout=stdout, stderr=stderr, cwd=cwd, env=env)
+    with JOBS_LOCK:
+        JOB_PROCESSES[job_id] = process
+    try:
+        while True:
+            if _is_cancel_requested(job_id):
+                _terminate_process(job_id)
+                raise JobCancelled("Job cancelled by user")
+            returncode = process.poll()
+            if returncode is not None:
+                return returncode
+            if timeout is not None and (datetime.utcnow() - started).total_seconds() > timeout:
+                _terminate_process(job_id)
+                raise subprocess.TimeoutExpired(args, timeout)
+            threading.Event().wait(0.5)
+    finally:
+        with JOBS_LOCK:
+            JOB_PROCESSES.pop(job_id, None)
+
+
 def run_job(job_name):
     if job_name not in ALLOWED_JOBS:
         return None
@@ -101,7 +182,7 @@ def run_job(job_name):
     logger.debug(f"Job queued: {job_name} ({job_id})")
 
     def task():
-        set_job_state(job_id, status="running", progress=10)
+        set_job_state(job_id, status="running", progress=10, started_at=datetime.utcnow().isoformat() + "Z")
         logger.debug(f"Job running: {job_name} ({job_id})")
         
         # Log job start
@@ -143,7 +224,8 @@ def run_job(job_name):
                     if rscript_path:
                         result = None
                         try:
-                            result = subprocess.run(
+                            returncode = _run_process(
+                                job_id,
                                 [rscript_path, "outbreaker2/run_outbreaker2.R"],
                                 stdout=lf,
                                 stderr=subprocess.STDOUT,
@@ -151,6 +233,7 @@ def run_job(job_name):
                                 timeout=outbreaker_timeout,
                                 env=child_env,
                             )
+                            result = subprocess.CompletedProcess([rscript_path, "outbreaker2/run_outbreaker2.R"], returncode)
                         except subprocess.TimeoutExpired:
                             if allow_mock_fallback:
                                 use_mock_fallback = True
@@ -174,7 +257,8 @@ def run_job(job_name):
 
                     if use_mock_fallback:
                         _write_log(lf, "Running mock Outbreaker2 generator...")
-                        mock_result = subprocess.run(
+                        mock_returncode = _run_process(
+                            job_id,
                             [python_exe, "scripts/generate_mock_outbreaker.py"],
                             stdout=lf,
                             stderr=subprocess.STDOUT,
@@ -182,6 +266,7 @@ def run_job(job_name):
                             timeout=60,
                             env=child_env,
                         )
+                        mock_result = subprocess.CompletedProcess([python_exe, "scripts/generate_mock_outbreaker.py"], mock_returncode)
                         if mock_result.returncode != 0:
                             raise Exception(f"Mock generator failed with code {mock_result.returncode}")
 
@@ -189,7 +274,8 @@ def run_job(job_name):
                     # from the JSON network artifact so reports include a
                     # non-blank image even when R plotting backends differ.
                     _write_log(lf, "Rendering transmission tree graphic...")
-                    tree_render_result = subprocess.run(
+                    tree_render_returncode = _run_process(
+                        job_id,
                         [python_exe, "scripts/render_transmission_tree.py"],
                         stdout=lf,
                         stderr=subprocess.STDOUT,
@@ -197,6 +283,7 @@ def run_job(job_name):
                         timeout=60,
                         env=child_env,
                     )
+                    tree_render_result = subprocess.CompletedProcess([python_exe, "scripts/render_transmission_tree.py"], tree_render_returncode)
                     if tree_render_result.returncode != 0:
                         _write_log(lf, "Warning: Transmission tree renderer exited with code {tree_render_result.returncode}")
                     
@@ -206,7 +293,8 @@ def run_job(job_name):
                         child_env["TB_SKIP_PRIORITY_NETWORK"] = "0"
                     else:
                         child_env["TB_SKIP_PRIORITY_NETWORK"] = "1"
-                    priority_result = subprocess.run(
+                    priority_returncode = _run_process(
+                        job_id,
                         [python_exe, "scripts/generate_priority_visualizations.py"],
                         stdout=lf,
                         stderr=subprocess.STDOUT,
@@ -214,29 +302,40 @@ def run_job(job_name):
                         timeout=60,
                         env=child_env,
                     )
+                    priority_result = subprocess.CompletedProcess([python_exe, "scripts/generate_priority_visualizations.py"], priority_returncode)
                     if priority_result.returncode != 0:
                         _write_log(lf, f"Warning: Supplementary visualizations exited with code {priority_result.returncode}")
                 else:
                     _write_log(lf, f"Running job: {' '.join(ALLOWED_JOBS[job_name])}")
-                    result = subprocess.run(
+                    returncode = _run_process(
+                        job_id,
                         ALLOWED_JOBS[job_name],
                         stdout=lf,
                         stderr=subprocess.STDOUT,
                         cwd=project_root,
                     )
+                    result = subprocess.CompletedProcess(ALLOWED_JOBS[job_name], returncode)
                     if result.returncode != 0:
                         raise Exception(f"{job_name} exited with code {result.returncode}")
                 
                 _write_log(lf, "=" * 70)
                 _write_log(lf, f"JOB COMPLETED SUCCESSFULLY")
                 _write_log(lf, "=" * 70)
-                set_job_state(job_id, progress=100, status="completed")
+                set_job_state(job_id, progress=100, status="completed", finished_at=datetime.utcnow().isoformat() + "Z")
                 logger.info(f"Job completed: {job_name} ({job_id})")
                 
                 # Log job completion
                 _log_to_audit("job_completed", "system", {"job_id": job_id, "job_name": job_name})
+            except JobCancelled as e:
+                set_job_state(job_id, status="cancelled", finished_at=datetime.utcnow().isoformat() + "Z")
+                _write_log(lf, "=" * 70)
+                _write_log(lf, "JOB CANCELLED")
+                _write_log(lf, "=" * 70)
+                _write_log(lf, str(e))
+                logger.info(f"Job cancelled: {job_name} ({job_id})")
+                _log_to_audit("job_cancelled", "system", {"job_id": job_id, "job_name": job_name})
             except Exception as e:
-                set_job_state(job_id, status="failed")
+                set_job_state(job_id, status="failed", finished_at=datetime.utcnow().isoformat() + "Z")
                 _write_log(lf, "=" * 70)
                 _write_log(lf, "JOB FAILED")
                 _write_log(lf, "=" * 70)
@@ -264,7 +363,7 @@ PIPELINE_STEPS = [
 ]
 
 
-def run_pipeline():
+def _legacy_run_pipeline():
     """Run all analysis steps sequentially under a single pipeline job ID."""
     pipeline_id = str(uuid.uuid4())
     log = log_path(f"{pipeline_id}.log")
@@ -275,6 +374,9 @@ def run_pipeline():
         "logfile": log,
         "pipeline_step": 0,
         "pipeline_total": len(PIPELINE_STEPS),
+        "completed_steps": 0,
+        "current_step": None,
+        "active_child_id": None,
     })
 
     def _task():
@@ -339,6 +441,120 @@ def run_pipeline():
             _write_log(lf, "=" * 70)
             set_job_state(pipeline_id, progress=100, status="completed")
             _log_to_audit("pipeline_completed", "system", {"pipeline_id": pipeline_id})
+
+    threading.Thread(target=_task).start()
+    return pipeline_id
+
+
+def run_pipeline():
+    """Run all analysis steps sequentially under a single cancellable pipeline job."""
+    pipeline_id = str(uuid.uuid4())
+    log = log_path(f"{pipeline_id}.log")
+    _create_job(pipeline_id, {
+        "job": "full_pipeline",
+        "status": "running",
+        "progress": 0,
+        "logfile": log,
+        "pipeline_step": 0,
+        "pipeline_total": len(PIPELINE_STEPS),
+        "completed_steps": 0,
+        "current_step": None,
+        "active_child_id": None,
+    })
+
+    def _task():
+        _log_to_audit("pipeline_started", "system", {"pipeline_id": pipeline_id, "steps": PIPELINE_STEPS})
+
+        with open(log, "w", encoding="utf-8") as lf:
+            try:
+                set_job_state(pipeline_id, started_at=datetime.utcnow().isoformat() + "Z")
+                _write_log(lf, "=" * 70)
+                _write_log(lf, "PIPELINE START")
+                _write_log(lf, f"Pipeline ID: {pipeline_id}")
+                _write_log(lf, f"Total steps: {len(PIPELINE_STEPS)}")
+                _write_log(lf, f"Steps: {', '.join(PIPELINE_STEPS)}")
+                _write_log(lf, "=" * 70)
+
+                total = len(PIPELINE_STEPS)
+                for idx, step in enumerate(PIPELINE_STEPS):
+                    if _is_cancel_requested(pipeline_id):
+                        raise JobCancelled("Pipeline cancelled by user")
+                    set_job_state(
+                        pipeline_id,
+                        status="running",
+                        pipeline_step=idx + 1,
+                        completed_steps=idx,
+                        current_step=step,
+                        progress=int((idx / total) * 95),
+                    )
+                    _write_log(lf, f"\nPIPELINE STEP {idx + 1}/{total}: {step}")
+                    _write_log(lf, "-" * 70)
+
+                    child_id = run_job(step)
+                    if child_id is None:
+                        set_job_state(pipeline_id, status="failed")
+                        _write_log(lf, f"ERROR: Step {step} is not allowed - aborting pipeline")
+                        _log_to_audit("pipeline_failed", "system", {"pipeline_id": pipeline_id, "failed_step": step})
+                        return
+
+                    set_job_state(pipeline_id, active_child_id=child_id)
+                    _write_log(lf, f"Child job ID: {child_id}")
+
+                    step_start = int((idx / total) * 95)
+                    step_end = int(((idx + 1) / total) * 95)
+                    step_width = step_end - step_start
+                    while True:
+                        if _is_cancel_requested(pipeline_id):
+                            cancel_job(child_id)
+                            raise JobCancelled("Pipeline cancelled by user")
+                        child = get_job_snapshot(child_id) or {}
+                        if child.get("status") in ("completed", "failed", "cancelled"):
+                            break
+                        child_pct = child.get("progress", 0) or 0
+                        pipeline_pct = step_start + int((child_pct / 100) * step_width)
+                        set_job_state(
+                            pipeline_id,
+                            progress=pipeline_pct,
+                            child_progress=child_pct,
+                            child_status=child.get("status"),
+                        )
+                        threading.Event().wait(0.5)
+
+                    child_snapshot = get_job_snapshot(child_id) or {}
+                    child_status = child_snapshot.get("status")
+                    child_progress = child_snapshot.get("progress", "?")
+                    set_job_state(pipeline_id, child_progress=child_progress, child_status=child_status)
+                    _write_log(lf, f"Step {step} finished with status: {child_status} (progress: {child_progress}%)")
+
+                    if child_status == "cancelled":
+                        raise JobCancelled("Pipeline cancelled by user")
+                    if child_status == "failed":
+                        set_job_state(pipeline_id, status="failed", active_child_id=None, finished_at=datetime.utcnow().isoformat() + "Z")
+                        _write_log(lf, f"ERROR: Step {step} failed - aborting pipeline")
+                        _log_to_audit("pipeline_failed", "system", {"pipeline_id": pipeline_id, "failed_step": step})
+                        return
+
+                _write_log(lf, "\n" + "=" * 70)
+                _write_log(lf, "PIPELINE COMPLETED SUCCESSFULLY")
+                _write_log(lf, "=" * 70)
+                set_job_state(
+                    pipeline_id,
+                    progress=100,
+                    status="completed",
+                    completed_steps=total,
+                    active_child_id=None,
+                    child_progress=None,
+                    child_status=None,
+                    finished_at=datetime.utcnow().isoformat() + "Z",
+                )
+                _log_to_audit("pipeline_completed", "system", {"pipeline_id": pipeline_id})
+            except JobCancelled as e:
+                set_job_state(pipeline_id, status="cancelled", active_child_id=None, finished_at=datetime.utcnow().isoformat() + "Z")
+                _write_log(lf, "\n" + "=" * 70)
+                _write_log(lf, "PIPELINE CANCELLED")
+                _write_log(lf, "=" * 70)
+                _write_log(lf, str(e))
+                _log_to_audit("pipeline_cancelled", "system", {"pipeline_id": pipeline_id})
 
     threading.Thread(target=_task).start()
     return pipeline_id

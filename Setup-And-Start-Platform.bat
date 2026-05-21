@@ -42,7 +42,7 @@ if errorlevel 1 (
 )
 
 if "%DATABASE_URL%"=="" (
-  set "DATABASE_URL=postgresql://tb:tb@localhost:5433/tb_surveillance"
+  set "DATABASE_URL=postgresql://tb:tb@localhost/tb_surveillance"
 )
 
 echo [INFO] Launching backend and GUI in new windows ...

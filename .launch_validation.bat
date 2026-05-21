@@ -1,6 +1,6 @@
 @echo off
 setlocal enabledelayedexpansion
-set DATABASE_URL=postgresql://tb:tb@localhost:5433/tb_surveillance
+set DATABASE_URL=postgresql://tb:tb@localhost/tb_surveillance
 set TBPROFILER_WSL_ENV=tbtools
 set TBPROFILER_WSL_FALLBACK=1
 set TBPROFILER_DOCKER_FALLBACK=1

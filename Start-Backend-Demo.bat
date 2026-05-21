@@ -30,7 +30,7 @@ if not exist ".venv\Scripts\python.exe" (
 )
 
 if "%DATABASE_URL%"=="" (
-  set "DATABASE_URL=postgresql://tb:tb@localhost:5433/tb_surveillance"
+  set "DATABASE_URL=postgresql://tb:tb@localhost/tb_surveillance"
 )
 
 set "TB_ENABLE_SYNTHETIC_SEEDING=1"

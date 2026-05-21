@@ -760,12 +760,19 @@ async function advancedSearch(){
 			html+='<table class="data-table">';
 			html+='<tr><th>Case ID</th><th>Date</th><th>Region</th><th>Lineage</th><th>Cluster</th><th>Action</th></tr>';
 			for(const c of data.cases){
-				html+=`<tr><td>${escapeHtml(c.case_id)}</td><td>${escapeHtml(c.specimen_date)}</td><td>${escapeHtml(c.region)}</td><td>${escapeHtml(c.lineage)}</td><td>${escapeHtml(c.cluster_id||'-')}</td><td><button type="button" class="mini-btn" onclick="loadCaseHistory(${escapeAttr(JSON.stringify(c.case_id||''))})">View history</button> <button type="button" class="mini-btn" onclick="generateCaseReport(${escapeAttr(JSON.stringify(c.case_id||''))})">Report</button></td></tr>`;
+				const rowCaseId=String(c.case_id||'');
+				html+=`<tr><td>${escapeHtml(c.case_id)}</td><td>${escapeHtml(c.specimen_date)}</td><td>${escapeHtml(c.region)}</td><td>${escapeHtml(c.lineage)}</td><td>${escapeHtml(c.cluster_id||'-')}</td><td><button type="button" class="mini-btn js-case-history-btn" data-case-id="${escapeAttr(rowCaseId)}">View history</button> <button type="button" class="mini-btn js-case-report-btn" data-case-id="${escapeAttr(rowCaseId)}">Report</button></td></tr>`;
 			}
 			html+='</table>';
 		}
 		html+='</div>';
 		box.innerHTML=html;
+		box.querySelectorAll('.js-case-history-btn').forEach(btn=>{
+			btn.addEventListener('click',()=>loadCaseHistory(btn.dataset.caseId||''));
+		});
+		box.querySelectorAll('.js-case-report-btn').forEach(btn=>{
+			btn.addEventListener('click',()=>generateCaseReport(btn.dataset.caseId||''));
+		});
 	}catch(e){
 		box.textContent=`Search failed: ${e}`;
 	}

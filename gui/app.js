@@ -2274,7 +2274,13 @@ async function loadFullKpis(){
 
 async function loadOutbreakerStatus(){
 	const box=document.getElementById('outbreakerStatusView');
+	const btn=document.getElementById('loadOutbreakerStatusBtn');
 	if(!box) return;
+	if(btn){
+		btn.disabled=true;
+		btn.dataset.originalLabel=btn.dataset.originalLabel||btn.textContent||'Load outbreaker status';
+		btn.textContent='Loading outbreaker status...';
+	}
 	box.textContent='Loading outbreaker status...';
 	try{
 		let apiBase=API;
@@ -2287,9 +2293,15 @@ async function loadOutbreakerStatus(){
 			apiBase=alternateApiBase;
 			API=alternateApiBase;
 		}
-		box.innerHTML=`<div class="kpi-strip">Cases export: ${d.cases_export?'available':'missing'} | DNA export: ${d.dna_export?'available':'missing'} | Results RDS: ${d.results_rds?'available':'missing'} | Provenance: ${escapeHtml(d.provenance||'unknown')} | Mock: ${escapeHtml(d.is_mock)} | API: ${escapeHtml(apiBase)}</div>`;
+		const checkedAt=new Date().toLocaleString();
+		box.innerHTML=`<div class="kpi-strip">Cases export: ${d.cases_export?'available':'missing'} | DNA export: ${d.dna_export?'available':'missing'} | Results RDS: ${d.results_rds?'available':'missing'} | Provenance: ${escapeHtml(d.provenance||'unknown')} | Mock: ${escapeHtml(d.is_mock)} | API: ${escapeHtml(apiBase)} | Last checked: ${escapeHtml(checkedAt)}</div>`;
 	}catch(e){
 		box.textContent='Failed to load outbreaker status: '+e;
+	}finally{
+		if(btn){
+			btn.textContent=btn.dataset.originalLabel||'Load outbreaker status';
+			btn.disabled=false;
+		}
 	}
 }
 

@@ -780,6 +780,87 @@ def _generate_resistance_validation_artifact(catalogue: str | None = None) -> di
     return payload
 
 
+def normalise_tb_lineage(value: object) -> str | None:
+    if value is None:
+        return None
+
+    raw = str(value).strip()
+    if not raw:
+        return None
+
+    compact = raw.lower().replace(" ", "").replace("_", "").replace("-", "")
+
+    mapping = {
+        "1": "L1",
+        "lineage1": "L1",
+        "l1": "L1",
+        "2": "L2",
+        "lineage2": "L2",
+        "l2": "L2",
+        "3": "L3",
+        "lineage3": "L3",
+        "l3": "L3",
+        "4": "L4",
+        "lineage4": "L4",
+        "l4": "L4",
+        "5": "L5",
+        "lineage5": "L5",
+        "l5": "L5",
+        "6": "L6",
+        "lineage6": "L6",
+        "l6": "L6",
+        "7": "L7",
+        "lineage7": "L7",
+        "l7": "L7",
+        "8": "L8",
+        "lineage8": "L8",
+        "l8": "L8",
+        "9": "L9",
+        "lineage9": "L9",
+        "l9": "L9",
+    }
+
+    return mapping.get(compact, raw)
+
+
+def _normalise_tb_sublineage(value: object) -> str | None:
+    if value is None:
+        return None
+
+    raw = str(value).strip()
+    if not raw:
+        return None
+
+    # Keep full specificity while canonicalising the major lineage prefix.
+    parts = raw.split(".")
+    major = normalise_tb_lineage(parts[0])
+    if major and len(parts) > 1:
+        suffix = ".".join(part.strip() for part in parts[1:] if str(part).strip())
+        return f"{major}.{suffix}" if suffix else major
+    return raw
+
+
+def _split_lineage_and_sublineage(
+    lineage_value: str | None,
+    sublineage_value: str | None,
+) -> tuple[str | None, str | None]:
+    lineage_norm = normalise_tb_lineage(lineage_value)
+    sublineage_norm = _normalise_tb_sublineage(sublineage_value)
+
+    if lineage_value is not None and "." in str(lineage_value):
+        major_raw = str(lineage_value).split(".", 1)[0]
+        major_norm = normalise_tb_lineage(major_raw)
+        if major_norm is not None:
+            lineage_norm = major_norm
+
+    # If sublineage was not provided but lineage includes a finer label,
+    # preserve that full label as sublineage while storing the major lineage.
+    if sublineage_norm is None and lineage_value is not None and "." in str(lineage_value):
+        sublineage_norm = _normalise_tb_sublineage(lineage_value)
+
+    return lineage_norm, sublineage_norm
+
+
 def _extract_lineage_and_resistance(result_json: Path) -> dict[str, Any]:
     payload = json.loads(result_json.read_text(encoding="utf-8"))
 
@@ -833,6 +914,12 @@ def _extract_lineage_and_resistance(result_json: Path) -> dict[str, Any]:
     else:
         lineage_value = str(lineage)
 
+    lineage_value = normalise_tb_lineage(lineage_value)
+    lineage_value, sublineage_value = _split_lineage_and_sublineage(
+        lineage_value,
+        str(sublineage) if sublineage is not None else None,
+    )
+
     resistant_drugs: set[str] = set()
     if isinstance(resistance_mutations, list):
         for item in resistance_mutations:
@@ -860,7 +947,7 @@ def _extract_lineage_and_resistance(result_json: Path) -> dict[str, Any]:
 
     return {
         "lineage": lineage_value,
-        "sublineage": str(sublineage) if sublineage is not None else None,
+        "sublineage": sublineage_value,
         "resistance_mutations": resistance_mutations,
         "predicted_drug_resistance": dr_payload,
         "confidence_score": _to_float(str(confidence)) if confidence is not None else None,
@@ -1276,7 +1363,7 @@ def _extract_mykrobe_results(result_json: Path) -> dict[str, Any]:
     if lineage_dict:
         # Pick the lineage with highest percent_coverage
         best = max(lineage_dict.items(), key=lambda kv: kv[1].get("percent_coverage", 0) if isinstance(kv[1], dict) else 0)
-        lineage_value: str | None = str(best[0])
+        lineage_value: str | None = normalise_tb_lineage(str(best[0]))
     else:
         lineage_value = None
 
@@ -1522,7 +1609,7 @@ def _import_calls_csv(path: Path) -> dict[str, Any]:
                     warnings.append(f"row {index}: sample_id not found in cases ({sample_id})")
                     continue
 
-                lineage = (row.get("lineage") or "").strip() or None
+                lineage = normalise_tb_lineage((row.get("lineage") or "").strip() or None)
                 resistance_obj = _parse_resistance(row.get("predicted_drug_resistance") or "")
                 confidence_score = _to_float(row.get("confidence_score") or "")
                 interpretation_summary = (row.get("interpretation_summary") or "").strip() or None

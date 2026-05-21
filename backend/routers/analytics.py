@@ -154,6 +154,8 @@ def _load_transmission_edges() -> list[dict]:
             "target": tgt,
             "posterior": _float_or_default(edge.get("probability"), 0.0),
             "confidence": str(edge.get("confidence") or "unknown"),
+            "posterior_reliability": str(edge.get("posterior_reliability") or net.get("posterior_reliability_status") or "unknown"),
+            "posterior_reliability_reasons": net.get("posterior_reliability_reasons") or [],
         })
     if normalised:
         return normalised
@@ -172,6 +174,8 @@ def _load_transmission_edges() -> list[dict]:
                 "target": tgt,
                 "posterior": _float_or_default(pair.get("posterior_probability"), 0.0),
                 "confidence": str(pair.get("confidence") or pair.get("confidence_code") or "unknown"),
+                "posterior_reliability": "unknown",
+                "posterior_reliability_reasons": [],
             }
             existing = fallback_edges.get(key)
             if not existing or candidate["posterior"] > existing["posterior"]:
@@ -2468,6 +2472,8 @@ def genomic_vs_epi(
             "pair": f"{src[:8]} -> {tgt[:8]}",
             "posterior": posterior,
             "confidence": str(e.get("confidence") or "unknown"),
+            "posterior_reliability": str(e.get("posterior_reliability") or "unknown"),
+            "posterior_reliability_reasons": e.get("posterior_reliability_reasons") or [],
             "snp_distance": snp,
             "genomic_supported": genomic_supported,
             "epi_supported": epi_supported,
@@ -2483,6 +2489,11 @@ def genomic_vs_epi(
     }
 
     compared.sort(key=lambda x: (-x["posterior"], x["pair"]))
+    reliability_reasons = []
+    for row in compared:
+        for reason in row.get("posterior_reliability_reasons") or []:
+            if reason not in reliability_reasons:
+                reliability_reasons.append(reason)
     return {
         "parameters": {
             "snp_threshold": snp_threshold,
@@ -2494,6 +2505,11 @@ def genomic_vs_epi(
         "notes": [
             "Epi support here is heuristic: same region and specimen dates within configured window.",
             "Genomic support requires available pairwise sequence distance below configured SNP threshold.",
+            *(
+                [f"Outbreaker posterior confidence is not assessable: {', '.join(reliability_reasons)}."]
+                if any(row.get("confidence") == "not_assessable" for row in compared) and reliability_reasons
+                else []
+            ),
         ],
         **_validation_notice(),
     }

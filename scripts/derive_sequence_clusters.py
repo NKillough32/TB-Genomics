@@ -13,7 +13,10 @@ from sqlalchemy import text
 
 from backend.database import SessionLocal
 from backend.snp_validation import validated_snp_distance
-from scripts.runtime_paths import EXPORTS
+try:
+    from scripts.runtime_paths import EXPORTS
+except ModuleNotFoundError:
+    from runtime_paths import EXPORTS
 
 
 def _snp_distance(seq_a: str, seq_b: str) -> tuple[int, int, int, str]:

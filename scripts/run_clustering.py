@@ -10,7 +10,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from sqlalchemy import text
 
 from backend.database import SessionLocal
-from scripts.runtime_paths import EXPORTS
+try:
+    from scripts.runtime_paths import EXPORTS
+except ModuleNotFoundError:
+    from runtime_paths import EXPORTS
 
 
 def _write_json_with_fallback(preferred_path: str, payload: dict) -> str:

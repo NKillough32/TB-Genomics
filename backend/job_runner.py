@@ -173,6 +173,35 @@ def _run_process(job_id: str, args: list[str], *, stdout, stderr, cwd: str, time
             JOB_PROCESSES.pop(job_id, None)
 
 
+def _outbreaker_summary(project_root: str) -> dict:
+    path = os.path.join(project_root, "exports", "outbreaker_summary.json")
+    if os.getenv("TB_EXPORTS_DIR", "").strip():
+        path = os.path.join(os.getenv("TB_EXPORTS_DIR", "").strip(), "outbreaker_summary.json")
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+        return payload if isinstance(payload, dict) else {}
+    except Exception:
+        return {}
+
+
+def _outbreaker_posterior_reliable(project_root: str) -> bool:
+    return bool(_outbreaker_summary(project_root).get("posterior_reliable"))
+
+
+def _run_outbreaker_r(job_id: str, rscript_path: str, project_root: str, lf, env: dict, timeout: int) -> subprocess.CompletedProcess:
+    returncode = _run_process(
+        job_id,
+        [rscript_path, "outbreaker2/run_outbreaker2.R"],
+        stdout=lf,
+        stderr=subprocess.STDOUT,
+        cwd=project_root,
+        timeout=timeout,
+        env=env,
+    )
+    return subprocess.CompletedProcess([rscript_path, "outbreaker2/run_outbreaker2.R"], returncode)
+
+
 def run_job(job_name):
     if job_name not in ALLOWED_JOBS:
         return None
@@ -224,16 +253,7 @@ def run_job(job_name):
                     if rscript_path:
                         result = None
                         try:
-                            returncode = _run_process(
-                                job_id,
-                                [rscript_path, "outbreaker2/run_outbreaker2.R"],
-                                stdout=lf,
-                                stderr=subprocess.STDOUT,
-                                cwd=project_root,
-                                timeout=outbreaker_timeout,
-                                env=child_env,
-                            )
-                            result = subprocess.CompletedProcess([rscript_path, "outbreaker2/run_outbreaker2.R"], returncode)
+                            result = _run_outbreaker_r(job_id, rscript_path, project_root, lf, child_env, outbreaker_timeout)
                         except subprocess.TimeoutExpired:
                             if allow_mock_fallback:
                                 use_mock_fallback = True
@@ -248,6 +268,28 @@ def run_job(job_name):
                                 _write_log(lf, f"R execution failed with code {result.returncode}, falling back to mock report generator")
                             else:
                                 raise Exception(f"R outbreaker2 execution failed with code {result.returncode} and mock fallback is disabled")
+                        auto_extend = os.getenv("TB_OUTBREAKER_AUTO_EXTEND", "1") == "1"
+                        if result is not None and result.returncode == 0 and auto_extend and not _outbreaker_posterior_reliable(project_root):
+                            summary = _outbreaker_summary(project_root)
+                            _write_log(
+                                lf,
+                                "Posterior reliability thresholds not met after initial outbreaker2 run: "
+                                + ", ".join(str(x) for x in summary.get("posterior_reliability_reasons", [])),
+                            )
+                            extended_env = child_env.copy()
+                            extended_env["TB_OUTBREAKER_ITER"] = os.getenv("TB_OUTBREAKER_RELIABLE_ITER", "250000")
+                            extended_env["TB_OUTBREAKER_BURNIN"] = os.getenv("TB_OUTBREAKER_RELIABLE_BURNIN", "50000")
+                            extended_env["TB_OUTBREAKER_THIN"] = os.getenv("TB_OUTBREAKER_RELIABLE_THIN", extended_env.get("TB_OUTBREAKER_THIN", "10"))
+                            _write_log(
+                                lf,
+                                "Auto-extending outbreaker2 run for posterior reliability: "
+                                f"iter={extended_env['TB_OUTBREAKER_ITER']}, "
+                                f"burnin={extended_env['TB_OUTBREAKER_BURNIN']}, "
+                                f"thin={extended_env['TB_OUTBREAKER_THIN']}",
+                            )
+                            result = _run_outbreaker_r(job_id, rscript_path, project_root, lf, extended_env, outbreaker_timeout)
+                            if result.returncode != 0:
+                                raise Exception(f"Extended R outbreaker2 execution failed with code {result.returncode}")
                     else:
                         if allow_mock_fallback:
                             use_mock_fallback = True

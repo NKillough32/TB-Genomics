@@ -2155,6 +2155,10 @@ async function loadGenomicVsEpiView(){
 		const params=d.parameters||{};
 		html+=`<p class="hint">SNP threshold: ${escapeHtml(params.snp_threshold??p.snpThreshold)} | Epi window: ${escapeHtml(params.epi_window_days??p.epiWindowDays)} days | Posterior min: ${escapeHtml(params.posterior_min??p.posteriorMin)}</p>`;
 		const pairs=d.pairs||[];
+		const reliabilityNotes=(d.notes||[]).filter(note=>String(note).toLowerCase().includes('not assessable'));
+		if(reliabilityNotes.length){
+			html+=`<div class="callout callout-warn"><strong>Posterior confidence not assessable.</strong> ${escapeHtml(reliabilityNotes.join(' '))}</div>`;
+		}
 		if(!pairs.length){
 			html+='<p class="hint">No transmission pairs available. Run Outbreaker2 analysis first.</p>';
 		}else{
@@ -2165,7 +2169,7 @@ async function loadGenomicVsEpiView(){
 				html+=`<tr>
 					<td>${escapeHtml(row.pair||'')}</td>
 					<td>${escapeHtml((row.posterior??'').toString())}</td>
-					<td>${escapeHtml(row.confidence||'')}</td>
+					<td>${escapeHtml(row.confidence==='not_assessable'?'not assessable':(row.confidence||''))}</td>
 					<td>${row.snp_distance!=null?escapeHtml(row.snp_distance.toString()):'n/a'}</td>
 					<td>${row.genomic_supported?'Yes':'No'}</td>
 					<td>${row.epi_supported?'Yes':'No'}</td>

@@ -19,7 +19,10 @@ from matplotlib.patches import Patch
 from scipy.cluster.hierarchy import dendrogram, linkage
 from sqlalchemy import text
 from backend.database import SessionLocal
-from scripts.runtime_paths import EXPORTS
+try:
+    from scripts.runtime_paths import EXPORTS
+except ModuleNotFoundError:
+    from runtime_paths import EXPORTS
 
 plt.rcParams.update({
     "figure.facecolor": "white",

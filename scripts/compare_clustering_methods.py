@@ -15,7 +15,10 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from itertools import combinations
 
-from scripts.runtime_paths import EXPORTS
+try:
+    from scripts.runtime_paths import EXPORTS
+except ModuleNotFoundError:
+    from runtime_paths import EXPORTS
 
 
 def _load_sequence_assignments(path: str):

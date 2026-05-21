@@ -9,7 +9,10 @@ import os
 from datetime import datetime
 import sys
 
-from scripts.runtime_paths import EXPORTS
+try:
+    from scripts.runtime_paths import EXPORTS
+except ModuleNotFoundError:
+    from runtime_paths import EXPORTS
 
 
 MOCK_MCMC_ITERATIONS = 50000

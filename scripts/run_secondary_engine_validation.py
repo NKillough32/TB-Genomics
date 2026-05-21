@@ -15,7 +15,10 @@ import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
-from scripts.runtime_paths import EXPORTS
+try:
+    from scripts.runtime_paths import EXPORTS
+except ModuleNotFoundError:
+    from runtime_paths import EXPORTS
 
 ROOT = Path(__file__).resolve().parent.parent
 R_SCRIPT = ROOT / "outbreaker2" / "run_secondary_engines.R"

@@ -13,7 +13,10 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from backend.database import SessionLocal
 from backend.synthesis.transmission_synthesis import build_transmission_synthesis
-from scripts.runtime_paths import EXPORTS
+try:
+    from scripts.runtime_paths import EXPORTS
+except ModuleNotFoundError:
+    from runtime_paths import EXPORTS
 
 
 EXPORT_PATH = EXPORTS / "synthesis_output.json"

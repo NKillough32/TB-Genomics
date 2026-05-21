@@ -11,7 +11,10 @@ from sqlalchemy import text
 
 from backend.database import SessionLocal
 from backend.data_safety import get_data_safety_status
-from scripts.runtime_paths import EXPORTS
+try:
+    from scripts.runtime_paths import EXPORTS
+except ModuleNotFoundError:
+    from runtime_paths import EXPORTS
 
 
 def generate_consensus_sequence(case_id: str, length: int = 2000) -> str:

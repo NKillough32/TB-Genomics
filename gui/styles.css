@@ -517,6 +517,11 @@ input[type="file"] {
 	align-items: center;
 }
 
+.card > .hint {
+	max-width: 86ch;
+	overflow-wrap: anywhere;
+}
+
 .btn-danger {
 	background: #b91c1c;
 	color: #fff;
@@ -552,25 +557,52 @@ input[type="file"] {
 
 .job-progress-details {
 	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+	grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
 	gap: 0.5rem;
 	margin-top: 0.65rem;
+	align-items: stretch;
 }
 
-.job-progress-details div {
+.job-progress-metric {
+	display: grid;
+	grid-template-rows: auto 1fr;
+	gap: 0.2rem;
 	background: #f8fbfd;
 	border: 1px solid #dbe4ed;
 	border-radius: 8px;
 	padding: 0.55rem 0.65rem;
+	min-width: 0;
 }
 
-.job-progress-details strong {
+.job-progress-metric strong {
 	display: block;
 	font-size: 0.72rem;
 	text-transform: uppercase;
 	color: var(--muted);
 	letter-spacing: 0.04em;
-	margin-bottom: 0.2rem;
+	line-height: 1.25;
+}
+
+.job-progress-metric span {
+	display: block;
+	color: #132237;
+	font-size: 0.95rem;
+	font-weight: 750;
+	line-height: 1.25;
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+@media (max-width: 620px) {
+	.job-progress-details {
+		grid-template-columns: 1fr 1fr;
+	}
+}
+
+@media (max-width: 430px) {
+	.job-progress-details {
+		grid-template-columns: 1fr;
+	}
 }
 
 .workflow-status-header {

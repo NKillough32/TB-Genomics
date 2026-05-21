@@ -251,11 +251,26 @@ function renderJobProgress(d, steps=[]){
 	const elapsed = fmtDuration(secondsSince(d.started_at || d.created_at));
 	const child = d.active_child_id ? `${d.child_status || 'running'}${d.child_progress != null ? ` (${d.child_progress}%)` : ''}` : 'none';
 	document.getElementById('jobProgressDetails').innerHTML = `
-		<div><strong>Status</strong><span>${escapeHtml(d.status || 'unknown')}</span></div>
-		<div><strong>Overall</strong><span>${progress}%</span></div>
-		<div><strong>Completed</strong><span>${escapeHtml(String(d.completed_steps ?? 0))}/${escapeHtml(String(total || '-'))}</span></div>
-		<div><strong>Current child</strong><span>${escapeHtml(child)}</span></div>
-		<div><strong>Elapsed</strong><span>${escapeHtml(elapsed)}</span></div>
+		<div class="job-progress-metric">
+			<strong>Status</strong>
+			<span>${escapeHtml(d.status || 'unknown')}</span>
+		</div>
+		<div class="job-progress-metric">
+			<strong>Overall</strong>
+			<span>${progress}%</span>
+		</div>
+		<div class="job-progress-metric">
+			<strong>Completed</strong>
+			<span>${escapeHtml(String(d.completed_steps ?? 0))}/${escapeHtml(String(total || '-'))}</span>
+		</div>
+		<div class="job-progress-metric">
+			<strong>Current child</strong>
+			<span>${escapeHtml(child)}</span>
+		</div>
+		<div class="job-progress-metric">
+			<strong>Elapsed</strong>
+			<span>${escapeHtml(elapsed)}</span>
+		</div>
 	`;
 
 	document.getElementById('jobStatus').textContent =

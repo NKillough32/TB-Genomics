@@ -44,6 +44,17 @@ def _fmt_date(value: Any) -> str:
     return "n/a" if value in (None, "") else str(value)
 
 
+def _first_present(*values: Any, default: Any = None) -> Any:
+    for value in values:
+        if value not in (None, ""):
+            return value
+    return default
+
+
+def _as_mapping(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
 def _read_json_export(filename: str) -> dict[str, Any]:
     path = _export_path(filename)
     try:
@@ -102,34 +113,122 @@ def _recent_investigation_actions(db: Session, limit: int = 20) -> list[dict[str
 
 
 def _analysis_provenance(db: Session, limit: int = 8) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
     try:
         rows = db.execute(
             text(
                 """
                 SELECT sample_id::text, pipeline_name, pipeline_version,
-                       reference_genome, resistance_catalogue, analysis_date
+                       reference_genome, software_versions, parameters, generated_at
                 FROM analysis_provenance
-                ORDER BY analysis_date DESC NULLS LAST
+                ORDER BY generated_at DESC NULLS LAST
                 LIMIT :limit
                 """
             ),
             {"limit": limit},
         ).mappings().all()
     except Exception:
-        return []
+        rows = []
 
-    return [
-        {
-            "sample_id": str(row["sample_id"]),
-            "sample_short": str(row["sample_id"])[:8],
-            "pipeline_name": row["pipeline_name"],
-            "pipeline_version": row["pipeline_version"],
-            "reference_genome": row["reference_genome"],
-            "resistance_catalogue": row["resistance_catalogue"],
-            "analysis_date": row["analysis_date"].isoformat() if row["analysis_date"] else None,
-        }
-        for row in rows
-    ]
+    for row in rows:
+        parameters = _as_mapping(row["parameters"])
+        software_versions = _as_mapping(row["software_versions"])
+        generated_at = row["generated_at"]
+        sample_id = str(row["sample_id"]) if row["sample_id"] else "run"
+        items.append(
+            {
+                "sample_id": sample_id,
+                "sample_short": sample_id[:8],
+                "pipeline_name": row["pipeline_name"],
+                "pipeline_version": row["pipeline_version"],
+                "reference_genome": row["reference_genome"],
+                "resistance_catalogue": _first_present(
+                    parameters.get("resistance_catalogue"),
+                    parameters.get("catalogue_version"),
+                    software_versions.get("resistance_catalogue"),
+                    software_versions.get("catalogue_version"),
+                    default="n/a",
+                ),
+                "analysis_date": generated_at.isoformat() if generated_at else None,
+                "source": "database",
+            }
+        )
+    return (items + _artifact_provenance_rows())[:limit]
+
+
+def _artifact_provenance_rows() -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+
+    outbreaker = _read_json_export("outbreaker_summary.json")
+    if outbreaker:
+        iteration = _as_mapping(outbreaker.get("mcmc_iteration_config"))
+        rows.append(
+            {
+                "sample_id": "run",
+                "sample_short": "run",
+                "pipeline_name": outbreaker.get("analysis_engine", "outbreaker2"),
+                "pipeline_version": f"{iteration.get('n_iter_total', 'n/a')} iterations",
+                "reference_genome": "transmission posterior",
+                "resistance_catalogue": "n/a",
+                "analysis_date": outbreaker.get("generated_at"),
+                "source": "artifact",
+            }
+        )
+
+    lineage = _read_json_export("lineage_dr_validation.json")
+    if lineage:
+        resistance_block = _as_mapping(lineage.get("resistance_validation"))
+        selected_fastas = _as_mapping(lineage.get("inputs")).get("selected_fasta_files") or []
+        rows.append(
+            {
+                "sample_id": "run",
+                "sample_short": "run",
+                "pipeline_name": "lineage/dr validation",
+                "pipeline_version": lineage.get("scaffold_version", lineage.get("status", "n/a")),
+                "reference_genome": (
+                    os.path.basename(selected_fastas[0]) if selected_fastas else "sequence exports"
+                ),
+                "resistance_catalogue": _first_present(
+                    resistance_block.get("catalogue_version"),
+                    _read_json_export("resistance_validation.json").get("catalogue_version"),
+                    default="n/a",
+                ),
+                "analysis_date": lineage.get("generated_at"),
+                "source": "artifact",
+            }
+        )
+
+    resistance = _read_json_export("resistance_validation.json")
+    if resistance:
+        rows.append(
+            {
+                "sample_id": "run",
+                "sample_short": "run",
+                "pipeline_name": "resistance validation",
+                "pipeline_version": resistance.get("pipeline_validation_status", resistance.get("status", "n/a")),
+                "reference_genome": resistance.get("validation_scope", "local mapping screen"),
+                "resistance_catalogue": resistance.get("catalogue_version", "n/a"),
+                "analysis_date": resistance.get("generated_at"),
+                "source": "artifact",
+            }
+        )
+
+    synthesis = _read_json_export("synthesis_output.json")
+    if synthesis:
+        rows.append(
+            {
+                "sample_id": "run",
+                "sample_short": "run",
+                "pipeline_name": "transmission synthesis",
+                "pipeline_version": f"format {synthesis.get('format_version', 'n/a')}",
+                "reference_genome": "cluster and transmission exports",
+                "resistance_catalogue": "n/a",
+                "analysis_date": synthesis.get("generated_at"),
+                "source": "artifact",
+            }
+        )
+
+    return rows
 
 
 def _lineage_dr_summary() -> dict[str, Any]:
@@ -137,16 +236,89 @@ def _lineage_dr_summary() -> dict[str, Any]:
     if not payload:
         return {"status": "not_available", "message": "Lineage/DR validation artifact not found."}
 
-    concordance = payload.get("dr_concordance") or {}
-    summary = payload.get("summary") or {}
+    resistance_payload = _read_json_export("resistance_validation.json")
+    concordance = _as_mapping(payload.get("dr_concordance"))
+    resistance_block = _as_mapping(payload.get("resistance_validation"))
+    resistance_summary = _as_mapping(
+        _first_present(
+            resistance_block.get("summary"),
+            resistance_payload.get("summary"),
+            default={},
+        )
+    )
+    tbprofiler_run = _as_mapping(payload.get("tbprofiler_run"))
+    mykrobe_run = _as_mapping(payload.get("mykrobe_run"))
+    tbprofiler_import = _as_mapping(payload.get("tbprofiler_db_import"))
+    mykrobe_import = _as_mapping(payload.get("mykrobe_db_import"))
+    db_imported_rows = (tbprofiler_import.get("imported_rows") or 0) + (
+        mykrobe_import.get("imported_rows") or 0
+    )
+
     return {
         "status": payload.get("status", "available"),
-        "validated_records": summary.get("validated_records"),
-        "suppressed_calls": summary.get("suppressed_calls"),
-        "discordant_samples": concordance.get("discordant_samples"),
-        "compared_samples": concordance.get("compared_samples"),
+        "confidence": payload.get("confidence", "n/a"),
+        "interpretation_blocking": payload.get("interpretation_blocking"),
+        "validated_calls": resistance_summary.get("validated_calls"),
+        "total_mutation_calls": resistance_summary.get("total_mutation_calls"),
+        "unusual_gene_drug_mapping_calls": resistance_summary.get("unusual_gene_drug_mapping_calls"),
+        "suppressed_calls": resistance_summary.get("suppressed_calls"),
+        "discordant_samples": concordance.get("discordant_sample_count"),
+        "compared_samples": concordance.get("samples_compared"),
+        "comparable_drug_calls": concordance.get("comparable_drug_calls"),
+        "one_tool_no_call_sample_count": concordance.get("one_tool_no_call_sample_count"),
+        "concordance_interpretable": concordance.get("concordance_interpretable"),
+        "tbprofiler_run": (
+            f"{tbprofiler_run.get('status', 'n/a')} "
+            f"({tbprofiler_run.get('successful_samples', 0)}/"
+            f"{tbprofiler_run.get('attempted_samples', 0)})"
+        ),
+        "mykrobe_run": (
+            f"{mykrobe_run.get('status', 'n/a')} "
+            f"({mykrobe_run.get('successful_samples', 0)}/"
+            f"{mykrobe_run.get('attempted_samples', 0)})"
+        ),
+        "tbprofiler_runner": tbprofiler_run.get("runner", "n/a"),
+        "mykrobe_runner": mykrobe_run.get("runner", "n/a"),
+        "db_imported_rows": db_imported_rows,
+        "catalogue_version": resistance_payload.get("catalogue_version", "n/a"),
+        "pipeline_validation_status": resistance_payload.get(
+            "pipeline_validation_status",
+            resistance_block.get("pipeline_validation_status", "n/a"),
+        ),
+        "warnings": list(payload.get("warnings") or []),
+        "limitation_codes": list(payload.get("limitation_codes") or []),
         "artifact_status": payload.get("status", "available"),
     }
+
+
+def _suggested_investigation_actions(
+    cluster_dossiers: list[dict[str, Any]], immediate_actions: list[str]
+) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    for action in immediate_actions:
+        items.append(
+            {
+                "cluster": "All",
+                "band": "report",
+                "priority": "",
+                "action": action,
+                "source": "executive summary",
+            }
+        )
+    for dossier in cluster_dossiers:
+        summary = dossier.get("summary") or {}
+        for action in dossier.get("recommended_actions") or []:
+            items.append(
+                {
+                    "cluster": dossier.get("cluster_short")
+                    or str(dossier.get("cluster_id") or "")[:8],
+                    "band": summary.get("priority_band", ""),
+                    "priority": summary.get("priority_score", ""),
+                    "action": action,
+                    "source": "cluster synthesis",
+                }
+            )
+    return items[:20]
 
 
 def _synthesis_config(
@@ -280,6 +452,7 @@ def build_actionable_surveillance_report(
         "priority_clusters": ranked_clusters,
         "cluster_dossiers": cluster_dossiers,
         "investigation_activity": _recent_investigation_actions(db),
+        "suggested_investigation_actions": _suggested_investigation_actions(cluster_dossiers, immediate_actions),
         "lineage_dr_summary": _lineage_dr_summary(),
         "analysis_provenance": _analysis_provenance(db),
         "validation_status": risk_summary.get("validation_status", "heuristic_non_validated"),
@@ -348,6 +521,16 @@ def render_actionable_surveillance_report_html(report: dict[str, Any]) -> str:
         }
         for item in report.get("investigation_activity", [])
     ]
+    suggested_action_rows = [
+        {
+            "cluster": item.get("cluster"),
+            "band": item.get("band"),
+            "priority": item.get("priority"),
+            "action": item.get("action"),
+            "source": item.get("source"),
+        }
+        for item in report.get("suggested_investigation_actions", [])
+    ]
     provenance_rows = [
         {
             "sample": item.get("sample_short"),
@@ -356,9 +539,14 @@ def render_actionable_surveillance_report_html(report: dict[str, Any]) -> str:
             "reference": item.get("reference_genome"),
             "catalogue": item.get("resistance_catalogue"),
             "date": _fmt_date(item.get("analysis_date")),
+            "source": item.get("source", ""),
         }
         for item in report.get("analysis_provenance", [])
     ]
+    lineage_warning_parts = list(lineage.get("warnings") or [])
+    if lineage.get("limitation_codes"):
+        lineage_warning_parts.append("Limitations: " + ", ".join(lineage.get("limitation_codes") or []))
+    lineage_warning = " ".join(lineage_warning_parts)
 
     dossier_sections = []
     for dossier in report.get("cluster_dossiers", []):
@@ -493,16 +681,33 @@ ul{{margin:8px 0 0 20px;padding:0;}}
         ("Decision", "decision"),
         ("Actions", "actions"),
     ], "No investigation activity recorded.")}
+    <h3>Generated Action Plan</h3>
+    {_simple_table(suggested_action_rows, [
+        ("Cluster", "cluster"),
+        ("Band", "band"),
+        ("Priority", "priority"),
+        ("Action", "action"),
+        ("Source", "source"),
+    ], "No generated investigation actions available.")}
   </section>
 
   <section>
     <h2>Lineage And Drug Resistance</h2>
     <div class="grid">
       {_metric_card("Validation status", lineage.get("status", "not_available"))}
+      {_metric_card("Confidence", lineage.get("confidence", "n/a"), f"blocking={lineage.get('interpretation_blocking', 'n/a')}")}
       {_metric_card("Compared samples", lineage.get("compared_samples", "n/a"))}
+      {_metric_card("Comparable drug calls", lineage.get("comparable_drug_calls", "n/a"), f"interpretable={lineage.get('concordance_interpretable', 'n/a')}")}
       {_metric_card("Discordant samples", lineage.get("discordant_samples", "n/a"))}
       {_metric_card("Suppressed calls", lineage.get("suppressed_calls", "n/a"))}
+      {_metric_card("Validated calls", lineage.get("validated_calls", "n/a"), f"mutations={lineage.get('total_mutation_calls', 'n/a')}")}
+      {_metric_card("Unusual mappings", lineage.get("unusual_gene_drug_mapping_calls", "n/a"))}
+      {_metric_card("TBProfiler", lineage.get("tbprofiler_run", "n/a"), lineage.get("tbprofiler_runner", ""))}
+      {_metric_card("Mykrobe", lineage.get("mykrobe_run", "n/a"), lineage.get("mykrobe_runner", ""))}
+      {_metric_card("Imported DR rows", lineage.get("db_imported_rows", "n/a"))}
+      {_metric_card("Catalogue", lineage.get("catalogue_version", "n/a"), lineage.get("pipeline_validation_status", ""))}
     </div>
+    {f'<p class="warning"><strong>Lineage/DR limitation:</strong> {_h(lineage_warning)}</p>' if lineage_warning else ''}
   </section>
 
   <section>
@@ -514,6 +719,7 @@ ul{{margin:8px 0 0 20px;padding:0;}}
         ("Reference", "reference"),
         ("Catalogue", "catalogue"),
         ("Date", "date"),
+        ("Source", "source"),
     ], "No analysis provenance records available.")}
   </section>
 

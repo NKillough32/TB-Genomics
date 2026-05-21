@@ -1,6 +1,7 @@
 
 let API='http://localhost:8000';const API_FALLBACK='http://127.0.0.1:8010';let activeJob=null;
 let demoModeActive=sessionStorage.getItem('tb_demo_mode_active')==='1';
+let outbreakerStatusRefreshCount=0;
 
 function refreshDemoModeStatus(){
 	const status=document.getElementById('demoModeStatus');
@@ -2276,27 +2277,36 @@ async function loadOutbreakerStatus(){
 	const box=document.getElementById('outbreakerStatusView');
 	const btn=document.getElementById('loadOutbreakerStatusBtn');
 	if(!box) return;
+	outbreakerStatusRefreshCount+=1;
+	const refreshId=outbreakerStatusRefreshCount;
 	if(btn){
 		btn.disabled=true;
 		btn.dataset.originalLabel=btn.dataset.originalLabel||btn.textContent||'Load outbreaker status';
-		btn.textContent='Loading outbreaker status...';
+		btn.textContent=`Loading outbreaker status (#${refreshId})...`;
 	}
-	box.textContent='Loading outbreaker status...';
+	box.textContent=`Loading outbreaker status (request #${refreshId})...`;
 	try{
 		let apiBase=API;
 		let d;
+		const ts=Date.now();
 		try{
-			d=await apiJson(`${apiBase}/cases/outbreaker-status`);
+			d=await apiJson(`${apiBase}/cases/outbreaker-status?_ts=${encodeURIComponent(ts)}`);
 		}catch(firstError){
 			const alternateApiBase=(apiBase===API_FALLBACK)?'http://localhost:8000':API_FALLBACK;
-			d=await apiJson(`${alternateApiBase}/cases/outbreaker-status`);
+			d=await apiJson(`${alternateApiBase}/cases/outbreaker-status?_ts=${encodeURIComponent(ts)}`);
 			apiBase=alternateApiBase;
 			API=alternateApiBase;
 		}
-		const checkedAt=new Date().toLocaleString();
-		box.innerHTML=`<div class="kpi-strip">Cases export: ${d.cases_export?'available':'missing'} | DNA export: ${d.dna_export?'available':'missing'} | Results RDS: ${d.results_rds?'available':'missing'} | Provenance: ${escapeHtml(d.provenance||'unknown')} | Mock: ${escapeHtml(d.is_mock)} | API: ${escapeHtml(apiBase)} | Last checked: ${escapeHtml(checkedAt)}</div>`;
+		const checkedAtLocal=new Date().toLocaleString();
+		const checkedAtIso=new Date().toISOString();
+		const missing=(Array.isArray(d.missing_artifacts)?d.missing_artifacts:[]).map(v=>String(v));
+		const ready=('ready' in d)?Boolean(d.ready):(Boolean(d.cases_export)&&Boolean(d.dna_export)&&Boolean(d.results_rds));
+		const readinessLabel=ready?'READY':'NOT READY';
+		const summaryUpdated=d.summary_updated_at?`Summary updated: ${escapeHtml(String(d.summary_updated_at))}`:'Summary updated: unknown';
+		const missingLabel=missing.length?`Missing: ${escapeHtml(missing.join(', '))}`:'Missing: none';
+		box.innerHTML=`<div class="kpi-strip"><strong>Outbreaker readiness: ${escapeHtml(readinessLabel)}</strong> | Cases export: ${d.cases_export?'available':'missing'} | DNA export: ${d.dna_export?'available':'missing'} | Results RDS: ${d.results_rds?'available':'missing'} | Provenance: ${escapeHtml(d.provenance||'unknown')} | Mock: ${escapeHtml(d.is_mock)} | API: ${escapeHtml(apiBase)} | Last checked: ${escapeHtml(checkedAtLocal)} | Request #: ${escapeHtml(refreshId)}</div><p class="hint">${missingLabel} | ${summaryUpdated}</p><p class="hint">Refresh confirmation: request #${escapeHtml(refreshId)} completed at ${escapeHtml(checkedAtIso)}</p>`;
 	}catch(e){
-		box.textContent='Failed to load outbreaker status: '+e;
+		box.textContent=`Failed to load outbreaker status (request #${refreshId}): ${e}`;
 	}finally{
 		if(btn){
 			btn.textContent=btn.dataset.originalLabel||'Load outbreaker status';

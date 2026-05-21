@@ -1,5 +1,6 @@
 import json
 import os
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import text
@@ -438,6 +439,7 @@ def data_safety(db: Session = Depends(get_db)):
 def outbreaker_status():
     summary_path = _export_path("outbreaker_summary.json")
     provenance = None
+    summary_updated_at = None
     if os.path.exists(summary_path):
         try:
             with open(summary_path, encoding="utf-8") as f:
@@ -445,13 +447,30 @@ def outbreaker_status():
                 provenance = (summary or {}).get("data_provenance")
         except Exception:
             provenance = None
+        try:
+            summary_updated_at = datetime.fromtimestamp(
+                os.path.getmtime(summary_path),
+                tz=timezone.utc,
+            ).isoformat()
+        except Exception:
+            summary_updated_at = None
+
+    artifact_map = {
+        "cases_export": _export_path("cases.csv"),
+        "dna_export": _export_path("dna.fasta"),
+        "results_rds": _export_path("outbreaker2_results.rds"),
+    }
+    availability = {key: os.path.exists(path) for key, path in artifact_map.items()}
+    missing = [key for key, exists in availability.items() if not exists]
+    ready = all(availability.values())
 
     return {
-        "cases_export": os.path.exists(_export_path("cases.csv")),
-        "dna_export": os.path.exists(_export_path("dna.fasta")),
-        "results_rds": os.path.exists(_export_path("outbreaker2_results.rds")),
+        **availability,
+        "ready": ready,
+        "missing_artifacts": missing,
         "provenance": provenance,
         "is_mock": provenance == "mock",
+        "summary_updated_at": summary_updated_at,
     }
 
 

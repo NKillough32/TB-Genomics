@@ -1,5 +1,4 @@
-
-#!/usr/bin/env Rscript
+# !/usr/bin/env Rscript
 # TB Genomic Surveillance - Outbreaker2 Analysis Script
 
 tryCatch({

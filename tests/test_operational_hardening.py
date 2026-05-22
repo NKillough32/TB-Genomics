@@ -326,6 +326,9 @@ def test_orm_metadata_covers_schema_tables_for_alembic_autogenerate():
         "exposures",
         "case_location_events",
         "case_contact_links",
+        "resistance_calls",
+        "alerts",
+        "actions",
     }
 
     assert expected_tables.issubset(set(Base.metadata.tables))

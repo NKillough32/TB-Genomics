@@ -227,10 +227,19 @@ tryCatch({
     "TB_OUTBREAKER_INIT_REPORTING_PROBABILITY",
     0.05
   )
-  prior_pi <- cfg_num(
+  prior_pi_mean <- cfg_num(
     c("mcmc", "prior_reporting_probability"),
     "TB_OUTBREAKER_PRIOR_REPORTING_PROBABILITY",
     0.05
+  )
+  prior_pi_strength <- cfg_num(
+    c("mcmc", "prior_reporting_probability_strength"),
+    "TB_OUTBREAKER_PRIOR_REPORTING_PROBABILITY_STRENGTH",
+    20
+  )
+  prior_pi <- c(
+    max(0.001, prior_pi_mean * prior_pi_strength),
+    max(0.001, (1 - prior_pi_mean) * prior_pi_strength)
   )
   init_kappa <- cfg_num(c("mcmc", "init_unsampled_ancestors"), "TB_OUTBREAKER_INIT_KAPPA", 5)
   burnin_rows <- max(0L, as.integer(floor(burnin_iters / max(1L, thin_every))))
@@ -1080,7 +1089,9 @@ tryCatch({
       thin_every = thin_every,
       chains = n_chains,
       init_reporting_probability = init_pi,
-      prior_reporting_probability = prior_pi,
+      prior_reporting_probability = prior_pi_mean,
+      prior_reporting_probability_strength = prior_pi_strength,
+      prior_pi_beta_shape = as.list(round(prior_pi, 4)),
       reporting_probability_note = "outbreaker2 pi is the case reporting/sampling probability, not an importation probability",
       init_kappa = init_kappa
     ),

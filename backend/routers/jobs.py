@@ -23,6 +23,7 @@ PUBLIC_HEALTH_ACTION_JOBS = {
     "compare_clustering_methods",
     "run_clustering",
     "run_secondary_validation",
+    "generate_alerts",
 }
 
 @router.post("/run/{job_name}")
@@ -69,6 +70,7 @@ def last_run_times():
     artifacts = {
         "lineage_dr_validation": EXPORTS_DIR / "lineage_dr_validation.json",
         "sequence_clusters": EXPORTS_DIR / "sequence_clustering_summary.json",
+        "alerts": EXPORTS_DIR / "alert_generation_summary.json",
         "outbreaker2": EXPORTS_DIR / "outbreaker_summary.json",
         "cluster_comparison": EXPORTS_DIR / "cluster_method_comparison.json",
     }

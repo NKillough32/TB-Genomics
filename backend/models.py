@@ -243,3 +243,62 @@ class CasePairReview(Base):
     entered_in_error_reason = Column(String)
     reviewed_at = Column(TIMESTAMP)
 
+
+class ResistanceCall(Base):
+    __tablename__ = "resistance_calls"
+
+    call_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    sample_id = Column(UUID(as_uuid=True), ForeignKey("cases.pseudonymised_case_id"), nullable=False)
+    drug = Column(String, nullable=False)
+    gene = Column(String)
+    mutation = Column(String)
+    prediction = Column(String)
+    confidence = Column(Numeric)
+    depth = Column(Numeric)
+    alt_fraction = Column(Numeric)
+    lineage = Column(String)
+    source_tool = Column(String, nullable=False)
+    tool_version = Column(String)
+    database_version = Column(String)
+    source_path = Column(String)
+    raw_call = Column(JSONB, nullable=False)
+    created_at = Column(TIMESTAMP)
+
+
+class Alert(Base):
+    __tablename__ = "alerts"
+
+    alert_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    alert_type = Column(String, nullable=False)
+    severity = Column(String, nullable=False)
+    status = Column(String, nullable=False)
+    sample_id = Column(UUID(as_uuid=True), ForeignKey("cases.pseudonymised_case_id"))
+    cluster_id = Column(UUID(as_uuid=True), ForeignKey("clusters.cluster_id"))
+    title = Column(String, nullable=False)
+    description = Column(String)
+    evidence = Column(JSONB, nullable=False)
+    assigned_to = Column(String)
+    acknowledged_by = Column(String)
+    acknowledged_at = Column(TIMESTAMP)
+    resolved_by = Column(String)
+    resolved_at = Column(TIMESTAMP)
+    created_at = Column(TIMESTAMP)
+    updated_at = Column(TIMESTAMP)
+
+
+class Action(Base):
+    __tablename__ = "actions"
+
+    action_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    alert_id = Column(UUID(as_uuid=True), ForeignKey("alerts.alert_id"))
+    cluster_id = Column(UUID(as_uuid=True), ForeignKey("clusters.cluster_id"))
+    sample_id = Column(UUID(as_uuid=True), ForeignKey("cases.pseudonymised_case_id"))
+    action_type = Column(String, nullable=False)
+    status = Column(String, nullable=False)
+    owner = Column(String)
+    note = Column(String)
+    due_at = Column(TIMESTAMP)
+    completed_at = Column(TIMESTAMP)
+    created_by = Column(String)
+    created_at = Column(TIMESTAMP)
+    updated_at = Column(TIMESTAMP)

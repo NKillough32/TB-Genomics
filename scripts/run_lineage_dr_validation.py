@@ -45,6 +45,8 @@ RESISTANCE_VALIDATION_JSON = EXPORTS / "resistance_validation.json"
 MAX_FASTA_SAMPLES = 10
 
 from backend.database import SessionLocal
+from scripts.generate_alerts import generate_alerts
+from scripts.normalise_resistance import normalise_tbprofiler_json, upsert_resistance_calls
 
 # Set up logging - enable debug with TB_DEBUG_LINEAGE_DR=1
 _DEBUG = os.getenv("TB_DEBUG_LINEAGE_DR", "0") == "1"
@@ -1457,6 +1459,7 @@ def _import_mykrobe_results(result_json_paths: list[str]) -> dict[str, Any]:
             "status": "failed",
             "message": str(exc),
             "imported_rows": imported,
+            "resistance_call_rows": 0,
             "skipped_rows": skipped,
             "warnings": warnings[:25],
         }
@@ -1470,6 +1473,7 @@ def _import_tbprofiler_results(result_json_paths: list[str]) -> dict[str, Any]:
     skipped = 0
     warnings: list[str] = []
     sample_map = _load_sample_id_map()
+    normalized_calls: list[dict[str, Any]] = []
 
     try:
         for path_str in result_json_paths:
@@ -1483,6 +1487,8 @@ def _import_tbprofiler_results(result_json_paths: list[str]) -> dict[str, Any]:
                 continue
 
             fields = _extract_lineage_and_resistance(path)
+            tbprofiler_calls = normalise_tbprofiler_json(path, sample_id=case_sample_id)
+            normalized_calls.extend(tbprofiler_calls)
             db.execute(
                 text(
                     """
@@ -1529,11 +1535,13 @@ def _import_tbprofiler_results(result_json_paths: list[str]) -> dict[str, Any]:
             imported += 1
 
         db.commit()
+        resistance_call_import = upsert_resistance_calls(normalized_calls)
         status, message = _import_status("tb-profiler", imported, skipped)
         return {
             "status": status,
             "message": message,
             "imported_rows": imported,
+            "resistance_call_rows": resistance_call_import.get("imported_rows", 0),
             "skipped_rows": skipped,
             "warnings": warnings[:25],
         }
@@ -2090,6 +2098,11 @@ def main() -> None:
     if tbprofiler_run["status"] == "completed" and tbprofiler_run["output_jsons"]:
         tbprofiler_import = _import_tbprofiler_results(tbprofiler_run["output_jsons"])
 
+    try:
+        alert_generation = generate_alerts()
+    except Exception as exc:
+        alert_generation = {"status": "failed", "message": str(exc)}
+
     resistance_validation = _generate_resistance_validation_artifact(resistance_catalogue)
 
     # Discordance check: flag samples where both tools ran but disagree on R/S.
@@ -2234,6 +2247,7 @@ def main() -> None:
         "mykrobe_run": mykrobe_run,
         "mykrobe_wsl_run": mykrobe_wsl_run,
         "mykrobe_db_import": mykrobe_import,
+        "alert_generation": alert_generation,
         "resistance_validation": {
             "status": resistance_validation.get("status"),
             "artifact": str(RESISTANCE_VALIDATION_JSON.as_posix()),

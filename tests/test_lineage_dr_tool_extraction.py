@@ -72,3 +72,45 @@ def test_dr_normalisation_keeps_no_call_category():
     )
 
     assert calls == {"rifampicin": "R", "isoniazid": "N", "ethambutol": "S"}
+
+
+def test_normalise_tbprofiler_json_exports_auditable_resistance_rows(tmp_path):
+    from scripts.normalise_resistance import normalise_tbprofiler_json
+
+    result_path = tmp_path / "sample.results.json"
+    result_path.write_text(
+        json.dumps(
+            {
+                "sample_id": "sample",
+                "main_lineage": "lineage4.8",
+                "tbprofiler_version": "6.6.0",
+                "db_version": {"name": "tbdb", "version": "2025-01"},
+                "dr_variants": [
+                    {
+                        "drug": ["rifampicin", "isoniazid"],
+                        "gene": "rpoB",
+                        "change": "S450L",
+                        "depth": 82,
+                        "freq": 0.74,
+                    }
+                ],
+                "dr": {"ethambutol": {"predict": "S"}},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    calls = normalise_tbprofiler_json(result_path, sample_id="00000000-0000-0000-0000-000000000001")
+
+    assert len(calls) == 3
+    rif = next(call for call in calls if call["drug"] == "rifampicin")
+    assert rif["sample_id"] == "00000000-0000-0000-0000-000000000001"
+    assert rif["gene"] == "rpoB"
+    assert rif["mutation"] == "S450L"
+    assert rif["prediction"] == "R"
+    assert rif["depth"] == 82
+    assert rif["alt_fraction"] == 0.74
+    assert rif["lineage"] == "lineage4.8"
+    assert rif["source_tool"] == "tbprofiler"
+    assert rif["tool_version"] == "6.6.0"
+    assert rif["database_version"] == "tbdb"

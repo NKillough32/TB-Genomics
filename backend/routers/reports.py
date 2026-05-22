@@ -112,6 +112,137 @@ def _recent_investigation_actions(db: Session, limit: int = 20) -> list[dict[str
     return items
 
 
+def _recent_alerts(db: Session, limit: int = 20) -> list[dict[str, Any]]:
+    try:
+        rows = db.execute(
+            text(
+                """
+                SELECT alert_id::text AS alert_id, alert_type, severity, status,
+                       sample_id::text AS sample_id, cluster_id::text AS cluster_id,
+                       title, assigned_to, created_at
+                FROM alerts
+                ORDER BY
+                  CASE severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
+                  created_at DESC
+                LIMIT :limit
+                """
+            ),
+            {"limit": limit},
+        ).mappings().all()
+    except Exception:
+        return []
+
+    return [
+        {
+            "alert_id": str(row["alert_id"]),
+            "alert_short": str(row["alert_id"])[:8],
+            "type": row["alert_type"],
+            "severity": row["severity"],
+            "status": row["status"],
+            "sample": str(row["sample_id"])[:8] if row["sample_id"] else "",
+            "cluster": str(row["cluster_id"])[:8] if row["cluster_id"] else "",
+            "title": row["title"],
+            "assigned_to": row["assigned_to"] or "Unassigned",
+            "created_at": row["created_at"].isoformat() if row["created_at"] else None,
+        }
+        for row in rows
+    ]
+
+
+def _recent_actions(db: Session, limit: int = 20) -> list[dict[str, Any]]:
+    try:
+        rows = db.execute(
+            text(
+                """
+                SELECT action_id::text AS action_id, alert_id::text AS alert_id,
+                       cluster_id::text AS cluster_id, sample_id::text AS sample_id,
+                       action_type, status, owner, note, due_at, completed_at
+                FROM actions
+                ORDER BY COALESCE(due_at, created_at) ASC NULLS LAST
+                LIMIT :limit
+                """
+            ),
+            {"limit": limit},
+        ).mappings().all()
+    except Exception:
+        return []
+
+    return [
+        {
+            "action_id": str(row["action_id"]),
+            "action_short": str(row["action_id"])[:8],
+            "alert": str(row["alert_id"])[:8] if row["alert_id"] else "",
+            "cluster": str(row["cluster_id"])[:8] if row["cluster_id"] else "",
+            "sample": str(row["sample_id"])[:8] if row["sample_id"] else "",
+            "action_type": row["action_type"],
+            "status": row["status"],
+            "owner": row["owner"] or "Unassigned",
+            "note": row["note"] or "",
+            "due_at": row["due_at"].isoformat() if row["due_at"] else None,
+            "completed_at": row["completed_at"].isoformat() if row["completed_at"] else None,
+        }
+        for row in rows
+    ]
+
+
+def _resistance_call_summary(db: Session, limit: int = 20) -> dict[str, Any]:
+    try:
+        summary = db.execute(
+            text(
+                """
+                SELECT
+                    COUNT(*) AS call_count,
+                    COUNT(DISTINCT sample_id) AS sample_count,
+                    COUNT(*) FILTER (
+                      WHERE UPPER(COALESCE(prediction, '')) IN ('R', 'RESISTANT')
+                         OR LOWER(COALESCE(prediction, '')) LIKE '%resistant%'
+                    ) AS resistant_call_count,
+                    COUNT(DISTINCT database_version) FILTER (WHERE database_version IS NOT NULL) AS database_version_count
+                FROM resistance_calls
+                """
+            )
+        ).mappings().first()
+        rows = db.execute(
+            text(
+                """
+                SELECT sample_id::text AS sample_id, drug, NULLIF(gene, '') AS gene,
+                       NULLIF(mutation, '') AS mutation, prediction, confidence,
+                       depth, alt_fraction, lineage, source_tool, tool_version, database_version
+                FROM resistance_calls
+                ORDER BY created_at DESC NULLS LAST
+                LIMIT :limit
+                """
+            ),
+            {"limit": limit},
+        ).mappings().all()
+    except Exception:
+        return {"call_count": 0, "sample_count": 0, "resistant_call_count": 0, "database_version_count": 0, "recent_calls": []}
+
+    return {
+        "call_count": int(summary["call_count"] or 0),
+        "sample_count": int(summary["sample_count"] or 0),
+        "resistant_call_count": int(summary["resistant_call_count"] or 0),
+        "database_version_count": int(summary["database_version_count"] or 0),
+        "recent_calls": [
+            {
+                "sample": str(row["sample_id"])[:8],
+                "drug": row["drug"],
+                "gene": row["gene"] or "",
+                "mutation": row["mutation"] or "",
+                "prediction": row["prediction"] or "",
+                "confidence": row["confidence"],
+                "depth": row["depth"],
+                "alt_fraction": row["alt_fraction"],
+                "lineage": row["lineage"] or "",
+                "source": row["source_tool"] or "",
+                "tool_version": row["tool_version"] or "",
+                "database_version": row["database_version"] or "",
+            }
+            for row in rows
+        ],
+    }
+
+
 def _analysis_provenance(db: Session, limit: int = 8) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     try:
@@ -253,6 +384,7 @@ def _lineage_dr_summary() -> dict[str, Any]:
     db_imported_rows = (tbprofiler_import.get("imported_rows") or 0) + (
         mykrobe_import.get("imported_rows") or 0
     )
+    resistance_call_rows = tbprofiler_import.get("resistance_call_rows") or 0
 
     return {
         "status": payload.get("status", "available"),
@@ -280,6 +412,7 @@ def _lineage_dr_summary() -> dict[str, Any]:
         "tbprofiler_runner": tbprofiler_run.get("runner", "n/a"),
         "mykrobe_runner": mykrobe_run.get("runner", "n/a"),
         "db_imported_rows": db_imported_rows,
+        "resistance_call_rows": resistance_call_rows,
         "catalogue_version": resistance_payload.get("catalogue_version", "n/a"),
         "pipeline_validation_status": resistance_payload.get(
             "pipeline_validation_status",
@@ -353,6 +486,9 @@ def build_actionable_surveillance_report(
     readiness = data_readiness(db=db)
     kpis = surveillance_kpis(weeks=weeks, db=db)
     risk_summary = build_cluster_risk_summary(db=db, config=cfg)
+    alerts = _recent_alerts(db)
+    actions = _recent_actions(db)
+    resistance_calls = _resistance_call_summary(db)
 
     ranked_clusters = list(risk_summary.get("clusters", []))[: max(1, top_clusters)]
     cluster_dossiers = []
@@ -444,6 +580,9 @@ def build_actionable_surveillance_report(
             "high_priority_pairs": risk_summary.get("summary", {}).get("high_priority_pairs", 0),
             "contradictory_pairs": risk_summary.get("summary", {}).get("contradictory_pairs", 0),
             "urgent_cluster_count": len(urgent_clusters),
+            "open_alert_count": sum(1 for alert in alerts if alert.get("status") in {"open", "acknowledged"}),
+            "critical_alert_count": sum(1 for alert in alerts if alert.get("severity") == "critical"),
+            "resistant_call_count": resistance_calls.get("resistant_call_count", 0),
             "immediate_actions": immediate_actions,
         },
         "data_safety": safety,
@@ -452,6 +591,9 @@ def build_actionable_surveillance_report(
         "priority_clusters": ranked_clusters,
         "cluster_dossiers": cluster_dossiers,
         "investigation_activity": _recent_investigation_actions(db),
+        "alerts": alerts,
+        "actions": actions,
+        "resistance_calls": resistance_calls,
         "suggested_investigation_actions": _suggested_investigation_actions(cluster_dossiers, immediate_actions),
         "lineage_dr_summary": _lineage_dr_summary(),
         "analysis_provenance": _analysis_provenance(db),
@@ -547,6 +689,43 @@ def render_actionable_surveillance_report_html(report: dict[str, Any]) -> str:
     if lineage.get("limitation_codes"):
         lineage_warning_parts.append("Limitations: " + ", ".join(lineage.get("limitation_codes") or []))
     lineage_warning = " ".join(lineage_warning_parts)
+    alert_rows = [
+        {
+            "severity": item.get("severity"),
+            "status": item.get("status"),
+            "type": item.get("type"),
+            "target": item.get("sample") or item.get("cluster"),
+            "title": item.get("title"),
+            "assigned": item.get("assigned_to"),
+        }
+        for item in report.get("alerts", [])
+    ]
+    action_rows = [
+        {
+            "action": item.get("action_type"),
+            "status": item.get("status"),
+            "owner": item.get("owner"),
+            "target": item.get("sample") or item.get("cluster") or item.get("alert"),
+            "due": _fmt_date(item.get("due_at")),
+            "note": item.get("note"),
+        }
+        for item in report.get("actions", [])
+    ]
+    resistance_block = report.get("resistance_calls") or {}
+    resistance_rows = [
+        {
+            "sample": item.get("sample"),
+            "drug": item.get("drug"),
+            "gene": item.get("gene"),
+            "mutation": item.get("mutation"),
+            "prediction": item.get("prediction"),
+            "depth": item.get("depth"),
+            "alt_fraction": item.get("alt_fraction"),
+            "source": item.get("source"),
+            "database": item.get("database_version"),
+        }
+        for item in resistance_block.get("recent_calls", [])
+    ]
 
     dossier_sections = []
     for dossier in report.get("cluster_dossiers", []):
@@ -635,6 +814,8 @@ ul{{margin:8px 0 0 20px;padding:0;}}
       {_metric_card("Cases", summary.get("total_cases", 0), summary.get("operational_mode", ""))}
       {_metric_card("Clusters", summary.get("cluster_count", 0))}
       {_metric_card("Urgent clusters", summary.get("urgent_cluster_count", 0))}
+      {_metric_card("Open alerts", summary.get("open_alert_count", 0), f"critical={summary.get('critical_alert_count', 0)}")}
+      {_metric_card("Resistant calls", summary.get("resistant_call_count", 0))}
       {_metric_card("Contradictory pairs", summary.get("contradictory_pairs", 0))}
     </div>
     <h3>Immediate Actions</h3>
@@ -692,6 +873,27 @@ ul{{margin:8px 0 0 20px;padding:0;}}
   </section>
 
   <section>
+    <h2>Alerts And Action Tracker</h2>
+    {_simple_table(alert_rows, [
+        ("Severity", "severity"),
+        ("Status", "status"),
+        ("Type", "type"),
+        ("Target", "target"),
+        ("Title", "title"),
+        ("Assigned", "assigned"),
+    ], "No alerts recorded.")}
+    <h3>Open Actions</h3>
+    {_simple_table(action_rows, [
+        ("Action", "action"),
+        ("Status", "status"),
+        ("Owner", "owner"),
+        ("Target", "target"),
+        ("Due", "due"),
+        ("Note", "note"),
+    ], "No actions recorded.")}
+  </section>
+
+  <section>
     <h2>Lineage And Drug Resistance</h2>
     <div class="grid">
       {_metric_card("Validation status", lineage.get("status", "not_available"))}
@@ -705,8 +907,21 @@ ul{{margin:8px 0 0 20px;padding:0;}}
       {_metric_card("TBProfiler", lineage.get("tbprofiler_run", "n/a"), lineage.get("tbprofiler_runner", ""))}
       {_metric_card("Mykrobe", lineage.get("mykrobe_run", "n/a"), lineage.get("mykrobe_runner", ""))}
       {_metric_card("Imported DR rows", lineage.get("db_imported_rows", "n/a"))}
+      {_metric_card("Resistance call rows", lineage.get("resistance_call_rows", "n/a"))}
+      {_metric_card("Normalized resistance calls", resistance_block.get("call_count", 0), f"samples={resistance_block.get('sample_count', 0)}")}
       {_metric_card("Catalogue", lineage.get("catalogue_version", "n/a"), lineage.get("pipeline_validation_status", ""))}
     </div>
+    {_simple_table(resistance_rows, [
+        ("Sample", "sample"),
+        ("Drug", "drug"),
+        ("Gene", "gene"),
+        ("Mutation", "mutation"),
+        ("Prediction", "prediction"),
+        ("Depth", "depth"),
+        ("Alt fraction", "alt_fraction"),
+        ("Source", "source"),
+        ("Database", "database"),
+    ], "No normalized resistance calls recorded.")}
     {f'<p class="warning"><strong>Lineage/DR limitation:</strong> {_h(lineage_warning)}</p>' if lineage_warning else ''}
   </section>
 

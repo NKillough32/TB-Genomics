@@ -234,9 +234,82 @@ CREATE TABLE IF NOT EXISTS case_pair_reviews (
 CREATE INDEX IF NOT EXISTS ix_case_pair_reviews_cluster ON case_pair_reviews (source_cluster_id);
 CREATE INDEX IF NOT EXISTS ix_case_pair_reviews_reviewed_at ON case_pair_reviews (reviewed_at DESC);
 
+-- Normalized TB-Profiler/Mykrobe resistance calls.
+-- This preserves per-drug/per-mutation evidence rather than only the compact
+-- sample-level summary kept in tb_interpretation.
+CREATE TABLE IF NOT EXISTS resistance_calls (
+  call_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  sample_id UUID NOT NULL REFERENCES cases(pseudonymised_case_id) ON DELETE CASCADE,
+  drug TEXT NOT NULL,
+  gene TEXT,
+  mutation TEXT,
+  prediction TEXT,
+  confidence NUMERIC,
+  depth NUMERIC,
+  alt_fraction NUMERIC,
+  lineage TEXT,
+  source_tool TEXT NOT NULL DEFAULT 'tbprofiler',
+  tool_version TEXT,
+  database_version TEXT,
+  source_path TEXT,
+  raw_call JSONB NOT NULL DEFAULT '{}',
+  created_at TIMESTAMP DEFAULT NOW(),
+  UNIQUE (sample_id, drug, gene, mutation, source_tool)
+);
+
+CREATE INDEX IF NOT EXISTS ix_resistance_calls_sample ON resistance_calls (sample_id);
+CREATE INDEX IF NOT EXISTS ix_resistance_calls_drug_prediction ON resistance_calls (drug, prediction);
+CREATE INDEX IF NOT EXISTS ix_resistance_calls_source ON resistance_calls (source_tool);
+
+-- Operational alerts raised by rule-based surveillance logic.
+CREATE TABLE IF NOT EXISTS alerts (
+  alert_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  alert_type TEXT NOT NULL,
+  severity TEXT NOT NULL CHECK (severity IN ('info', 'low', 'medium', 'high', 'critical')),
+  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'acknowledged', 'resolved')),
+  sample_id UUID REFERENCES cases(pseudonymised_case_id) ON DELETE CASCADE,
+  cluster_id UUID REFERENCES clusters(cluster_id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  description TEXT,
+  evidence JSONB NOT NULL DEFAULT '{}',
+  assigned_to TEXT,
+  acknowledged_by TEXT,
+  acknowledged_at TIMESTAMP,
+  resolved_by TEXT,
+  resolved_at TIMESTAMP,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS ix_alerts_status ON alerts (status);
+CREATE INDEX IF NOT EXISTS ix_alerts_type ON alerts (alert_type);
+CREATE INDEX IF NOT EXISTS ix_alerts_cluster ON alerts (cluster_id);
+CREATE INDEX IF NOT EXISTS ix_alerts_sample ON alerts (sample_id);
+
+-- Action tracker rows linked to alerts, clusters, or individual cases.
+CREATE TABLE IF NOT EXISTS actions (
+  action_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  alert_id UUID REFERENCES alerts(alert_id) ON DELETE SET NULL,
+  cluster_id UUID REFERENCES clusters(cluster_id) ON DELETE SET NULL,
+  sample_id UUID REFERENCES cases(pseudonymised_case_id) ON DELETE SET NULL,
+  action_type TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'in_progress', 'completed', 'cancelled')),
+  owner TEXT,
+  note TEXT,
+  due_at TIMESTAMP,
+  completed_at TIMESTAMP,
+  created_by TEXT,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS ix_actions_status ON actions (status);
+CREATE INDEX IF NOT EXISTS ix_actions_alert ON actions (alert_id);
+CREATE INDEX IF NOT EXISTS ix_actions_cluster ON actions (cluster_id);
+CREATE INDEX IF NOT EXISTS ix_actions_sample ON actions (sample_id);
+
 -- Additional hot-query path indexes for synthesis and reporting
 CREATE INDEX IF NOT EXISTS ix_case_clusters_cluster ON case_clusters (cluster_id);
 CREATE INDEX IF NOT EXISTS ix_audit_log_action ON audit_log (action);
 CREATE INDEX IF NOT EXISTS ix_audit_log_timestamp ON audit_log (timestamp DESC);
 CREATE INDEX IF NOT EXISTS ix_analysis_provenance_sample ON analysis_provenance (sample_id);
-

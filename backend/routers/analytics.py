@@ -119,6 +119,49 @@ class CasePairReviewRestore(BaseModel):
     reviewer: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)] | None = None
 
 
+class AlertAssignment(BaseModel):
+    assigned_to: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+
+
+class AlertStatusUpdate(BaseModel):
+    note: str | None = None
+
+
+class ActionCreate(BaseModel):
+    alert_id: Annotated[str, StringConstraints(strip_whitespace=True, min_length=36, max_length=36)] | None = None
+    cluster_id: Annotated[str, StringConstraints(strip_whitespace=True, min_length=36, max_length=36)] | None = None
+    sample_id: Annotated[str, StringConstraints(strip_whitespace=True, min_length=36, max_length=36)] | None = None
+    action_type: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+    owner: str | None = None
+    note: str | None = None
+    due_at: datetime | None = None
+
+
+class ActionUpdate(BaseModel):
+    status: str | None = None
+    owner: str | None = None
+    note: str | None = None
+    completed_by: str | None = None
+
+
+def _json_ready(value: object) -> object:
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    return value
+
+
+def _audit(db: Session, *, action: str, user_id: str, details: dict) -> None:
+    db.execute(
+        text(
+            """
+            INSERT INTO audit_log (action, user_id, details, timestamp)
+            VALUES (:action, :user_id, CAST(:details AS JSONB), NOW())
+            """
+        ),
+        {"action": action, "user_id": user_id, "details": json.dumps(details, default=str)},
+    )
+
+
 def _export_json(path: str) -> dict | None:
     try:
         with open(path, "r", encoding="utf-8") as f:
@@ -2236,6 +2279,307 @@ def analytics_clusters(db: Session = Depends(get_db)):
         ],
         **_validation_notice(),
     }
+
+
+@router.get("/resistance-calls")
+def resistance_calls(
+    sample_id: str | None = Query(None),
+    drug: str | None = Query(None),
+    prediction: str | None = Query(None),
+    limit: int = Query(200, ge=1, le=1000),
+    db: Session = Depends(get_db),
+):
+    """Return normalized TB-Profiler resistance calls for dashboards and reports."""
+    filters = []
+    params: dict[str, object] = {"limit": limit}
+    if sample_id:
+        filters.append("sample_id = CAST(:sample_id AS uuid)")
+        params["sample_id"] = _normalise_uuid(sample_id)
+    if drug:
+        filters.append("LOWER(drug) = LOWER(:drug)")
+        params["drug"] = drug
+    if prediction:
+        filters.append("LOWER(COALESCE(prediction, '')) = LOWER(:prediction)")
+        params["prediction"] = prediction
+    where = ("WHERE " + " AND ".join(filters)) if filters else ""
+
+    rows = db.execute(
+        text(
+            f"""
+            SELECT call_id::text AS call_id, sample_id::text AS sample_id, drug,
+                   NULLIF(gene, '') AS gene, NULLIF(mutation, '') AS mutation,
+                   prediction, confidence, depth, alt_fraction, lineage, source_tool,
+                   tool_version, database_version, source_path, created_at
+            FROM resistance_calls
+            {where}
+            ORDER BY created_at DESC NULLS LAST, sample_id, drug, gene, mutation
+            LIMIT :limit
+            """
+        ),
+        params,
+    ).mappings().all()
+
+    calls = [{key: _json_ready(value) for key, value in dict(row).items()} for row in rows]
+    resistant = [
+        c for c in calls
+        if str(c.get("prediction") or "").strip().lower() in {"r", "resistant"}
+        or "resistant" in str(c.get("prediction") or "").strip().lower()
+    ]
+    return {
+        "calls": calls,
+        "summary": {
+            "returned": len(calls),
+            "resistant_calls": len(resistant),
+            "source_tools": sorted({str(c.get("source_tool") or "") for c in calls if c.get("source_tool")}),
+            "database_versions": sorted({str(c.get("database_version") or "") for c in calls if c.get("database_version")}),
+        },
+        **_validation_notice(),
+    }
+
+
+@router.get("/alerts")
+def alerts(
+    status: str | None = Query(None),
+    severity: str | None = Query(None),
+    alert_type: str | None = Query(None),
+    limit: int = Query(200, ge=1, le=1000),
+    db: Session = Depends(get_db),
+):
+    """Return operational alerts generated from SNP, setting, regional, and resistance rules."""
+    filters = []
+    params: dict[str, object] = {"limit": limit}
+    if status:
+        filters.append("LOWER(status) = LOWER(:status)")
+        params["status"] = status
+    if severity:
+        filters.append("LOWER(severity) = LOWER(:severity)")
+        params["severity"] = severity
+    if alert_type:
+        filters.append("LOWER(alert_type) = LOWER(:alert_type)")
+        params["alert_type"] = alert_type
+    where = ("WHERE " + " AND ".join(filters)) if filters else ""
+
+    rows = db.execute(
+        text(
+            f"""
+            SELECT alert_id::text AS alert_id, alert_type, severity, status,
+                   sample_id::text AS sample_id, cluster_id::text AS cluster_id,
+                   title, description, evidence, assigned_to, acknowledged_by,
+                   acknowledged_at, resolved_by, resolved_at, created_at, updated_at
+            FROM alerts
+            {where}
+            ORDER BY
+              CASE severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
+              created_at DESC
+            LIMIT :limit
+            """
+        ),
+        params,
+    ).mappings().all()
+    items = [{key: _json_ready(value) for key, value in dict(row).items()} for row in rows]
+    return {
+        "alerts": items,
+        "summary": {
+            "returned": len(items),
+            "open": sum(1 for item in items if item.get("status") == "open"),
+            "critical": sum(1 for item in items if item.get("severity") == "critical"),
+            "high": sum(1 for item in items if item.get("severity") == "high"),
+        },
+        **_validation_notice(),
+    }
+
+
+@router.post("/alerts/{alert_id}/acknowledge")
+def acknowledge_alert(
+    alert_id: str,
+    payload: AlertStatusUpdate | None = None,
+    db: Session = Depends(get_db),
+    user: AuthenticatedUser = Depends(require_roles("analyst")),
+):
+    aid = _normalise_uuid(alert_id)
+    result = db.execute(
+        text(
+            """
+            UPDATE alerts
+            SET status = 'acknowledged',
+                acknowledged_by = :user_id,
+                acknowledged_at = NOW(),
+                updated_at = NOW()
+            WHERE alert_id = CAST(:alert_id AS uuid)
+            RETURNING alert_id::text AS alert_id, status
+            """
+        ),
+        {"alert_id": aid, "user_id": user.subject},
+    ).mappings().first()
+    if not result:
+        raise HTTPException(status_code=404, detail="Alert not found")
+    _audit(db, action="alert_acknowledged", user_id=user.subject, details={"alert_id": aid, "note": (payload.note if payload else None)})
+    db.commit()
+    return {"alert_id": aid, "status": result["status"]}
+
+
+@router.post("/alerts/{alert_id}/assign")
+def assign_alert(
+    alert_id: str,
+    payload: AlertAssignment,
+    db: Session = Depends(get_db),
+    user: AuthenticatedUser = Depends(require_roles("analyst")),
+):
+    aid = _normalise_uuid(alert_id)
+    result = db.execute(
+        text(
+            """
+            UPDATE alerts
+            SET assigned_to = :assigned_to, updated_at = NOW()
+            WHERE alert_id = CAST(:alert_id AS uuid)
+            RETURNING alert_id::text AS alert_id, assigned_to
+            """
+        ),
+        {"alert_id": aid, "assigned_to": payload.assigned_to},
+    ).mappings().first()
+    if not result:
+        raise HTTPException(status_code=404, detail="Alert not found")
+    _audit(db, action="alert_assigned", user_id=user.subject, details={"alert_id": aid, "assigned_to": payload.assigned_to})
+    db.commit()
+    return {"alert_id": aid, "assigned_to": result["assigned_to"]}
+
+
+@router.post("/alerts/{alert_id}/resolve")
+def resolve_alert(
+    alert_id: str,
+    payload: AlertStatusUpdate | None = None,
+    db: Session = Depends(get_db),
+    user: AuthenticatedUser = Depends(require_roles("analyst")),
+):
+    aid = _normalise_uuid(alert_id)
+    result = db.execute(
+        text(
+            """
+            UPDATE alerts
+            SET status = 'resolved',
+                resolved_by = :user_id,
+                resolved_at = NOW(),
+                updated_at = NOW()
+            WHERE alert_id = CAST(:alert_id AS uuid)
+            RETURNING alert_id::text AS alert_id, status
+            """
+        ),
+        {"alert_id": aid, "user_id": user.subject},
+    ).mappings().first()
+    if not result:
+        raise HTTPException(status_code=404, detail="Alert not found")
+    _audit(db, action="alert_resolved", user_id=user.subject, details={"alert_id": aid, "note": (payload.note if payload else None)})
+    db.commit()
+    return {"alert_id": aid, "status": result["status"]}
+
+
+@router.get("/actions")
+def actions(
+    status: str | None = Query(None),
+    alert_id: str | None = Query(None),
+    cluster_id: str | None = Query(None),
+    limit: int = Query(200, ge=1, le=1000),
+    db: Session = Depends(get_db),
+):
+    filters = []
+    params: dict[str, object] = {"limit": limit}
+    if status:
+        filters.append("LOWER(status) = LOWER(:status)")
+        params["status"] = status
+    if alert_id:
+        filters.append("alert_id = CAST(:alert_id AS uuid)")
+        params["alert_id"] = _normalise_uuid(alert_id)
+    if cluster_id:
+        filters.append("cluster_id = CAST(:cluster_id AS uuid)")
+        params["cluster_id"] = _normalise_uuid(cluster_id)
+    where = ("WHERE " + " AND ".join(filters)) if filters else ""
+    rows = db.execute(
+        text(
+            f"""
+            SELECT action_id::text AS action_id, alert_id::text AS alert_id,
+                   cluster_id::text AS cluster_id, sample_id::text AS sample_id,
+                   action_type, status, owner, note, due_at, completed_at,
+                   completed_by, created_at, updated_at
+            FROM actions
+            {where}
+            ORDER BY COALESCE(due_at, created_at) ASC NULLS LAST
+            LIMIT :limit
+            """
+        ),
+        params,
+    ).mappings().all()
+    return {"actions": [{key: _json_ready(value) for key, value in dict(row).items()} for row in rows], **_validation_notice()}
+
+
+@router.post("/actions")
+def create_action(
+    payload: ActionCreate,
+    db: Session = Depends(get_db),
+    user: AuthenticatedUser = Depends(require_roles("analyst")),
+):
+    params = {
+        "alert_id": _normalise_uuid(payload.alert_id) if payload.alert_id else None,
+        "cluster_id": _normalise_uuid(payload.cluster_id) if payload.cluster_id else None,
+        "sample_id": _normalise_uuid(payload.sample_id) if payload.sample_id else None,
+        "action_type": payload.action_type,
+        "owner": payload.owner,
+        "note": payload.note,
+        "due_at": payload.due_at,
+    }
+    row = db.execute(
+        text(
+            """
+            INSERT INTO actions (alert_id, cluster_id, sample_id, action_type, owner, note, due_at, created_at, updated_at)
+            VALUES (
+              CAST(:alert_id AS uuid), CAST(:cluster_id AS uuid), CAST(:sample_id AS uuid),
+              :action_type, :owner, :note, :due_at, NOW(), NOW()
+            )
+            RETURNING action_id::text AS action_id, status
+            """
+        ),
+        params,
+    ).mappings().first()
+    _audit(db, action="action_created", user_id=user.subject, details={**params, "due_at": str(payload.due_at) if payload.due_at else None})
+    db.commit()
+    return {"action_id": row["action_id"], "status": row["status"]}
+
+
+@router.patch("/actions/{action_id}")
+def update_action(
+    action_id: str,
+    payload: ActionUpdate,
+    db: Session = Depends(get_db),
+    user: AuthenticatedUser = Depends(require_roles("analyst")),
+):
+    aid = _normalise_uuid(action_id)
+    completed_at_expr = "NOW()" if payload.status == "completed" else "completed_at"
+    row = db.execute(
+        text(
+            f"""
+            UPDATE actions
+            SET status = COALESCE(:status, status),
+                owner = COALESCE(:owner, owner),
+                note = COALESCE(:note, note),
+                completed_by = COALESCE(:completed_by, completed_by),
+                completed_at = {completed_at_expr},
+                updated_at = NOW()
+            WHERE action_id = CAST(:action_id AS uuid)
+            RETURNING action_id::text AS action_id, status
+            """
+        ),
+        {
+            "action_id": aid,
+            "status": payload.status,
+            "owner": payload.owner,
+            "note": payload.note,
+            "completed_by": payload.completed_by or (user.subject if payload.status == "completed" else None),
+        },
+    ).mappings().first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Action not found")
+    _audit(db, action="action_updated", user_id=user.subject, details={"action_id": aid, **payload.model_dump(exclude_none=True)})
+    db.commit()
+    return {"action_id": aid, "status": row["status"]}
 
 
 @router.get("/phylo-tree")

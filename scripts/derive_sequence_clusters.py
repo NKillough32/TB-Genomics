@@ -13,6 +13,7 @@ from sqlalchemy import text
 
 from backend.database import SessionLocal
 from backend.snp_validation import validated_snp_distance
+from scripts.generate_alerts import generate_alerts
 try:
     from scripts.runtime_paths import EXPORTS
 except ModuleNotFoundError:
@@ -437,6 +438,18 @@ def main() -> None:
 
         db.commit()
         print("Database committed successfully")
+
+        try:
+            print("\nGenerating operational alerts...")
+            summary["alerts"] = generate_alerts()
+            with (EXPORTS / "sequence_clustering_summary.json").open("w", encoding="utf-8") as f:
+                json.dump(summary, f, indent=2)
+            print(f"  Alerts: {summary['alerts']}")
+        except Exception as alert_exc:
+            summary["alerts"] = {"status": "failed", "message": str(alert_exc)}
+            with (EXPORTS / "sequence_clustering_summary.json").open("w", encoding="utf-8") as f:
+                json.dump(summary, f, indent=2)
+            print(f"  Alert generation failed: {alert_exc}")
         
         print("\n" + "=" * 70)
         print("DERIVE SEQUENCE CLUSTERS - COMPLETED SUCCESSFULLY")

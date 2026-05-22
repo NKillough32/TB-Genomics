@@ -114,3 +114,46 @@ def test_normalise_tbprofiler_json_exports_auditable_resistance_rows(tmp_path):
     assert rif["source_tool"] == "tbprofiler"
     assert rif["tool_version"] == "6.6.0"
     assert rif["database_version"] == "tbdb"
+
+
+def test_normalise_tbprofiler_json_keeps_sensitive_classification_without_variants(tmp_path):
+    from scripts.normalise_resistance import normalise_tbprofiler_json
+
+    result_path = tmp_path / "sample.results.json"
+    result_path.write_text(
+        json.dumps(
+            {
+                "id": "sample",
+                "main_lineage": "lineage4",
+                "drtype": "Sensitive",
+                "dr_variants": [],
+                "pipeline": {
+                    "software_version": "6.6.6",
+                    "db_version": {"name": "tbdb", "commit": "0a909094"},
+                },
+                "schema_version": "1.0.0",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    calls = normalise_tbprofiler_json(result_path, sample_id="00000000-0000-0000-0000-000000000001")
+
+    assert calls == [
+        {
+            "sample_id": "00000000-0000-0000-0000-000000000001",
+            "drug": "overall",
+            "gene": None,
+            "mutation": None,
+            "prediction": "Sensitive",
+            "confidence": None,
+            "depth": None,
+            "alt_fraction": None,
+            "lineage": "lineage4",
+            "source_tool": "tbprofiler",
+            "tool_version": "6.6.6",
+            "database_version": "tbdb",
+            "source_path": result_path.as_posix(),
+            "raw_call": {"drtype": "Sensitive", "schema_version": "1.0.0", "qc": None},
+        }
+    ]

@@ -41,6 +41,8 @@ def _first(*values: Any) -> Any:
 
 def _tool_version(payload: dict[str, Any]) -> str | None:
     version = payload.get("tbprofiler_version") or payload.get("version") or payload.get("pipeline_version")
+    if not version and isinstance(payload.get("pipeline"), dict):
+        version = payload["pipeline"].get("software_version")
     if isinstance(version, dict):
         return str(_first(version.get("tbprofiler"), version.get("version"), version.get("name")))
     return str(version) if version else None
@@ -48,6 +50,8 @@ def _tool_version(payload: dict[str, Any]) -> str | None:
 
 def _database_version(payload: dict[str, Any]) -> str | None:
     db_version = payload.get("db_version") or payload.get("database_version") or payload.get("catalogue")
+    if not db_version and isinstance(payload.get("pipeline"), dict):
+        db_version = payload["pipeline"].get("db_version")
     if isinstance(db_version, dict):
         return str(_first(db_version.get("name"), db_version.get("version"), db_version.get("commit")))
     return str(db_version) if db_version else None
@@ -157,6 +161,31 @@ def normalise_tbprofiler_json(path: Path, sample_id: str | None = None) -> list[
                     "raw_call": value if isinstance(value, dict) else {"prediction": value},
                 }
             )
+
+    drtype = payload.get("drtype")
+    if not calls and drtype:
+        calls.append(
+            {
+                "sample_id": resolved_sample,
+                "drug": "overall",
+                "gene": None,
+                "mutation": None,
+                "prediction": str(drtype),
+                "confidence": None,
+                "depth": None,
+                "alt_fraction": None,
+                "lineage": lineage,
+                "source_tool": "tbprofiler",
+                "tool_version": tool_version,
+                "database_version": database_version,
+                "source_path": str(path.as_posix()),
+                "raw_call": {
+                    "drtype": drtype,
+                    "schema_version": payload.get("schema_version"),
+                    "qc": payload.get("qc"),
+                },
+            }
+        )
 
     return calls
 

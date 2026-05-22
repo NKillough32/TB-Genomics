@@ -12,23 +12,93 @@ tryCatch({
   library(outbreaker2)
   library(ape)
   library(jsonlite)
+  has_coda <- requireNamespace("coda", quietly = TRUE)
+  has_yaml <- requireNamespace("yaml", quietly = TRUE)
+  has_digest <- requireNamespace("digest", quietly = TRUE)
 
   # Create outputs directory. Defaults preserve the Windows/local layout.
   exports_dir <- Sys.getenv("TB_EXPORTS_DIR", "exports")
   export_file <- function(...) file.path(exports_dir, ...)
   dir.create(exports_dir, showWarnings = FALSE, recursive = TRUE)
 
+  config_path <- Sys.getenv("TB_OUTBREAKER_CONFIG", export_file("outbreaker_config.yml"))
+  file_sha256 <- function(path) {
+    if (!file.exists(path) || !has_digest) {
+      return(NA_character_)
+    }
+    as.character(digest::digest(file = path, algo = "sha256"))
+  }
+  cfg_doc <- list()
+  if (file.exists(config_path) && has_yaml) {
+    cfg_doc <- yaml::read_yaml(config_path)
+    cat("Loaded outbreaker config from ", config_path, "\n", sep = "")
+  } else if (file.exists(config_path) && !has_yaml) {
+    cat("Config file found but yaml package unavailable; using environment/defaults.\n")
+  }
+  cfg_value <- function(path, env_name, default) {
+    env_val <- Sys.getenv(env_name, unset = NA_character_)
+    if (!is.na(env_val) && nzchar(env_val)) {
+      return(env_val)
+    }
+    cur <- cfg_doc
+    for (key in path) {
+      if (!is.list(cur) || is.null(cur[[key]])) {
+        return(default)
+      }
+      cur <- cur[[key]]
+    }
+    if (is.null(cur)) default else cur
+  }
+  cfg_int <- function(path, env_name, default) as.integer(cfg_value(path, env_name, default))
+  cfg_num <- function(path, env_name, default) as.numeric(cfg_value(path, env_name, default))
+  cfg_chr <- function(path, env_name, default) as.character(cfg_value(path, env_name, default))
+  truthy <- function(x) tolower(trimws(as.character(x))) %in% c("1", "true", "t", "yes", "y")
+
   # Read input data
   cases <- read.csv(export_file("cases.csv"), stringsAsFactors = FALSE)
   dna <- read.dna(export_file("dna.fasta"), format = "fasta")
 
+  set_seed <- cfg_int(c("mcmc", "seed"), "TB_OUTBREAKER_SEED", 20260522)
+  set.seed(set_seed)
+  cat("Using RNG seed ", set_seed, "\n", sep = "")
+
+  qc_exclusions <- data.frame()
+  qc_metrics_path <- export_file("sample_qc_metrics.csv")
+  min_depth <- cfg_num(c("qc", "min_depth"), "TB_QC_MIN_DEPTH", 20)
+  min_coverage_breadth <- cfg_num(c("qc", "min_coverage_breadth"), "TB_QC_MIN_COVERAGE_BREADTH", 90)
+  max_ambiguous_base_percent <- cfg_num(c("qc", "max_ambiguous_base_percent"), "TB_QC_MAX_AMBIGUOUS_BASE_PERCENT", 5)
+  exclude_failed_qc <- truthy(cfg_chr(c("qc", "exclude_failed_qc"), "TB_QC_EXCLUDE_FAILED", "1"))
+  if (file.exists(qc_metrics_path)) {
+    qc_metrics <- read.csv(qc_metrics_path, stringsAsFactors = FALSE)
+    qc_metrics$sample_id <- as.character(qc_metrics$sample_id)
+    qc_metrics$mean_depth_num <- suppressWarnings(as.numeric(qc_metrics$mean_depth))
+    qc_metrics$coverage_breadth_num <- suppressWarnings(as.numeric(qc_metrics$coverage_breadth))
+    qc_metrics$ambiguous_base_percent_num <- suppressWarnings(as.numeric(qc_metrics$ambiguous_base_percent))
+    qc_metrics$contamination_bool <- truthy(qc_metrics$contamination_flag)
+    qc_metrics$exclude_reason <- ""
+    qc_metrics$exclude_reason[exclude_failed_qc & tolower(qc_metrics$qc_status) == "fail"] <- "qc_status_fail"
+    qc_metrics$exclude_reason[is.finite(qc_metrics$mean_depth_num) & qc_metrics$mean_depth_num < min_depth] <- "low_depth"
+    qc_metrics$exclude_reason[is.finite(qc_metrics$coverage_breadth_num) & qc_metrics$coverage_breadth_num < min_coverage_breadth] <- "low_coverage_breadth"
+    qc_metrics$exclude_reason[is.finite(qc_metrics$ambiguous_base_percent_num) & qc_metrics$ambiguous_base_percent_num > max_ambiguous_base_percent] <- "high_ambiguous_base_fraction"
+    qc_metrics$exclude_reason[qc_metrics$contamination_bool] <- "contamination_flag"
+    qc_exclusions <- qc_metrics[nzchar(qc_metrics$exclude_reason), c("sample_id", "exclude_reason", "mean_depth", "coverage_breadth", "ambiguous_base_percent", "contamination_flag", "qc_status")]
+    if (nrow(qc_exclusions) > 0) {
+      write.csv(qc_exclusions, export_file("outbreaker_qc_exclusions.csv"), row.names = FALSE)
+      keep_case <- !(as.character(cases$case_id) %in% qc_exclusions$sample_id)
+      cases <- cases[keep_case, , drop = FALSE]
+      keep_dna <- as.character(labels(dna)) %in% as.character(cases$case_id)
+      dna <- dna[keep_dna, , drop = FALSE]
+      cat("Excluded ", nrow(qc_exclusions), " sample(s) using genomic QC thresholds.\n", sep = "")
+    }
+  }
+
   # TB serial interval defaults (long-tailed compared with acute infections).
   # Defaults can be tuned per deployment using environment variables.
-  si_window <- as.integer(Sys.getenv("TB_OUTBREAKER_SI_WINDOW", "730"))
-  serial_w_shape <- as.numeric(Sys.getenv("TB_OUTBREAKER_W_SHAPE", "2.0"))
-  serial_w_scale <- as.numeric(Sys.getenv("TB_OUTBREAKER_W_SCALE", "90.0"))
-  serial_f_shape <- as.numeric(Sys.getenv("TB_OUTBREAKER_F_SHAPE", "1.5"))
-  serial_f_scale <- as.numeric(Sys.getenv("TB_OUTBREAKER_F_SCALE", "90.0"))
+  si_window <- cfg_int(c("tb", "generation_interval_window_days"), "TB_OUTBREAKER_SI_WINDOW", 730)
+  serial_w_shape <- cfg_num(c("tb", "generation_interval_shape"), "TB_OUTBREAKER_W_SHAPE", 2.0)
+  serial_w_scale <- cfg_num(c("tb", "generation_interval_scale"), "TB_OUTBREAKER_W_SCALE", 90.0)
+  serial_f_shape <- cfg_num(c("tb", "sampling_delay_shape"), "TB_OUTBREAKER_F_SHAPE", 1.5)
+  serial_f_scale <- cfg_num(c("tb", "sampling_delay_scale"), "TB_OUTBREAKER_F_SCALE", 90.0)
 
   w_raw <- dgamma(1:si_window, shape = serial_w_shape, scale = serial_w_scale)
   f_raw <- dgamma(1:si_window, shape = serial_f_shape, scale = serial_f_scale)
@@ -53,6 +123,7 @@ tryCatch({
   case_dates <- date_col_used
   names(case_dates) <- as.character(cases$case_id)
   dna_ids <- as.character(labels(dna))
+  cases <- cases[match(dna_ids, as.character(cases$case_id)), , drop = FALSE]
   aligned_dates <- case_dates[dna_ids]
 
   if (any(is.na(aligned_dates))) {
@@ -61,24 +132,117 @@ tryCatch({
 
   names(aligned_dates) <- dna_ids
 
-  out_data <- outbreaker_data(
-    dates = aligned_dates,
-    dna = dna,
-    w_dens = w_dens,
-    f_dens = f_dens
+  build_contact_tracing <- function(case_table, ids) {
+    fields <- c(
+      "household_id", "shared_accommodation_id", "prison_exposure_id",
+      "hospital_episode_id", "hospital_id", "ward_id", "postcode",
+      "postcode_sector", "hsc_trust", "location_id"
+    )
+    present <- intersect(fields, names(case_table))
+    links <- data.frame(i = integer(), j = integer(), reason = character())
+    if (length(present) == 0) {
+      return(list(ctd = NULL, evidence = links, fields = character()))
+    }
+    for (field in present) {
+      values <- trimws(as.character(case_table[[field]]))
+      values[is.na(values)] <- ""
+      for (value in unique(values[nzchar(values)])) {
+        idx <- which(values == value)
+        if (length(idx) > 1) {
+          pairs <- t(combn(idx, 2))
+          links <- rbind(
+            links,
+            data.frame(i = pairs[, 1], j = pairs[, 2], reason = field),
+            data.frame(i = pairs[, 2], j = pairs[, 1], reason = field)
+          )
+        }
+      }
+    }
+    if (nrow(links) == 0) {
+      return(list(ctd = NULL, evidence = links, fields = present))
+    }
+    links <- unique(links)
+    links <- links[links$i != links$j, , drop = FALSE]
+    write.csv(
+      data.frame(
+        source = ids[links$i],
+        target = ids[links$j],
+        reason = links$reason
+      ),
+      export_file("outbreaker_contact_tracing_links.csv"),
+      row.names = FALSE
+    )
+    list(ctd = links[, c("i", "j"), drop = FALSE], evidence = links, fields = present)
+  }
+
+  ctd_payload <- build_contact_tracing(cases, dna_ids)
+  out_data <- tryCatch(
+    {
+      if (!is.null(ctd_payload$ctd) && nrow(ctd_payload$ctd) > 0) {
+        cat("Using ", nrow(ctd_payload$ctd), " directed contact-tracing constraints.\n", sep = "")
+        outbreaker_data(
+          dates = aligned_dates,
+          dna = dna,
+          ctd = ctd_payload$ctd,
+          w_dens = w_dens,
+          f_dens = f_dens
+        )
+      } else {
+        outbreaker_data(
+          dates = aligned_dates,
+          dna = dna,
+          w_dens = w_dens,
+          f_dens = f_dens
+        )
+      }
+    },
+    error = function(e) {
+      cat("Contact-tracing data rejected by outbreaker2; retrying without ctd: ", as.character(e), "\n", sep = "")
+      outbreaker_data(
+        dates = aligned_dates,
+        dna = dna,
+        w_dens = w_dens,
+        f_dens = f_dens
+      )
+    }
   )
 
   # Run outbreak investigation
   cat("Running outbreaker2 analysis...\n")
-  n_iter_total <- as.integer(Sys.getenv("TB_OUTBREAKER_ITER", "50000"))
-  burnin_iters <- as.integer(Sys.getenv("TB_OUTBREAKER_BURNIN", "10000"))
-  thin_every <- as.integer(Sys.getenv("TB_OUTBREAKER_THIN", "10"))
+  n_iter_total <- cfg_int(c("mcmc", "iterations"), "TB_OUTBREAKER_ITER", 50000)
+  burnin_iters <- cfg_int(c("mcmc", "burnin"), "TB_OUTBREAKER_BURNIN", 10000)
+  thin_every <- cfg_int(c("mcmc", "thin"), "TB_OUTBREAKER_THIN", 10)
+  n_chains <- max(1L, cfg_int(c("mcmc", "chains"), "TB_OUTBREAKER_CHAINS", 1))
+  init_pi <- cfg_num(c("mcmc", "init_import_probability"), "TB_OUTBREAKER_INIT_PI", 0.05)
+  prior_pi <- cfg_num(c("mcmc", "prior_import_probability"), "TB_OUTBREAKER_PRIOR_PI", 0.05)
+  init_kappa <- cfg_num(c("mcmc", "init_unsampled_ancestors"), "TB_OUTBREAKER_INIT_KAPPA", 5)
   burnin_rows <- max(0L, as.integer(floor(burnin_iters / max(1L, thin_every))))
-  cfg <- create_config(n_iter = n_iter_total, sample_every = thin_every)
-  res <- outbreaker(data = out_data, config = cfg)
-  chain_df <- as.data.frame(res)
+  cfg <- create_config(
+    n_iter = n_iter_total,
+    sample_every = thin_every,
+    init_pi = init_pi,
+    prior_pi = prior_pi,
+    init_kappa = init_kappa
+  )
+  run_one_chain <- function(chain_id) {
+    set.seed(set_seed + chain_id - 1L)
+    result <- outbreaker(data = out_data, config = cfg)
+    chain <- as.data.frame(result)
+    chain$chain_id <- chain_id
+    list(result = result, chain = chain)
+  }
+  chain_runs <- lapply(seq_len(n_chains), run_one_chain)
+  res <- chain_runs[[1]]$result
+  chain_df <- do.call(rbind, lapply(chain_runs, function(x) x$chain))
+  posterior_chain_df <- do.call(
+    rbind,
+    lapply(split(chain_df, chain_df$chain_id), function(chain_part) {
+      start_row <- min(max(1, burnin_rows + 1), nrow(chain_part))
+      chain_part[start_row:nrow(chain_part), , drop = FALSE]
+    })
+  )
 
-  estimate_ess <- function(series) {
+  estimate_ess_lag1 <- function(series) {
     x <- as.numeric(series)
     x <- x[is.finite(x)]
     n <- length(x)
@@ -93,9 +257,36 @@ tryCatch({
     ess <- n * (1 - rho1) / (1 + rho1)
     max(1, min(n, ess))
   }
+  estimate_ess <- function(series) {
+    x <- as.numeric(series)
+    x <- x[is.finite(x)]
+    if (length(x) < 3) {
+      return(NA_real_)
+    }
+    if (has_coda) {
+      return(as.numeric(coda::effectiveSize(coda::mcmc(x))))
+    }
+    estimate_ess_lag1(x)
+  }
 
-  build_transmission_network <- function(result, ids, burnin_iter, posterior_reliable = TRUE, reliability_status = "reliable", reliability_reasons = c()) {
-    chain_local <- as.data.frame(result)
+  posterior_entropy <- function(probabilities) {
+    p <- probabilities[is.finite(probabilities) & probabilities > 0]
+    if (length(p) == 0) return(NA_real_)
+    round(-sum(p * log(p)), 4)
+  }
+
+  operational_risk_score <- function(row) {
+    score <- 0
+    if ("smear_status" %in% names(row) && grepl("positive", tolower(row$smear_status))) score <- score + 3
+    if ("smear_positive" %in% names(row) && truthy(row$smear_positive)) score <- score + 3
+    if ("homelessness" %in% names(row) && truthy(row$homelessness)) score <- score + 2
+    if ("prison_exposure" %in% names(row) && truthy(row$prison_exposure)) score <- score + 3
+    if ("household_child_exposure" %in% names(row) && truthy(row$household_child_exposure)) score <- score + 4
+    if ("healthcare_worker" %in% names(row) && truthy(row$healthcare_worker)) score <- score + 2
+    score
+  }
+
+  build_transmission_network <- function(chain_local, ids, case_table, burnin_iter, posterior_reliable = TRUE, reliability_status = "reliable", reliability_reasons = c()) {
     alpha_cols <- grep("^alpha_", names(chain_local), value = TRUE)
 
     n_cases <- length(ids)
@@ -132,6 +323,7 @@ tryCatch({
 
         freq <- table(ancestry)
         sorted_freq <- sort(freq, decreasing = TRUE)
+        all_probs <- as.numeric(sorted_freq) / max(1, nrow(alpha_post))
         # Issue #5: Export top alternative ancestors (up to 3 total candidates) with probabilities
         best_ancestor_idx <- as.integer(names(sorted_freq)[1])
         edge_prob <- as.numeric(sorted_freq[1]) / max(1, nrow(alpha_post))
@@ -149,7 +341,7 @@ tryCatch({
           for (cand_rank in 2:n_alts) {
             alt_ancestor_idx <- as.integer(names(sorted_freq)[cand_rank])
             alt_prob <- as.numeric(sorted_freq[cand_rank]) / max(1, nrow(alpha_post))
-            alternative_ancestors[[cand_rank - 1]] <- list(
+          alternative_ancestors[[cand_rank - 1]] <- list(
               ancestor_id = ids[alt_ancestor_idx],
               probability = round(alt_prob, 4),
               rank = cand_rank
@@ -157,10 +349,28 @@ tryCatch({
           }
         }
 
+        source_row <- case_table[case_table$case_id == src, , drop = FALSE]
+        target_row <- case_table[case_table$case_id == dst, , drop = FALSE]
+        shared_context <- c()
+        for (ctx_col in c("hsc_trust", "postcode", "postcode_sector", "lineage")) {
+          if (ctx_col %in% names(case_table) && nrow(source_row) == 1 && nrow(target_row) == 1) {
+            if (nzchar(as.character(source_row[[ctx_col]])) && identical(as.character(source_row[[ctx_col]]), as.character(target_row[[ctx_col]]))) {
+              shared_context <- c(shared_context, paste0("shared ", ctx_col, " ", as.character(source_row[[ctx_col]])))
+            }
+          }
+        }
+        interpretation <- paste0(
+          "Case ", substr(src, 1, 8), " has posterior support ",
+          sprintf("%.2f", edge_prob), " as the likely source for case ",
+          substr(dst, 1, 8), ifelse(length(shared_context) > 0, paste0("; ", paste(shared_context, collapse = ", ")), ""), "."
+        )
+
         edge_list[[length(edge_list) + 1]] <- list(
           source = src,
           target = dst,
           probability = round(edge_prob, 4),
+          posterior_entropy = posterior_entropy(all_probs),
+          credibility_class = ifelse(edge_prob >= 0.8, "Strong", ifelse(edge_prob >= 0.5, "Moderate", "Weak")),
           confidence = ifelse(
             posterior_reliable,
             ifelse(edge_prob >= 0.8, "high", ifelse(edge_prob >= 0.6, "medium", "low")),
@@ -168,12 +378,15 @@ tryCatch({
           ),
           posterior_reliability = reliability_status,
           inference = "posterior_marginal_mode",
+          interpretation = interpretation,
           alternative_ancestors = alternative_ancestors
         )
       }
     }
 
     node_list <- lapply(ids, function(case_id) {
+      case_row <- case_table[case_table$case_id == case_id, , drop = FALSE]
+      op_score <- if (nrow(case_row) == 1) operational_risk_score(case_row) else 0
       score <- round(
         as.numeric(outgoing[case_id]) * 0.7 +
           as.numeric(incoming[case_id]) * 0.3,
@@ -188,6 +401,8 @@ tryCatch({
         full_case_id = case_id,
         risk_score = score,
         risk_band = band,
+        public_health_risk_score = op_score,
+        public_health_priority = ifelse(op_score >= 6, "high", ifelse(op_score >= 3, "medium", "low")),
         outgoing_links = as.integer(
           sum(vapply(
             edge_list, function(e) e$source == case_id, logical(1)
@@ -225,6 +440,11 @@ tryCatch({
       node_count = length(node_list),
       edge_count = length(edge_list),
       high_confidence_edges = as.integer(high_conf_count),
+      consensus_methods = list(
+        marginal_posterior_ancestry = "exported",
+        decycle = "not_run_in_script",
+        instability_flag = any(vapply(edge_list, function(e) e$posterior_entropy > 0.7, logical(1)))
+      ),
       posterior_samples = as.integer(posterior_samples),
       all_nodes = node_list,
       key_nodes = key_nodes,
@@ -233,7 +453,10 @@ tryCatch({
   }
 
   # Save R object
-  saveRDS(res, export_file("outbreaker2_results.rds"))
+  saveRDS(
+    list(primary = res, chains = lapply(chain_runs, function(x) x$result)),
+    export_file("outbreaker2_results.rds")
+  )
   cat("Results saved to ", export_file("outbreaker2_results.rds"), "\n", sep = "")
 
   # Generate plots
@@ -285,6 +508,60 @@ tryCatch({
   } else {
     "No strong late drift by simple mean check"
   }
+  build_mcmc_diagnostics <- function(full_chain, post_chain) {
+    diagnostic_cols <- intersect(
+      c("post", "like", "prior", "mu", "pi", "eps", "lambda", "kappa"),
+      names(full_chain)
+    )
+    ess_values <- list()
+    for (col_name in diagnostic_cols) {
+      ess_values[[col_name]] <- round(estimate_ess(post_chain[[col_name]]), 2)
+    }
+    diagnostics <- list(
+      coda_available = has_coda,
+      effective_size = ess_values,
+      gelman_rubin = list(status = "not_run", psrf_max = NA_real_),
+      geweke = list(status = "not_run", max_abs_z = NA_real_),
+      heidelberg = list(status = "not_run", failed_count = NA_integer_)
+    )
+    if (!has_coda || length(diagnostic_cols) == 0 || nrow(post_chain) < 10) {
+      return(diagnostics)
+    }
+    if (n_chains > 1) {
+      mcmc_parts <- lapply(split(post_chain, post_chain$chain_id), function(chain_part) {
+        coda::mcmc(chain_part[, diagnostic_cols, drop = FALSE])
+      })
+      if (length(mcmc_parts) > 1) {
+        gelman_result <- tryCatch(coda::gelman.diag(coda::mcmc.list(mcmc_parts), autoburnin = FALSE), error = function(e) NULL)
+        if (!is.null(gelman_result)) {
+          psrf_values <- as.numeric(gelman_result$psrf[, 1])
+          diagnostics$gelman_rubin <- list(
+            status = "completed",
+            psrf_max = round(max(psrf_values, na.rm = TRUE), 4)
+          )
+        }
+      }
+    }
+    first_mcmc <- coda::mcmc(post_chain[, diagnostic_cols, drop = FALSE])
+    geweke_result <- tryCatch(coda::geweke.diag(first_mcmc), error = function(e) NULL)
+    if (!is.null(geweke_result)) {
+      z_values <- as.numeric(geweke_result$z)
+      diagnostics$geweke <- list(
+        status = "completed",
+        max_abs_z = round(max(abs(z_values), na.rm = TRUE), 4)
+      )
+    }
+    heidel_result <- tryCatch(coda::heidel.diag(first_mcmc), error = function(e) NULL)
+    if (!is.null(heidel_result)) {
+      stationarity <- if (is.matrix(heidel_result)) heidel_result[, 1] else numeric(0)
+      diagnostics$heidelberg <- list(
+        status = "completed",
+        failed_count = as.integer(sum(stationarity != 1, na.rm = TRUE))
+      )
+    }
+    diagnostics
+  }
+  mcmc_diagnostics <- build_mcmc_diagnostics(chain_df, posterior_chain_df)
 
   png(export_file("outbreaker_trace.png"), width = 1400, height = 900, res = 140)
   par(mar = c(4.8, 5.2, 4.6, 1.5), family = "sans")
@@ -417,8 +694,6 @@ tryCatch({
 
   # Reliability gate for posterior interpretation depth/ESS.
   # Confidence bands are only exposed when depth + ESS + drift checks pass.
-  burnin_effective_for_gate <- min(burnin_rows, max(0, nrow(chain_df) - 1))
-  post_start_for_gate <- burnin_effective_for_gate + 1
   like_col_for_gate <- if ("like" %in% names(chain_df)) {
     "like"
   } else if ("post" %in% names(chain_df)) {
@@ -426,15 +701,15 @@ tryCatch({
   } else {
     NA_character_
   }
-  like_values_for_gate <- if (!is.na(like_col_for_gate) && post_start_for_gate <= nrow(chain_df)) {
-    as.numeric(chain_df[[like_col_for_gate]][post_start_for_gate:nrow(chain_df)])
+  like_values_for_gate <- if (!is.na(like_col_for_gate) && nrow(posterior_chain_df) > 0) {
+    as.numeric(posterior_chain_df[[like_col_for_gate]])
   } else {
     numeric(0)
   }
   alpha_cols_for_gate <- grep("^alpha_", names(chain_df), value = TRUE)
   alpha_ess_values_for_gate <- numeric(0)
-  if (length(alpha_cols_for_gate) > 0 && post_start_for_gate <= nrow(chain_df)) {
-    alpha_post_for_gate <- chain_df[post_start_for_gate:nrow(chain_df), alpha_cols_for_gate, drop = FALSE]
+  if (length(alpha_cols_for_gate) > 0 && nrow(posterior_chain_df) > 0) {
+    alpha_post_for_gate <- posterior_chain_df[, alpha_cols_for_gate, drop = FALSE]
     if (nrow(alpha_post_for_gate) > 2) {
       for (col_name in names(alpha_post_for_gate)) {
         ess_local <- estimate_ess(alpha_post_for_gate[[col_name]])
@@ -446,7 +721,7 @@ tryCatch({
   }
   like_ess_for_gate <- if (length(like_values_for_gate) > 2) estimate_ess(like_values_for_gate) else NA_real_
   alpha_ess_min_for_gate <- if (length(alpha_ess_values_for_gate) > 0) min(alpha_ess_values_for_gate) else NA_real_
-  posterior_samples_for_gate <- max(0, nrow(chain_df) - burnin_effective_for_gate)
+  posterior_samples_for_gate <- nrow(posterior_chain_df)
   reliability_reasons <- c()
   if (posterior_samples_for_gate < 1000) {
     reliability_reasons <- c(reliability_reasons, sprintf("posterior_samples_below_minimum(%s<1000)", posterior_samples_for_gate))
@@ -460,14 +735,19 @@ tryCatch({
   if (!is.na(late_drift) && late_drift > 0.10) {
     reliability_reasons <- c(reliability_reasons, sprintf("late_drift_exceeds_threshold(%.4f)", late_drift))
   }
+  rhat_max <- suppressWarnings(as.numeric(mcmc_diagnostics$gelman_rubin$psrf_max))
+  if (n_chains > 1 && is.finite(rhat_max) && rhat_max > 1.1) {
+    reliability_reasons <- c(reliability_reasons, sprintf("gelman_rubin_psrf_high(%.4f)", rhat_max))
+  }
   posterior_reliable <- length(reliability_reasons) == 0
   reliability_status <- if (posterior_reliable) "reliable" else "not_assessable"
 
   # Export posterior-derived transmission network in JSON format.
   network <- build_transmission_network(
-    res,
+    posterior_chain_df,
     as.character(cases$case_id),
-    burnin_rows,
+    cases,
+    0,
     posterior_reliable = posterior_reliable,
     reliability_status = reliability_status,
     reliability_reasons = reliability_reasons
@@ -480,8 +760,7 @@ tryCatch({
 
   # Generate summary statistics
   cat("Generating summary report...\n")
-  burnin_effective <- min(burnin_rows, max(0, nrow(chain_df) - 1))
-  post_start <- burnin_effective + 1
+  burnin_effective <- burnin_rows
   like_col <- if ("like" %in% names(chain_df)) {
     "like"
   } else if ("post" %in% names(chain_df)) {
@@ -489,14 +768,14 @@ tryCatch({
   } else {
     NA_character_
   }
-  like_values <- if (!is.na(like_col)) {
-    as.numeric(chain_df[[like_col]][post_start:nrow(chain_df)])
+  like_values <- if (!is.na(like_col) && nrow(posterior_chain_df) > 0) {
+    as.numeric(posterior_chain_df[[like_col]])
   } else {
     numeric(0)
   }
   alpha_cols <- grep("^alpha_", names(chain_df), value = TRUE)
-  alpha_post <- if (length(alpha_cols) > 0 && post_start <= nrow(chain_df)) {
-    chain_df[post_start:nrow(chain_df), alpha_cols, drop = FALSE]
+  alpha_post <- if (length(alpha_cols) > 0 && nrow(posterior_chain_df) > 0) {
+    posterior_chain_df[, alpha_cols, drop = FALSE]
   } else {
     data.frame()
   }
@@ -522,9 +801,12 @@ tryCatch({
     n_generations = nrow(chain_df),
     burnin = burnin_iters,
     burnin_rows = burnin_effective,
-    n_samples = max(0, nrow(chain_df) - burnin_effective),
+    n_samples = nrow(posterior_chain_df),
     thinning = thin_every,
+    chains = n_chains,
+    rng_seed = set_seed,
     case_count = length(cases$case_id),
+    qc_excluded_case_count = nrow(qc_exclusions),
     likelihood_mean = ifelse(
       length(like_values) > 0, mean(like_values), NA_real_
     ),
@@ -558,12 +840,17 @@ tryCatch({
       NA_real_
     ),
     alpha_mcmc_effective_sample_size_by_case = alpha_ess_by_case,
+    coda_diagnostics = mcmc_diagnostics,
     mcmc_diagnostic_status = diagnostic_status,
     mcmc_late_drift_fraction = ifelse(is.na(late_drift), NA_real_, late_drift),
     mcmc_iteration_config = list(
       n_iter_total = n_iter_total,
       burnin_iters = burnin_iters,
-      thin_every = thin_every
+      thin_every = thin_every,
+      chains = n_chains,
+      init_pi = init_pi,
+      prior_pi = prior_pi,
+      init_kappa = init_kappa
     ),
     serial_interval_config = list(
       si_window = si_window,
@@ -572,8 +859,19 @@ tryCatch({
       f_shape = serial_f_shape,
       f_scale = serial_f_scale
     ),
+    contact_tracing = list(
+      fields_used = as.list(ctd_payload$fields),
+      directed_link_count = ifelse(is.null(ctd_payload$ctd), 0, nrow(ctd_payload$ctd))
+    ),
+    qc_config = list(
+      min_depth = min_depth,
+      min_coverage_breadth = min_coverage_breadth,
+      max_ambiguous_base_percent = max_ambiguous_base_percent,
+      exclude_failed_qc = exclude_failed_qc
+    ),
     data_provenance = "real",
     analysis_engine = "outbreaker2",
+    analysis_engine_version = as.character(utils::packageVersion("outbreaker2")),
     generated_at = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC")
   )
 

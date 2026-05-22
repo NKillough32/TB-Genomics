@@ -127,7 +127,10 @@ def outbreak_report(db: Session = Depends(get_db)):
     secondary_validation_data = load_json_artifact("secondary_engine_validation.json")
     method_comparison_data = load_json_artifact("cluster_method_comparison.json")
     sequence_summary_data = load_json_artifact("sequence_clustering_summary.json")
+    decycled_consensus_data = load_json_artifact("outbreaker_decycled_consensus.json")
     synthesis_data = load_json_artifact("synthesis_output.json") or {}
+    interactive_network_path = _export_path("outbreaker_interactive_network.html")
+    interactive_network_available = os.path.exists(interactive_network_path)
     synthesis_pairs = synthesis_data.get("pairs") if isinstance(synthesis_data, dict) else []
     if not isinstance(synthesis_pairs, list):
         synthesis_pairs = []
@@ -3410,6 +3413,10 @@ def outbreak_report(db: Session = Depends(get_db)):
         story.append(Paragraph(f"Outbreaker summary timestamp: {summary_data.get('generated_at')}", styles["Normal"]))
     if transmission_data and transmission_data.get("generated_at"):
         story.append(Paragraph(f"Transmission network timestamp: {transmission_data.get('generated_at')}", styles["Normal"]))
+    if interactive_network_available:
+        story.append(Paragraph("Interactive transmission network artifact: exports/outbreaker_interactive_network.html", styles["Normal"]))
+    if decycled_consensus_data:
+        story.append(Paragraph(f"Decycled consensus artifact status: {decycled_consensus_data.get('status', 'available')}", styles["Normal"]))
     if lineage_dr_data and lineage_dr_data.get("generated_at"):
         story.append(Paragraph(f"Lineage/DR validation timestamp: {lineage_dr_data.get('generated_at')}", styles["Normal"]))
     if secondary_validation_data and secondary_validation_data.get("generated_at"):
@@ -3435,6 +3442,8 @@ def outbreak_report(db: Session = Depends(get_db)):
         ["Input hash: exports/cases.csv", _sha256_of_file(_export_path("cases.csv"))],
         ["Input hash: exports/dna.fasta", _sha256_of_file(_export_path("dna.fasta"))],
         ["Input hash: exports/transmission_network.json", _sha256_of_file(_export_path("transmission_network.json"))],
+        ["Input hash: exports/outbreaker_decycled_consensus.json", _sha256_of_file(_export_path("outbreaker_decycled_consensus.json"))],
+        ["Interactive network HTML", "Available: exports/outbreaker_interactive_network.html" if interactive_network_available else "Not generated"],
         ["Input hash: exports/synthesis_output.json", _sha256_of_file(_export_path("synthesis_output.json"))],
     ]
     reproducibility_table = Table(
@@ -3473,7 +3482,8 @@ def outbreak_report(db: Session = Depends(get_db)):
         "<b>Companion files:</b> "
         "exports/appendix_a_case_level_actions.csv \u2014 full case-level actions; "
         "exports/appendix_b_full_discordance_review.csv \u2014 full discordance table; "
-        "exports/transmission_pairs.csv \u2014 all model-prioritised pairs with owner/due fields.",
+        "exports/transmission_pairs.csv \u2014 all model-prioritised pairs with owner/due fields; "
+        "exports/outbreaker_interactive_network.html \u2014 interactive posterior network when generated.",
         small_style,
     ))
 

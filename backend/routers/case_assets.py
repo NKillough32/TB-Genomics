@@ -9,6 +9,7 @@ from backend.runtime_paths import export_path
 router = APIRouter(prefix="/cases", tags=["cases"])
 
 OUTBREAKER_IMAGE_RE = re.compile(r"^outbreaker_[A-Za-z0-9_.-]+\.png$")
+OUTBREAKER_HTML_RE = re.compile(r"^outbreaker_[A-Za-z0-9_.-]+\.html$")
 
 
 def _export_path(*parts: str) -> str:
@@ -28,4 +29,17 @@ def get_outbreaker_image(filename: str):
         return FileResponse(path, media_type="image/png")
 
     return {"error": "Image not found"}
+
+
+@router.get("/outbreaker-artifact/{filename}")
+def get_outbreaker_artifact(filename: str):
+    """Serve generated outbreaker2 HTML artifacts such as the interactive network."""
+    if not OUTBREAKER_HTML_RE.fullmatch(filename):
+        return {"error": "Invalid file"}
+
+    path = _export_path(filename)
+    if os.path.exists(path):
+        return FileResponse(path, media_type="text/html")
+
+    return {"error": "Artifact not found"}
 

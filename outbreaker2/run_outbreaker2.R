@@ -15,6 +15,8 @@ tryCatch({
   has_coda <- requireNamespace("coda", quietly = TRUE)
   has_yaml <- requireNamespace("yaml", quietly = TRUE)
   has_digest <- requireNamespace("digest", quietly = TRUE)
+  has_visnetwork <- requireNamespace("visNetwork", quietly = TRUE)
+  has_htmlwidgets <- requireNamespace("htmlwidgets", quietly = TRUE)
 
   # Create outputs directory. Defaults preserve the Windows/local layout.
   exports_dir <- Sys.getenv("TB_EXPORTS_DIR", "exports")
@@ -27,6 +29,13 @@ tryCatch({
       return(NA_character_)
     }
     as.character(digest::digest(file = path, algo = "sha256"))
+  }
+  git_commit_hash <- function() {
+    hash <- tryCatch(
+      system("git rev-parse --short=12 HEAD", intern = TRUE, ignore.stderr = TRUE),
+      error = function(e) NA_character_
+    )
+    if (length(hash) == 0 || !nzchar(hash[1])) NA_character_ else hash[1]
   }
   cfg_doc <- list()
   if (file.exists(config_path) && has_yaml) {
@@ -52,13 +61,6 @@ tryCatch({
   cfg_int <- function(path, env_name, default) as.integer(cfg_value(path, env_name, default))
   cfg_num <- function(path, env_name, default) as.numeric(cfg_value(path, env_name, default))
   cfg_chr <- function(path, env_name, default) as.character(cfg_value(path, env_name, default))
-  cfg_num_alias <- function(path, env_name, legacy_path, legacy_env_name, default) {
-    value <- cfg_value(path, env_name, NA_real_)
-    if (!is.na(value)) {
-      return(as.numeric(value))
-    }
-    as.numeric(cfg_value(legacy_path, legacy_env_name, default))
-  }
   truthy <- function(x) tolower(trimws(as.character(x))) %in% c("1", "true", "t", "yes", "y")
 
   # Read input data
@@ -186,7 +188,7 @@ tryCatch({
   out_data <- tryCatch(
     {
       if (!is.null(ctd_payload$ctd) && nrow(ctd_payload$ctd) > 0) {
-        cat("Using ", nrow(ctd_payload$ctd), " directed contact-tracing constraints.\n", sep = "")
+        cat("Using ", nrow(ctd_payload$ctd), " undirected contact-tracing/co-location constraints.\n", sep = "")
         outbreaker_data(
           dates = aligned_dates,
           dna = dna,
@@ -220,18 +222,14 @@ tryCatch({
   burnin_iters <- cfg_int(c("mcmc", "burnin"), "TB_OUTBREAKER_BURNIN", 10000)
   thin_every <- cfg_int(c("mcmc", "thin"), "TB_OUTBREAKER_THIN", 10)
   n_chains <- max(1L, cfg_int(c("mcmc", "chains"), "TB_OUTBREAKER_CHAINS", 1))
-  init_pi <- cfg_num_alias(
+  init_pi <- cfg_num(
     c("mcmc", "init_reporting_probability"),
     "TB_OUTBREAKER_INIT_REPORTING_PROBABILITY",
-    c("mcmc", "init_import_probability"),
-    "TB_OUTBREAKER_INIT_PI",
     0.05
   )
-  prior_pi <- cfg_num_alias(
+  prior_pi <- cfg_num(
     c("mcmc", "prior_reporting_probability"),
     "TB_OUTBREAKER_PRIOR_REPORTING_PROBABILITY",
-    c("mcmc", "prior_import_probability"),
-    "TB_OUTBREAKER_PRIOR_PI",
     0.05
   )
   init_kappa <- cfg_num(c("mcmc", "init_unsampled_ancestors"), "TB_OUTBREAKER_INIT_KAPPA", 5)
@@ -320,6 +318,49 @@ tryCatch({
     round(-sum(p * log(p)), 4)
   }
 
+  edge_chain_stability <- function(chain_local, target_idx, source_idx, n_cases) {
+    if (!("chain_id" %in% names(chain_local))) {
+      return(list(
+        top_ancestor_agreement = NA_real_,
+        probability_min = NA_real_,
+        probability_max = NA_real_,
+        probability_range = NA_real_
+      ))
+    }
+    alpha_col <- paste0("alpha_", target_idx)
+    if (!(alpha_col %in% names(chain_local))) {
+      return(list(
+        top_ancestor_agreement = NA_real_,
+        probability_min = NA_real_,
+        probability_max = NA_real_,
+        probability_range = NA_real_
+      ))
+    }
+    chain_ids <- sort(unique(chain_local$chain_id))
+    top_hits <- 0
+    probabilities <- numeric(0)
+    for (chain_id in chain_ids) {
+      part <- chain_local[chain_local$chain_id == chain_id, , drop = FALSE]
+      values <- suppressWarnings(as.integer(part[[alpha_col]]))
+      values <- values[!is.na(values) & values >= 1 & values <= n_cases & values != target_idx]
+      if (length(values) == 0) {
+        probabilities <- c(probabilities, 0)
+        next
+      }
+      freq <- sort(table(values), decreasing = TRUE)
+      if (as.integer(names(freq)[1]) == source_idx) {
+        top_hits <- top_hits + 1
+      }
+      probabilities <- c(probabilities, sum(values == source_idx) / length(part[[alpha_col]]))
+    }
+    list(
+      top_ancestor_agreement = round(top_hits / max(1, length(chain_ids)), 4),
+      probability_min = round(min(probabilities, na.rm = TRUE), 4),
+      probability_max = round(max(probabilities, na.rm = TRUE), 4),
+      probability_range = round(diff(range(probabilities, na.rm = TRUE)), 4)
+    )
+  }
+
   operational_risk_score <- function(row) {
     score <- 0
     if ("smear_status" %in% names(row) && grepl("positive", tolower(row$smear_status))) score <- score + 3
@@ -331,7 +372,7 @@ tryCatch({
     score
   }
 
-  build_transmission_network <- function(chain_local, ids, case_table, burnin_iter, posterior_reliable = TRUE, reliability_status = "reliable", reliability_reasons = c()) {
+  build_transmission_network <- function(chain_local, ids, case_table, burnin_iter, posterior_reliable = TRUE, reliability_status = "reliable", reliability_reasons = c(), decycle_status = "not_run") {
     alpha_cols <- grep("^alpha_", names(chain_local), value = TRUE)
 
     n_cases <- length(ids)
@@ -375,6 +416,7 @@ tryCatch({
 
         src <- ids[best_ancestor_idx]
         dst <- ids[target_idx]
+        chain_stability <- edge_chain_stability(chain_local, target_idx, best_ancestor_idx, n_cases)
         outgoing[src] <- outgoing[src] + edge_prob
         incoming[dst] <- incoming[dst] + edge_prob
 
@@ -415,6 +457,7 @@ tryCatch({
           target = dst,
           probability = round(edge_prob, 4),
           posterior_entropy = posterior_entropy(all_probs),
+          chain_stability = chain_stability,
           credibility_class = ifelse(edge_prob >= 0.8, "Strong", ifelse(edge_prob >= 0.5, "Moderate", "Weak")),
           confidence = ifelse(
             posterior_reliable,
@@ -442,7 +485,8 @@ tryCatch({
         ifelse(score >= 0.5, "medium", "low")
       )
       list(
-        case_id = substr(case_id, 1, 8),
+        case_id = case_id,
+        display_case_id = substr(case_id, 1, 8),
         full_case_id = case_id,
         risk_score = score,
         risk_band = band,
@@ -487,7 +531,7 @@ tryCatch({
       high_confidence_edges = as.integer(high_conf_count),
       consensus_methods = list(
         marginal_posterior_ancestry = "exported",
-        decycle = "not_run_in_script",
+        decycle = decycle_status,
         instability_flag = any(vapply(edge_list, function(e) e$posterior_entropy > 0.7, logical(1)))
       ),
       posterior_samples = as.integer(posterior_samples),
@@ -497,9 +541,136 @@ tryCatch({
     )
   }
 
+  build_decycled_consensus <- function(result) {
+    payload <- tryCatch(
+      {
+        decycled <- summary(result, method = "decycle")
+        list(
+          status = "completed",
+          method = "decycle",
+          text = as.list(capture.output(print(decycled)))
+        )
+      },
+      error = function(e) {
+        list(
+          status = "unavailable",
+          method = "decycle",
+          error = as.character(e)
+        )
+      }
+    )
+    write_json(payload, export_file("outbreaker_decycled_consensus.json"), pretty = TRUE, auto_unbox = TRUE)
+    payload
+  }
+
+  generate_interactive_network <- function(network, case_table) {
+    if (!has_visnetwork || !has_htmlwidgets) {
+      return(list(status = "optional_unavailable", path = NA_character_))
+    }
+    node_rows <- lapply(network$all_nodes, function(node) {
+      case_id <- node$full_case_id
+      case_row <- case_table[case_table$case_id == case_id, , drop = FALSE]
+      lookup <- function(col) {
+        if (col %in% names(case_row) && nrow(case_row) == 1) as.character(case_row[[col]]) else ""
+      }
+      title <- paste0(
+        "<b>", node$display_case_id, "</b><br/>",
+        "Full ID: ", case_id, "<br/>",
+        "Risk score: ", node$risk_score, "<br/>",
+        "Public health risk: ", node$public_health_risk_score, " (", node$public_health_priority, ")<br/>",
+        "p_unlinked: ", node$p_unlinked, "<br/>",
+        "Onset: ", lookup("symptom_onset_date"), "<br/>",
+        "Sample: ", lookup("sample_date"), "<br/>",
+        "HSC Trust: ", lookup("hsc_trust"), "<br/>",
+        "Lineage: ", lookup("lineage"), "<br/>",
+        "Smear: ", lookup("smear_status")
+      )
+      data.frame(
+        id = case_id,
+        label = node$display_case_id,
+        title = title,
+        value = max(1, as.numeric(node$public_health_risk_score) + as.numeric(node$risk_score) * 5),
+        group = node$public_health_priority,
+        shape = ifelse(isTRUE(node$likely_index_case), "diamond", "dot"),
+        stringsAsFactors = FALSE
+      )
+    })
+    edge_rows <- lapply(network$edges, function(edge) {
+      edge_color <- if (edge$credibility_class == "Strong") {
+        "#15803d"
+      } else if (edge$credibility_class == "Moderate") {
+        "#d97706"
+      } else {
+        "#dc2626"
+      }
+      stability <- edge$chain_stability
+      alt_text <- ""
+      if (length(edge$alternative_ancestors) > 0) {
+        alt_text <- paste(
+          vapply(edge$alternative_ancestors, function(alt) {
+            paste0(substr(alt$ancestor_id, 1, 8), " (", alt$probability, ")")
+          }, character(1)),
+          collapse = ", "
+        )
+      }
+      title <- paste0(
+        "<b>", substr(edge$source, 1, 8), " -> ", substr(edge$target, 1, 8), "</b><br/>",
+        "Posterior probability: ", edge$probability, "<br/>",
+        "Credibility: ", edge$credibility_class, "<br/>",
+        "Posterior entropy: ", edge$posterior_entropy, "<br/>",
+        "Top-ancestor chain agreement: ", stability$top_ancestor_agreement, "<br/>",
+        "Probability range by chain: ", stability$probability_min, "-", stability$probability_max, "<br/>",
+        "Alternative ancestors: ", alt_text, "<br/>",
+        edge$interpretation
+      )
+      data.frame(
+        from = edge$source,
+        to = edge$target,
+        label = paste0(round(100 * as.numeric(edge$probability)), "%"),
+        title = title,
+        width = max(1, 8 * as.numeric(edge$probability)),
+        color = edge_color,
+        dashes = as.numeric(edge$probability) < 0.5,
+        arrows = "to",
+        stringsAsFactors = FALSE
+      )
+    })
+    nodes_df <- if (length(node_rows) > 0) {
+      do.call(rbind, node_rows)
+    } else {
+      data.frame(id = character(), label = character(), title = character(), value = numeric(), group = character(), shape = character())
+    }
+    edges_df <- if (length(edge_rows) > 0) {
+      do.call(rbind, edge_rows)
+    } else {
+      data.frame(from = character(), to = character(), label = character(), title = character(), width = numeric(), color = character(), dashes = logical(), arrows = character())
+    }
+    widget <- visNetwork::visNetwork(nodes_df, edges_df, height = "760px", width = "100%", main = "Interactive TB Transmission Network")
+    widget <- visNetwork::visNodes(widget, scaling = list(min = 12, max = 38), font = list(size = 16))
+    widget <- visNetwork::visEdges(widget, smooth = list(type = "dynamic"), shadow = TRUE)
+    widget <- visNetwork::visGroups(widget, groupname = "high", color = list(background = "#fee2e2", border = "#dc2626"))
+    widget <- visNetwork::visGroups(widget, groupname = "medium", color = list(background = "#fef3c7", border = "#d97706"))
+    widget <- visNetwork::visGroups(widget, groupname = "low", color = list(background = "#dcfce7", border = "#15803d"))
+    widget <- visNetwork::visOptions(widget, highlightNearest = list(enabled = TRUE, degree = 1, hover = TRUE), selectedBy = "group")
+    widget <- visNetwork::visLegend(widget, useGroups = TRUE, addEdges = data.frame(
+      label = c("Strong edge", "Moderate edge", "Weak edge"),
+      color = c("#15803d", "#d97706", "#dc2626"),
+      width = c(5, 3, 1),
+      dashes = c(FALSE, FALSE, TRUE)
+    ))
+    widget <- visNetwork::visInteraction(widget, hover = TRUE, navigationButtons = TRUE, keyboard = TRUE)
+    out_html <- export_file("outbreaker_interactive_network.html")
+    htmlwidgets::saveWidget(widget, out_html, selfcontained = TRUE)
+    list(status = "completed", path = out_html)
+  }
+
   # Save R object
   saveRDS(
-    list(primary = res, chains = lapply(chain_runs, function(x) x$result)),
+    list(
+      primary = res,
+      chains = lapply(chain_runs, function(x) x$result),
+      chain_configs = lapply(chain_runs, function(x) x$config)
+    ),
     export_file("outbreaker2_results.rds")
   )
   cat("Results saved to ", export_file("outbreaker2_results.rds"), "\n", sep = "")
@@ -517,18 +688,13 @@ tryCatch({
   } else {
     NA_character_
   }
+  chain_df$plot_step <- ave(seq_len(nrow(chain_df)), chain_df$chain_id, FUN = seq_along)
   if (!is.na(metric_col)) {
-    metric_vals <- as.numeric(chain_df[[metric_col]])
+    metric_vals <- as.numeric(posterior_chain_df[[metric_col]])
   } else {
-    metric_vals <- as.numeric(seq_len(nrow(chain_df)))
+    metric_vals <- as.numeric(seq_len(nrow(posterior_chain_df)))
   }
-
-  burnin_effective_for_plot <- min(burnin_rows, max(0, length(metric_vals) - 1))
-  post_metric_vals <- if (burnin_effective_for_plot < length(metric_vals)) {
-    metric_vals[(burnin_effective_for_plot + 1):length(metric_vals)]
-  } else {
-    metric_vals
-  }
+  post_metric_vals <- metric_vals
   metric_label <- ifelse(
     is.na(metric_col), "Iteration index", paste0(toupper(metric_col), " value")
   )
@@ -610,27 +776,38 @@ tryCatch({
 
   png(export_file("outbreaker_trace.png"), width = 1400, height = 900, res = 140)
   par(mar = c(4.8, 5.2, 4.6, 1.5), family = "sans")
+  trace_values <- if (!is.na(metric_col)) as.numeric(chain_df[[metric_col]]) else chain_df$plot_step
   plot(
-    metric_vals,
-    type = "l",
-    col = "#2563eb",
-    lwd = 1.2,
-    xlab = "Iteration",
+    chain_df$plot_step,
+    trace_values,
+    type = "n",
+    xlab = "Saved sample within chain",
     ylab = metric_label,
-    main = "Outbreaker2 MCMC Trace",
+    main = "Outbreaker2 MCMC Trace by Chain",
     cex.main = 1.15,
     cex.lab = 0.95,
     cex.axis = 0.85
   )
+  palette <- c("#2563eb", "#0f766e", "#b45309", "#7c3aed", "#dc2626", "#475569")
+  for (chain_id in sort(unique(chain_df$chain_id))) {
+    part <- chain_df[chain_df$chain_id == chain_id, , drop = FALSE]
+    part_vals <- if (!is.na(metric_col)) as.numeric(part[[metric_col]]) else part$plot_step
+    lines(
+      part$plot_step,
+      part_vals,
+      col = palette[((as.integer(chain_id) - 1L) %% length(palette)) + 1L],
+      lwd = 1.1
+    )
+  }
   grid(col = "grey88", lty = "dotted")
-  if (burnin_effective_for_plot > 0) {
-    abline(v = burnin_effective_for_plot, col = "#dc2626", lty = 2, lwd = 1.2)
+  if (burnin_rows > 0) {
+    abline(v = burnin_rows, col = "#dc2626", lty = 2, lwd = 1.2)
     legend(
       "bottomright",
-      legend = c("Trace", "Burn-in cutoff"),
-      col = c("#2563eb", "#dc2626"),
-      lty = c(1, 2),
-      lwd = c(1.2, 1.2),
+      legend = c(paste("Chain", sort(unique(chain_df$chain_id))), "Burn-in cutoff"),
+      col = c(rep(palette, length.out = length(unique(chain_df$chain_id))), "#dc2626"),
+      lty = c(rep(1, length(unique(chain_df$chain_id))), 2),
+      lwd = c(rep(1.2, length(unique(chain_df$chain_id))), 1.2),
       bty = "n",
       cex = 0.82
     )
@@ -787,6 +964,8 @@ tryCatch({
   posterior_reliable <- length(reliability_reasons) == 0
   reliability_status <- if (posterior_reliable) "reliable" else "not_assessable"
 
+  decycled_consensus <- build_decycled_consensus(res)
+
   # Export posterior-derived transmission network in JSON format.
   network <- build_transmission_network(
     posterior_chain_df,
@@ -795,13 +974,20 @@ tryCatch({
     0,
     posterior_reliable = posterior_reliable,
     reliability_status = reliability_status,
-    reliability_reasons = reliability_reasons
+    reliability_reasons = reliability_reasons,
+    decycle_status = decycled_consensus$status
   )
   write_json(
     network, export_file("transmission_network.json"),
     pretty = TRUE, auto_unbox = TRUE
   )
   cat("✓ Transmission network JSON saved\n")
+  interactive_network <- generate_interactive_network(network, cases)
+  if (interactive_network$status == "completed") {
+    cat("✓ Interactive transmission network HTML saved\n")
+  } else {
+    cat("⚠ Interactive network skipped: visNetwork/htmlwidgets unavailable\n")
+  }
 
   # Generate summary statistics
   cat("Generating summary report...\n")
@@ -893,8 +1079,9 @@ tryCatch({
       burnin_iters = burnin_iters,
       thin_every = thin_every,
       chains = n_chains,
-      init_pi = init_pi,
-      prior_pi = prior_pi,
+      init_reporting_probability = init_pi,
+      prior_reporting_probability = prior_pi,
+      reporting_probability_note = "outbreaker2 pi is the case reporting/sampling probability, not an importation probability",
       init_kappa = init_kappa
     ),
     serial_interval_config = list(
@@ -906,7 +1093,12 @@ tryCatch({
     ),
     contact_tracing = list(
       fields_used = as.list(ctd_payload$fields),
-      directed_link_count = ifelse(is.null(ctd_payload$ctd), 0, nrow(ctd_payload$ctd))
+      link_count = ifelse(is.null(ctd_payload$ctd), 0, nrow(ctd_payload$ctd)),
+      directed = FALSE,
+      note = "co-location/contact fields are encoded as undirected evidence; paired rows are emitted only for outbreaker2 ctd compatibility"
+    ),
+    interactive_outputs = list(
+      transmission_network_html = interactive_network
     ),
     qc_config = list(
       min_depth = min_depth,
@@ -915,6 +1107,21 @@ tryCatch({
       exclude_failed_qc = exclude_failed_qc
     ),
     data_provenance = "real",
+    git_commit = git_commit_hash(),
+    artifact_hashes = list(
+      cases_csv_sha256 = file_sha256(export_file("cases.csv")),
+      dna_fasta_sha256 = file_sha256(export_file("dna.fasta")),
+      sample_qc_metrics_csv_sha256 = file_sha256(export_file("sample_qc_metrics.csv")),
+      analysis_provenance_csv_sha256 = file_sha256(export_file("analysis_provenance.csv")),
+      config_sha256 = file_sha256(config_path)
+    ),
+    package_versions = list(
+      outbreaker2 = as.character(utils::packageVersion("outbreaker2")),
+      ape = as.character(utils::packageVersion("ape")),
+      jsonlite = as.character(utils::packageVersion("jsonlite")),
+      coda = ifelse(has_coda, as.character(utils::packageVersion("coda")), NA_character_),
+      visNetwork = ifelse(has_visnetwork, as.character(utils::packageVersion("visNetwork")), NA_character_)
+    ),
     analysis_engine = "outbreaker2",
     analysis_engine_version = as.character(utils::packageVersion("outbreaker2")),
     generated_at = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC")

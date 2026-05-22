@@ -62,6 +62,7 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
     # -- Load export JSON artifacts ---------------------------------------------
     summary_data = _load_export_json("outbreaker_summary.json")
     transmission_data = _load_export_json("transmission_network.json")
+    decycled_consensus_data = _load_export_json("outbreaker_decycled_consensus.json")
     synthesis_data = _load_export_json("synthesis_output.json")
     lineage_dr_data = _load_export_json("lineage_dr_validation.json")
     resistance_validation_data = _load_export_json("resistance_validation.json")
@@ -395,6 +396,23 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
 
     # -- Transmission edge data -------------------------------------------------
     transmission_edges = (transmission_data or {}).get("edges") or (transmission_data or {}).get("transmission_edges") or []
+    enriched_network_edges = []
+    for edge in transmission_edges:
+        if not isinstance(edge, dict):
+            continue
+        stability = edge.get("chain_stability") if isinstance(edge.get("chain_stability"), dict) else {}
+        enriched = dict(edge)
+        enriched["source_display"] = _short_case_id(str(edge.get("source") or ""))
+        enriched["target_display"] = _short_case_id(str(edge.get("target") or ""))
+        enriched["credibility_class"] = edge.get("credibility_class") or edge.get("confidence")
+        enriched["posterior_entropy"] = edge.get("posterior_entropy")
+        enriched["chain_agreement"] = stability.get("top_ancestor_agreement")
+        enriched["probability_range_by_chain"] = (
+            f"{stability.get('probability_min')} - {stability.get('probability_max')}"
+            if stability.get("probability_min") is not None and stability.get("probability_max") is not None
+            else "n/a"
+        )
+        enriched_network_edges.append(enriched)
     best_incoming: dict = {}
     best_outgoing: dict = {}
     outbreaker_pair_prob: dict = {}
@@ -2130,17 +2148,38 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
         _cluster_epi_complete_html = '<p class="muted">No cluster data available for epi-completeness table.</p>'
 
     # 17. Transmission network section
+    interactive_network_path = _export_path("outbreaker_interactive_network.html")
+    interactive_network_available = os.path.exists(interactive_network_path)
+    interactive_network_html = (
+        '<div class="callout" style="margin:.7rem 0">'
+        '<strong>Interactive network available.</strong> Open the full HTML network to inspect risk-sized nodes, '
+        'posterior-weighted edges, credibility colours, entropy, chain agreement, and alternative ancestors. '
+        '<a href="/cases/outbreaker-artifact/outbreaker_interactive_network.html" target="_blank" rel="noopener">Open interactive transmission network</a>'
+        '</div>'
+        if interactive_network_available
+        else '<div class="callout callout-warn" style="margin:.7rem 0"><strong>Interactive network not generated.</strong> Run outbreaker2 with visNetwork/htmlwidgets available to produce exports/outbreaker_interactive_network.html.</div>'
+    )
+    decycle_status = ""
+    if isinstance(decycled_consensus_data, dict):
+        decycle_status = str(decycled_consensus_data.get("status") or "")
+    decycle_html = (
+        f'<div class="section-note">Decycled consensus tree export: <strong>{_safe_html(decycle_status or "not available")}</strong>. '
+        'The marginal posterior network remains the main displayed graph; decycled output is included in raw artifacts when available.</div>'
+    )
     key_nodes_html = _data_table_html(
         key_nodes[:15 if not full else None],
-        [("Case", "case_id"), ("Cluster", "cluster_id"), ("Region", "region"),
+        [("Case", "display_case_id"), ("Full case ID", "full_case_id"), ("Cluster", "cluster_id"), ("Region", "region"),
          ("Risk score", "risk_score"), ("Risk band", "risk_band"),
+         ("PH risk", "public_health_risk_score"), ("PH priority", "public_health_priority"),
          ("Outgoing", "outgoing_links"), ("Incoming", "incoming_links")],
         "No priority-node data."
     )
     network_edges_html = _data_table_html(
-        network_edges[:15 if not full else None],
-        [("From", "source"), ("To", "target"), ("Posterior probability", "probability"),
-         ("Posterior band", "confidence"), ("Inference", "inference")],
+        enriched_network_edges[:15 if not full else None],
+        [("From", "source_display"), ("To", "target_display"), ("Posterior probability", "probability"),
+         ("Credibility", "credibility_class"), ("Entropy", "posterior_entropy"),
+         ("Chain agreement", "chain_agreement"), ("Chain probability range", "probability_range_by_chain"),
+         ("Inference", "inference")],
         "No transmission-link data."
     )
     network_meta_html = ""
@@ -2225,6 +2264,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
   <p class="muted">Complete JSON exports used to produce this report.</p>
   <details><summary>Outbreaker2 summary artifact</summary><div><pre>{_safe_html(json.dumps(summary_data, indent=2, default=str) if summary_data else 'No artifact found.')}</pre></div></details>
   <details><summary>Transmission network artifact</summary><div><pre>{_safe_html(json.dumps(transmission_data, indent=2, default=str) if transmission_data else 'No artifact found.')}</pre></div></details>
+  <details><summary>Decycled consensus artifact</summary><div><pre>{_safe_html(json.dumps(decycled_consensus_data, indent=2, default=str) if decycled_consensus_data else 'No artifact found.')}</pre></div></details>
   <details><summary>Sequence clustering summary</summary><div><pre>{_safe_html(json.dumps(sequence_summary_data, indent=2, default=str) if sequence_summary_data else 'No artifact found.')}</pre></div></details>
   <details><summary>Lineage/DR validation</summary><div><pre>{_safe_html(json.dumps(lineage_dr_data, indent=2, default=str) if lineage_dr_data else 'No artifact found.')}</pre></div></details>
   <details><summary>Resistance validation</summary><div><pre>{_safe_html(json.dumps(resistance_validation_data, indent=2, default=str) if resistance_validation_data else 'No artifact found.')}</pre></div></details>
@@ -2319,6 +2359,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
     <h3>Analysis</h3>
     <a href="#analysis">outbreaker2 analysis</a>
     <a href="#transmission">Transmission network</a>
+    {'<a href="/cases/outbreaker-artifact/outbreaker_interactive_network.html" target="_blank" rel="noopener">Interactive network</a>' if interactive_network_available else ''}
     <a href="#pairs">High-posterior model hypotheses</a>
     <a href="#snp-summary">Pairwise SNP summary</a>
     <a href="#interpretation">Outbreak interpretation</a>
@@ -2409,6 +2450,8 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
     <section class="card" id="transmission">
       <h2>Transmission network</h2>
       {network_meta_html}
+      {interactive_network_html}
+      {decycle_html}
       <div class="fig-inline">{_figure_card("outbreaker_tree")}</div>
       <h3>Model-prioritised nodes</h3>
       {key_nodes_html}

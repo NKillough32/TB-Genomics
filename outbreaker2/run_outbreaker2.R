@@ -52,6 +52,13 @@ tryCatch({
   cfg_int <- function(path, env_name, default) as.integer(cfg_value(path, env_name, default))
   cfg_num <- function(path, env_name, default) as.numeric(cfg_value(path, env_name, default))
   cfg_chr <- function(path, env_name, default) as.character(cfg_value(path, env_name, default))
+  cfg_num_alias <- function(path, env_name, legacy_path, legacy_env_name, default) {
+    value <- cfg_value(path, env_name, NA_real_)
+    if (!is.na(value)) {
+      return(as.numeric(value))
+    }
+    as.numeric(cfg_value(legacy_path, legacy_env_name, default))
+  }
   truthy <- function(x) tolower(trimws(as.character(x))) %in% c("1", "true", "t", "yes", "y")
 
   # Read input data
@@ -213,23 +220,61 @@ tryCatch({
   burnin_iters <- cfg_int(c("mcmc", "burnin"), "TB_OUTBREAKER_BURNIN", 10000)
   thin_every <- cfg_int(c("mcmc", "thin"), "TB_OUTBREAKER_THIN", 10)
   n_chains <- max(1L, cfg_int(c("mcmc", "chains"), "TB_OUTBREAKER_CHAINS", 1))
-  init_pi <- cfg_num(c("mcmc", "init_import_probability"), "TB_OUTBREAKER_INIT_PI", 0.05)
-  prior_pi <- cfg_num(c("mcmc", "prior_import_probability"), "TB_OUTBREAKER_PRIOR_PI", 0.05)
+  init_pi <- cfg_num_alias(
+    c("mcmc", "init_reporting_probability"),
+    "TB_OUTBREAKER_INIT_REPORTING_PROBABILITY",
+    c("mcmc", "init_import_probability"),
+    "TB_OUTBREAKER_INIT_PI",
+    0.05
+  )
+  prior_pi <- cfg_num_alias(
+    c("mcmc", "prior_reporting_probability"),
+    "TB_OUTBREAKER_PRIOR_REPORTING_PROBABILITY",
+    c("mcmc", "prior_import_probability"),
+    "TB_OUTBREAKER_PRIOR_PI",
+    0.05
+  )
   init_kappa <- cfg_num(c("mcmc", "init_unsampled_ancestors"), "TB_OUTBREAKER_INIT_KAPPA", 5)
   burnin_rows <- max(0L, as.integer(floor(burnin_iters / max(1L, thin_every))))
-  cfg <- create_config(
-    n_iter = n_iter_total,
-    sample_every = thin_every,
-    init_pi = init_pi,
-    prior_pi = prior_pi,
-    init_kappa = init_kappa
-  )
+  make_config <- function(chain_id) {
+    init_tree_options <- c("star", "random", "seq")
+    init_tree_value <- cfg_chr(
+      c("mcmc", "init_tree"),
+      "TB_OUTBREAKER_INIT_TREE",
+      init_tree_options[((chain_id - 1L) %% length(init_tree_options)) + 1L]
+    )
+    pi_multiplier <- c(0.75, 1, 1.25, 1.5)[((chain_id - 1L) %% 4L) + 1L]
+    kappa_offset <- (chain_id - 1L) %% 4L
+    args <- list(
+      n_iter = n_iter_total,
+      sample_every = thin_every,
+      init_pi = min(0.99, max(0.001, init_pi * pi_multiplier)),
+      prior_pi = prior_pi,
+      init_kappa = max(1, init_kappa + kappa_offset),
+      init_tree = init_tree_value,
+      ctd_directed = FALSE
+    )
+    tryCatch(
+      do.call(create_config, args),
+      error = function(e) {
+        args$ctd_directed <- NULL
+        tryCatch(
+          do.call(create_config, args),
+          error = function(e2) {
+            args$init_tree <- NULL
+            do.call(create_config, args)
+          }
+        )
+      }
+    )
+  }
   run_one_chain <- function(chain_id) {
     set.seed(set_seed + chain_id - 1L)
-    result <- outbreaker(data = out_data, config = cfg)
+    chain_config <- make_config(chain_id)
+    result <- outbreaker(data = out_data, config = chain_config)
     chain <- as.data.frame(result)
     chain$chain_id <- chain_id
-    list(result = result, chain = chain)
+    list(result = result, chain = chain, config = chain_config)
   }
   chain_runs <- lapply(seq_len(n_chains), run_one_chain)
   res <- chain_runs[[1]]$result

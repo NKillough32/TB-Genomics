@@ -22,6 +22,9 @@ Current capabilities include:
 - Optional epidemiology reference library for reusable exposure, contact, and location records
 - TBProfiler + Mykrobe integration (WSL / Docker fallback) for lineage and drug resistance calling
 - Parallel dual-tool DR concordance checking with discordance flagged in audit_log
+- Automated alerts and actions system for surveillance rule-based event generation
+- Normalized drug resistance calls with per-drug/per-mutation evidence tracking
+- FASTQ discovery and validation for direct raw-read analysis
 - NI data ingest pipeline: prepare_ni_data.py, validate_ingest_files.py, load_ingest_bundle.py
 - Governance/setup documentation for secure deployment and integration
 
@@ -239,6 +242,12 @@ DR concordance checking:
 - Discordant samples (one tool says R, the other says S) are written to `audit_log` with action `dr_concordance_discordance_flagged`.
 - Concordance summary included in `exports/lineage_dr_validation.json` under `dr_concordance`.
 
+FASTQ discovery and validation:
+- The pipeline automatically discovers FASTQ pairs in `uploads/` or specified input directories.
+- FASTQ metadata is extracted and validated against consensus sequences to ensure consistency.
+- Supports WSL and Docker fallback environments for TBProfiler and Mykrobe execution on raw reads.
+- FASTQ-based runs are logged in `exports/lineage_dr_validation.json` under `fastq_inputs` with per-sample diagnostics.
+
 Environment variables for tool execution:
 - `TBPROFILER_WSL_FALLBACK=1` (default on): enables WSL execution path.
 - `TBPROFILER_WSL_ENV=tbtools` (default): mamba env name inside WSL.
@@ -274,6 +283,65 @@ Notes:
 - Ensure DB contains no synthetic seed events (`audit_log WHERE action='seed_synthetic_dataset'`) before loading real data.
 
 
+Normalized drug resistance calls
+---------------------------------
+
+The platform normalises and audits drug resistance outputs from specialist tools into structured, queryable records.
+
+**normalise_resistance.py** processes TB-Profiler JSON outputs:
+
+```bash
+python scripts/normalise_resistance.py --input exports/tbprofiler/ --dry-run
+python scripts/normalise_resistance.py --input exports/tbprofiler/
+```
+
+Per-drug calls are stored in the `resistance_calls` table with:
+- Drug name and prediction (R/S/U)
+- Gene and mutation details with confidence scores
+- Lineage, tool version, and database version for provenance
+- Raw call artifacts for audit and review
+
+The script runs automatically as part of the full pipeline after TBProfiler/Mykrobe execution. Outputs are stored in `exports/resistance_validation.json` and imported to `resistance_calls` for dashboards and reports.
+
+Alerts and actions system
+---------------------------------
+
+Automated rule-based alerts trigger on genomic, resistance, and cluster-growth signals.
+
+**Automatic alert generation:**
+
+```bash
+python scripts/generate_alerts.py
+```
+
+Alert types include:
+- `probable_cluster` (high severity): SNP distance ≤ configurable probable threshold (default 5 SNPs)
+- `possible_cluster` (medium severity): SNP distance ≤ configurable possible threshold (default 12 SNPs)
+- `dr_resistance_alert` (varies): drug resistance patterns with genomic evidence
+- `cluster_growth` (varies): clusters exceeding `TB_CLUSTER_ALERT_MIN_CASES` with rapid membership changes
+
+Alerts are stored in the `alerts` table with:
+- Type, severity (info/low/medium/high/critical), and status (open/acknowledged/resolved)
+- Associated sample_id or cluster_id
+- Title, description, and structured evidence JSONB
+- Timestamps and workflow fields for assignment and resolution tracking
+
+Linked actions (`actions` table) allow operators to record tasks, assignments, and completion:
+- Action type and status (open/in_progress/completed/cancelled)
+- Owner, due date, and completion tracking
+- Relationship to alerts, clusters, or samples
+
+Environment variable configuration:
+- `TB_ALERT_PROBABLE_SNP` (default 5): SNP threshold for probable clusters
+- `TB_ALERT_POSSIBLE_SNP` (default 12): SNP threshold for possible clusters
+- `TB_CLUSTER_ALERT_MIN_CASES` (default 5): minimum cluster size to trigger growth alerts
+
+The alerts script runs automatically as part of the pipeline and can also be invoked standalone via API:
+
+```
+POST /jobs/run?job_name=generate_alerts
+```
+
 
 The outbreak report is available in two formats:
 
@@ -282,6 +350,28 @@ The outbreak report is available in two formats:
 - GET /cases/outbreak-report.full.html for the full browser-friendly HTML report that is saved alongside it as exports/outbreaker_investigation_report_full.html.
 
 Use the short HTML report for online publication workflows after local information-governance review, and use the full HTML report when reviewers need all action/discordance rows and complete JSON source artifacts alongside the summary. Both HTML outputs embed outbreak graphics and use responsive tables to reduce PDF-only wrapping and page-break formatting issues.
+
+Actionable surveillance report
+-------------------------------
+
+The actionable surveillance report synthesizes programme-level metrics, recent alerts, pending actions, and operational status into a single dashboard view suitable for leadership and operational review.
+
+**Endpoints:**
+
+- GET /reports/actionable-surveillance - Returns JSON summary with recent alerts, actions, investigation status, and KPI snapshots.
+- GET /reports/actionable-surveillance.html - Returns HTML dashboard report suitable for printing or web publication.
+
+The HTML report includes:
+- Current data safety and readiness status
+- Recent alerts with severity and context
+- Pending actions and their owners
+- Investigation cluster summaries with risk assessments
+- Resistance validation sign-off status
+- Historical KPI trends (12-week default)
+- Audit trail of recent critical events
+- Analysis pipeline provenance and software versions
+
+The report automatically embeds the latest exports from lineage_dr_validation.json, resistance_validation.json, and transmission_synthesis data to provide current operational intelligence.
 
 TB surveillance KPI reporting
 -----------------------------

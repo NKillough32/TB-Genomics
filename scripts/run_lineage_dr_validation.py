@@ -124,10 +124,10 @@ def _probe_version(exec_path: str, args: list[str]) -> tuple[str, str]:
 def _discover_inputs() -> dict[str, Any]:
     fastq = sorted(
         [
-            *UPLOADS.glob("*.fastq"),
-            *UPLOADS.glob("*.fastq.gz"),
-            *UPLOADS.glob("*.fq"),
-            *UPLOADS.glob("*.fq.gz"),
+            *UPLOADS.rglob("*.fastq"),
+            *UPLOADS.rglob("*.fastq.gz"),
+            *UPLOADS.rglob("*.fq"),
+            *UPLOADS.rglob("*.fq.gz"),
         ]
     )
     vcf = sorted([*UPLOADS.glob("*.vcf"), *UPLOADS.glob("*.vcf.gz")])
@@ -160,6 +160,128 @@ def _discover_fasta_inputs() -> list[Path]:
     if upload_fasta:
         return [upload_fasta[0]]
     return []
+
+
+def _discover_fastq_pairs(max_samples: int = MAX_FASTA_SAMPLES) -> list[dict[str, Any]]:
+    explicit_r1 = os.getenv("LINEAGE_DR_FASTQ_R1") or os.getenv("TB_LINEAGE_DR_READ1")
+    explicit_r2 = os.getenv("LINEAGE_DR_FASTQ_R2") or os.getenv("TB_LINEAGE_DR_READ2")
+    if explicit_r1:
+        r1 = Path(explicit_r1)
+        r2 = Path(explicit_r2) if explicit_r2 else None
+        if r1.exists() and (r2 is None or r2.exists()):
+            sample_id = os.getenv("LINEAGE_DR_SAMPLE_ID") or os.getenv("TB_LINEAGE_DR_SAMPLE_ID") or _fastq_sample_id(r1)
+            return [{"sample_id": sample_id, "read1": r1, "read2": r2}]
+        return []
+
+    candidates = sorted(
+        [
+            *UPLOADS.rglob("*.fastq"),
+            *UPLOADS.rglob("*.fastq.gz"),
+            *UPLOADS.rglob("*.fq"),
+            *UPLOADS.rglob("*.fq.gz"),
+        ],
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    by_sample: dict[str, dict[str, Path]] = {}
+    for path in candidates:
+        name = path.name
+        sample = _fastq_sample_id(path)
+        slot = None
+        if any(token in name for token in ("_1.fastq", "_1.fq", "_R1", ".R1", "_read1")):
+            slot = "read1"
+        elif any(token in name for token in ("_2.fastq", "_2.fq", "_R2", ".R2", "_read2")):
+            slot = "read2"
+        elif sample not in by_sample:
+            slot = "read1"
+        if slot:
+            by_sample.setdefault(sample, {})[slot] = path
+
+    pairs: list[dict[str, Any]] = []
+    for sample, reads in by_sample.items():
+        read1 = reads.get("read1")
+        if not read1:
+            continue
+        pairs.append({"sample_id": sample, "read1": read1, "read2": reads.get("read2")})
+        if len(pairs) >= max_samples:
+            break
+    return pairs
+
+
+def _fastq_sample_id(path: Path) -> str:
+    name = path.name
+    for suffix in (".fastq.gz", ".fq.gz", ".fastq", ".fq"):
+        if name.endswith(suffix):
+            name = name[: -len(suffix)]
+            break
+    for token in ("_R1_001", "_R2_001", "_R1", "_R2", "_1", "_2", ".R1", ".R2", "_read1", "_read2"):
+        name = name.replace(token, "")
+    return name
+
+
+def _fastq_input_metadata(fastq_pairs: list[dict[str, Any]]) -> dict[str, Any]:
+    return {
+        "selected_fastq_pairs": [
+            {
+                "sample_id": str(item["sample_id"]),
+                "read1": str(item["read1"].as_posix()),
+                "read2": str(item["read2"].as_posix()) if item.get("read2") else None,
+            }
+            for item in fastq_pairs
+        ],
+        "fastq_selection_policy": (
+            "explicit LINEAGE_DR_FASTQ_R1/TB_LINEAGE_DR_READ1 path"
+            if (os.getenv("LINEAGE_DR_FASTQ_R1") or os.getenv("TB_LINEAGE_DR_READ1"))
+            else "newest paired FASTQ files under uploads/"
+        ),
+    }
+
+
+def _validate_tool_sample_ids(sample_ids: list[str], label: str) -> dict[str, Any]:
+    if not sample_ids:
+        return {
+            "status": "no_samples",
+            "message": f"No {label} samples selected for lineage/DR tool execution",
+            "matched_sample_ids": [],
+            "unmatched_sample_ids": [],
+        }
+
+    db = SessionLocal()
+    sample_map = _load_sample_id_map()
+    matched: list[str] = []
+    unmatched: list[str] = []
+    try:
+        for sample_id in sample_ids:
+            if _resolve_case_sample_id(db, sample_id, sample_map):
+                matched.append(sample_id)
+            else:
+                unmatched.append(sample_id)
+    except Exception as exc:
+        return {
+            "status": "validation_error",
+            "message": f"Unable to validate {label} sample IDs against cases: {exc}",
+            "matched_sample_ids": matched,
+            "unmatched_sample_ids": unmatched,
+        }
+    finally:
+        db.close()
+
+    if matched and not unmatched:
+        status = "matched"
+        message = f"All selected {label} sample IDs resolve to active cases"
+    elif matched:
+        status = "partial_match"
+        message = f"Some selected {label} sample IDs do not resolve to active cases"
+    else:
+        status = "no_matching_cases"
+        message = f"Selected {label} sample IDs do not resolve to active cases; tool execution can run, but database import will skip unmapped outputs"
+
+    return {
+        "status": status,
+        "message": message,
+        "matched_sample_ids": matched,
+        "unmatched_sample_ids": unmatched,
+    }
 
 
 def _probe_docker() -> dict[str, Any]:
@@ -371,51 +493,7 @@ def _fasta_input_metadata(fasta_files: list[Path], sample_inputs: list[dict[str,
 
 
 def _validate_fasta_sample_inputs(sample_inputs: list[dict[str, Any]]) -> dict[str, Any]:
-    if not sample_inputs:
-        return {
-            "status": "no_samples",
-            "message": "No FASTA records selected for lineage/DR tool execution",
-            "matched_sample_ids": [],
-            "unmatched_sample_ids": [],
-        }
-
-    db = SessionLocal()
-    sample_map = _load_sample_id_map()
-    matched: list[str] = []
-    unmatched: list[str] = []
-    try:
-        for item in sample_inputs:
-            sample_id = str(item["sample_id"])
-            if _resolve_case_sample_id(db, sample_id, sample_map):
-                matched.append(sample_id)
-            else:
-                unmatched.append(sample_id)
-    except Exception as exc:
-        return {
-            "status": "validation_error",
-            "message": f"Unable to validate FASTA sample IDs against cases: {exc}",
-            "matched_sample_ids": matched,
-            "unmatched_sample_ids": unmatched,
-        }
-    finally:
-        db.close()
-
-    if matched and not unmatched:
-        status = "matched"
-        message = "All selected FASTA sample IDs resolve to active cases"
-    elif matched:
-        status = "partial_match"
-        message = "Some selected FASTA sample IDs do not resolve to active cases"
-    else:
-        status = "no_matching_cases"
-        message = "Selected FASTA sample IDs do not resolve to active cases"
-
-    return {
-        "status": status,
-        "message": message,
-        "matched_sample_ids": matched,
-        "unmatched_sample_ids": unmatched,
-    }
+    return _validate_tool_sample_ids([str(item["sample_id"]) for item in sample_inputs], "FASTA")
 
 
 def _sample_id_map_paths() -> list[Path]:
@@ -1231,6 +1309,120 @@ def _run_tbprofiler_on_fasta_wsl(fasta_files: list[Path], sample_inputs: list[di
     }
 
 
+def _run_tbprofiler_on_fastq_wsl(fastq_pairs: list[dict[str, Any]], wsl_env: str) -> dict[str, Any]:
+    run_dir = EXPORTS / "tbprofiler"
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    if not fastq_pairs:
+        return {
+            "status": "skipped",
+            "runner": "wsl",
+            "message": "No FASTQ inputs detected for tb-profiler run",
+            "attempted_samples": 0,
+            "successful_samples": 0,
+            "failed_samples": 0,
+            "output_jsons": [],
+            "failures": [],
+        }
+
+    run_dir_wsl = _win_to_wsl_path(run_dir)
+    if not run_dir_wsl:
+        return {
+            "status": "failed",
+            "runner": "wsl",
+            "message": "Unable to map run directory to WSL path",
+            "attempted_samples": 0,
+            "successful_samples": 0,
+            "failed_samples": len(fastq_pairs),
+            "output_jsons": [],
+            "failures": [{"sample_id": "n/a", "exit_code": 1, "output_tail": "wslpath conversion failed"}],
+        }
+
+    output_jsons: list[str] = []
+    failures: list[dict[str, Any]] = []
+    successful_samples = 0
+
+    for item in fastq_pairs:
+        sample_id = str(item["sample_id"])
+        read1_wsl = _win_to_wsl_path(item["read1"])
+        read2 = item.get("read2")
+        read2_wsl = _win_to_wsl_path(read2) if read2 else None
+        if not read1_wsl or (read2 and not read2_wsl):
+            failures.append(
+                {
+                    "sample_id": sample_id,
+                    "exit_code": 1,
+                    "output_tail": "Unable to map FASTQ path to WSL path",
+                }
+            )
+            continue
+
+        args = [
+            "tb-profiler",
+            "profile",
+            "--read1",
+            read1_wsl,
+            "--prefix",
+            sample_id,
+            "--dir",
+            run_dir_wsl,
+            "--threads",
+            os.getenv("TBPROFILER_THREADS", "2"),
+        ]
+        if read2_wsl:
+            args.extend(["--read2", read2_wsl])
+
+        bash_cmd = _build_wsl_micromamba_command(wsl_env, args)
+        started_at = datetime.now().timestamp() - 1.0
+        proc = subprocess.run(
+            ["wsl", "--", "bash", "-lc", bash_cmd],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=int(os.getenv("TBPROFILER_FASTQ_TIMEOUT_SECONDS", "7200")),
+            cwd=str(ROOT),
+            check=False,
+        )
+
+        result_json = run_dir / "results" / f"{sample_id}.results.json"
+        if proc.returncode == 0 and _written_during_run(result_json, started_at):
+            successful_samples += 1
+            output_jsons.append(str(result_json.as_posix()))
+        else:
+            tail = "\n".join((proc.stdout or "").splitlines()[-30:])
+            failures.append(
+                {
+                    "sample_id": sample_id,
+                    "exit_code": proc.returncode,
+                    "output_tail": tail,
+                }
+            )
+
+    status = "completed" if successful_samples else "failed"
+    return {
+        "status": status,
+        "runner": "wsl",
+        "wsl_env": wsl_env,
+        "message": "tb-profiler WSL FASTQ execution finished" if successful_samples else "tb-profiler WSL FASTQ execution failed",
+        "attempted_samples": len(fastq_pairs),
+        "input_fastq_pairs": [
+            {
+                "sample_id": str(item["sample_id"]),
+                "read1": str(item["read1"].as_posix()),
+                "read2": str(item["read2"].as_posix()) if item.get("read2") else None,
+            }
+            for item in fastq_pairs
+        ],
+        "attempted_sample_ids": [str(item["sample_id"]) for item in fastq_pairs],
+        "successful_samples": successful_samples,
+        "failed_samples": len(fastq_pairs) - successful_samples,
+        "output_jsons": output_jsons,
+        "failures": failures[:10],
+    }
+
+
 def _run_mykrobe_on_fasta_wsl(fasta_files: list[Path], sample_inputs: list[dict[str, Any]], wsl_env: str) -> dict[str, Any]:
     run_dir = EXPORTS / "mykrobe"
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -1347,6 +1539,124 @@ def _run_mykrobe_on_fasta_wsl(fasta_files: list[Path], sample_inputs: list[dict[
         "attempted_sample_ids": [str(item["sample_id"]) for item in sample_inputs],
         "successful_samples": successful_samples,
         "failed_samples": len(sample_inputs) - successful_samples,
+        "output_jsons": output_jsons,
+        "failures": failures[:10],
+    }
+
+
+def _run_mykrobe_on_fastq_wsl(fastq_pairs: list[dict[str, Any]], wsl_env: str) -> dict[str, Any]:
+    run_dir = EXPORTS / "mykrobe"
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    if not fastq_pairs:
+        return {
+            "status": "skipped",
+            "runner": "wsl",
+            "message": "No FASTQ inputs detected for mykrobe run",
+            "attempted_samples": 0,
+            "successful_samples": 0,
+            "failed_samples": 0,
+            "output_jsons": [],
+            "failures": [],
+        }
+
+    output_jsons: list[str] = []
+    failures: list[dict[str, Any]] = []
+    successful_samples = 0
+
+    for item in fastq_pairs:
+        sample_id = str(item["sample_id"])
+        read1_wsl = _win_to_wsl_path(item["read1"])
+        read2 = item.get("read2")
+        read2_wsl = _win_to_wsl_path(read2) if read2 else None
+        if not read1_wsl or (read2 and not read2_wsl):
+            failures.append(
+                {
+                    "sample_id": sample_id,
+                    "exit_code": 1,
+                    "output_tail": "Unable to map FASTQ path to WSL path",
+                }
+            )
+            continue
+
+        result_json = run_dir / f"{sample_id}_mykrobe.json"
+        result_json_wsl = _win_to_wsl_path(result_json)
+        if not result_json_wsl:
+            failures.append(
+                {
+                    "sample_id": sample_id,
+                    "exit_code": 1,
+                    "output_tail": "Unable to map result JSON to WSL path",
+                }
+            )
+            continue
+
+        seq_args = [read1_wsl]
+        if read2_wsl:
+            seq_args.append(read2_wsl)
+        bash_cmd = _build_wsl_micromamba_command(
+            wsl_env,
+            [
+                "mykrobe",
+                "predict",
+                "--sample",
+                sample_id,
+                "--seq",
+                *seq_args,
+                "--species",
+                "tb",
+                "--format",
+                "json",
+                "--output",
+                result_json_wsl,
+                "--threads",
+                os.getenv("MYKROBE_THREADS", os.getenv("TBPROFILER_THREADS", "2")),
+            ],
+        )
+        started_at = datetime.now().timestamp() - 1.0
+        proc = subprocess.run(
+            ["wsl", "--", "bash", "-lc", bash_cmd],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=int(os.getenv("MYKROBE_FASTQ_TIMEOUT_SECONDS", "7200")),
+            cwd=str(ROOT),
+            check=False,
+        )
+
+        if proc.returncode == 0 and _written_during_run(result_json, started_at):
+            successful_samples += 1
+            output_jsons.append(str(result_json.as_posix()))
+        else:
+            tail = "\n".join((proc.stdout or "").splitlines()[-30:])
+            failures.append(
+                {
+                    "sample_id": sample_id,
+                    "exit_code": proc.returncode,
+                    "output_tail": tail,
+                }
+            )
+
+    status = "completed" if successful_samples else "failed"
+    return {
+        "status": status,
+        "runner": "wsl",
+        "wsl_env": wsl_env,
+        "message": "mykrobe WSL FASTQ execution finished" if successful_samples else "mykrobe WSL FASTQ execution failed",
+        "attempted_samples": len(fastq_pairs),
+        "input_fastq_pairs": [
+            {
+                "sample_id": str(item["sample_id"]),
+                "read1": str(item["read1"].as_posix()),
+                "read2": str(item["read2"].as_posix()) if item.get("read2") else None,
+            }
+            for item in fastq_pairs
+        ],
+        "attempted_sample_ids": [str(item["sample_id"]) for item in fastq_pairs],
+        "successful_samples": successful_samples,
+        "failed_samples": len(fastq_pairs) - successful_samples,
         "output_jsons": output_jsons,
         "failures": failures[:10],
     }
@@ -1836,16 +2146,31 @@ def main() -> None:
     logger.debug(f"Local tool detection: tbprofiler_exec={tbprofiler_exec}, mykrobe_exec={mykrobe_exec}")
     
     inputs = _discover_inputs()
+    fastq_pairs = _discover_fastq_pairs()
     fasta_inputs = _discover_fasta_inputs()
     fasta_sample_inputs = _prepare_fasta_sample_inputs(fasta_inputs)
     fasta_metadata = _fasta_input_metadata(fasta_inputs, fasta_sample_inputs)
     fasta_validation = _validate_fasta_sample_inputs(fasta_sample_inputs)
     fasta_ready_for_tools = fasta_validation["status"] == "matched"
+    fastq_metadata = _fastq_input_metadata(fastq_pairs)
+    fastq_validation = _validate_tool_sample_ids([str(item["sample_id"]) for item in fastq_pairs], "FASTQ")
+    fastq_ready_for_tools = bool(fastq_pairs) and fastq_validation["status"] != "validation_error"
+    input_mode = (os.getenv("TB_LINEAGE_DR_INPUT_MODE") or os.getenv("LINEAGE_DR_INPUT_MODE") or "").strip().lower()
+    explicit_fastq = bool(os.getenv("LINEAGE_DR_FASTQ_R1") or os.getenv("TB_LINEAGE_DR_READ1"))
+    use_fastq_inputs = bool(fastq_pairs) and (input_mode == "fastq" or explicit_fastq or not fasta_ready_for_tools)
+    use_fasta_inputs = bool(fasta_inputs) and not use_fastq_inputs
     
-    logger.debug(f"Input discovery: fasta_count={len(fasta_inputs)}, fasta_ready_for_tools={fasta_ready_for_tools}")
+    logger.debug(
+        f"Input discovery: fasta_count={len(fasta_inputs)}, fasta_ready_for_tools={fasta_ready_for_tools}, "
+        f"fastq_pairs={len(fastq_pairs)}, fastq_ready_for_tools={fastq_ready_for_tools}, use_fastq={use_fastq_inputs}"
+    )
     
     inputs.update(fasta_metadata)
-    inputs["sample_id_validation"] = fasta_validation
+    inputs.update(fastq_metadata)
+    inputs["selected_input_mode"] = "fastq" if use_fastq_inputs else "fasta" if use_fasta_inputs else "none"
+    if use_fastq_inputs:
+        inputs["attempted_sample_ids"] = [str(item["sample_id"]) for item in fastq_pairs]
+    inputs["sample_id_validation"] = fastq_validation if use_fastq_inputs else fasta_validation
 
     tbprofiler = {
         "status": "not_installed",
@@ -2007,7 +2332,7 @@ def main() -> None:
         "warnings": [],
     }
 
-    if fasta_inputs and not fasta_ready_for_tools:
+    if use_fasta_inputs and not fasta_ready_for_tools:
         blocked_message = fasta_validation["message"]
         tbprofiler_run["message"] = blocked_message
         tbprofiler_local_run["message"] = blocked_message
@@ -2016,7 +2341,7 @@ def main() -> None:
         mykrobe_run["message"] = blocked_message
         mykrobe_wsl_run["message"] = blocked_message
 
-    if tbprofiler["status"] == "installed" and fasta_inputs and fasta_ready_for_tools:
+    if tbprofiler["status"] == "installed" and use_fasta_inputs and fasta_ready_for_tools:
         tbprofiler_local_run = _run_tbprofiler_on_fasta(tbprofiler_exec, fasta_inputs, fasta_sample_inputs)
         tbprofiler_run = tbprofiler_local_run
     elif tbprofiler["status"] == "installed_but_unusable":
@@ -2036,11 +2361,31 @@ def main() -> None:
     logger.debug(f"  Local: status={tbprofiler_run['status']}")
     logger.debug(f"  WSL fallback enabled: {wsl_fallback_enabled}")
     logger.debug(f"  Docker fallback enabled: {docker_fallback_enabled}")
-    logger.debug(f"  FASTA inputs available: {bool(fasta_inputs)}, ready_for_tools: {fasta_ready_for_tools}")
+    logger.debug(f"  FASTA inputs available: {use_fasta_inputs}, ready_for_tools: {fasta_ready_for_tools}")
+    logger.debug(f"  FASTQ inputs available: {use_fastq_inputs}, ready_for_tools: {fastq_ready_for_tools}")
 
     if (
         wsl_fallback_enabled
-        and fasta_inputs
+        and use_fastq_inputs
+        and fastq_ready_for_tools
+        and wsl.get("available")
+        and wsl_tbprofiler.get("status") == "installed"
+        and (
+            tbprofiler_run["status"] in {"skipped", "failed"}
+            or tbprofiler["status"] in {"not_installed", "installed_but_unusable"}
+        )
+    ):
+        logger.info("Running TBProfiler on FASTQ via WSL...")
+        tbprofiler_wsl_run = _run_tbprofiler_on_fastq_wsl(fastq_pairs, wsl_env_name)
+        logger.debug(f"WSL TBProfiler FASTQ result: status={tbprofiler_wsl_run['status']}, samples={tbprofiler_wsl_run['attempted_samples']}")
+        if tbprofiler_wsl_run["status"] == "completed":
+            tbprofiler_run = tbprofiler_wsl_run
+        elif tbprofiler_run["status"] == "skipped":
+            tbprofiler_run = tbprofiler_wsl_run
+
+    if (
+        wsl_fallback_enabled
+        and use_fasta_inputs
         and fasta_ready_for_tools
         and wsl.get("available")
         and wsl_tbprofiler.get("status") == "installed"
@@ -2049,7 +2394,7 @@ def main() -> None:
             or tbprofiler["status"] in {"not_installed", "installed_but_unusable"}
         )
     ):
-        logger.info("Running TBProfiler via WSL...")
+        logger.info("Running TBProfiler on FASTA via WSL...")
         tbprofiler_wsl_run = _run_tbprofiler_on_fasta_wsl(fasta_inputs, fasta_sample_inputs, wsl_env_name)
         logger.debug(f"WSL TBProfiler result: status={tbprofiler_wsl_run['status']}, samples={tbprofiler_wsl_run['attempted_samples']}")
         if tbprofiler_wsl_run["status"] == "completed":
@@ -2059,7 +2404,7 @@ def main() -> None:
 
     if (
         docker_fallback_enabled
-        and fasta_inputs
+        and use_fasta_inputs
         and fasta_ready_for_tools
         and docker.get("available")
         and docker.get("daemon_running")
@@ -2080,10 +2425,19 @@ def main() -> None:
         logger.info(f"TBProfiler completed: {tbprofiler_run['successful_samples']} samples processed")
         pass  # imported below after mykrobe, so tbprofiler overwrites as authoritative
 
-    # Run mykrobe via WSL in parallel with tb-profiler - always when available and FASTA inputs exist.
+    # Run mykrobe via WSL when available so DR concordance can compare engines.
     if (
         wsl_fallback_enabled
-        and fasta_inputs
+        and use_fastq_inputs
+        and fastq_ready_for_tools
+        and wsl.get("available")
+        and wsl_mykrobe.get("status") == "installed"
+    ):
+        mykrobe_wsl_run = _run_mykrobe_on_fastq_wsl(fastq_pairs, wsl_env_name)
+        mykrobe_run = mykrobe_wsl_run
+    elif (
+        wsl_fallback_enabled
+        and use_fasta_inputs
         and fasta_ready_for_tools
         and wsl.get("available")
         and wsl_mykrobe.get("status") == "installed"
@@ -2142,11 +2496,16 @@ def main() -> None:
         interpretation_blocking = True
         limitation_codes.append("missing_sequence_inputs")
         warnings.append("No FASTQ/VCF/FASTA inputs were found for lineage/DR validation.")
-    elif fasta_inputs and not fasta_ready_for_tools:
+    elif use_fasta_inputs and not fasta_ready_for_tools:
         overall_status = "completed_with_warnings"
         interpretation_blocking = True
         limitation_codes.append("sample_id_mismatch")
         warnings.append(fasta_validation["message"])
+    elif use_fastq_inputs and fastq_validation["status"] == "no_matching_cases":
+        overall_status = "completed_with_warnings"
+        interpretation_blocking = True
+        limitation_codes.append("sample_id_mismatch")
+        warnings.append(fastq_validation["message"])
     elif not tbprofiler_effective_available and not mykrobe_effective_available:
         overall_status = "completed_with_warnings"
         interpretation_blocking = True
@@ -2204,6 +2563,8 @@ def main() -> None:
         warnings.append(
             "Both DR engines produced sample outputs, but no overlapping per-drug R/S calls were available for concordance."
         )
+    if interpretation_blocking and overall_status == "completed":
+        overall_status = "completed_with_warnings"
 
     payload = {
         "generated_at": _iso_now(),

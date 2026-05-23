@@ -329,6 +329,27 @@ def _artifact_provenance_rows() -> list[dict[str, Any]]:
             }
         )
 
+    fasta_analysis = _read_json_export("fasta_analysis_summary.json")
+    if fasta_analysis:
+        tools = _as_mapping(fasta_analysis.get("tools"))
+        available_tools = [
+            key
+            for key, value in tools.items()
+            if key != "_wsl" and isinstance(value, dict) and value.get("status") == "available"
+        ]
+        rows.append(
+            {
+                "sample_id": "run",
+                "sample_short": "run",
+                "pipeline_name": "advanced FASTA analysis",
+                "pipeline_version": fasta_analysis.get("status", "n/a"),
+                "reference_genome": os.path.basename(str(fasta_analysis.get("input_fasta") or "sequence exports")),
+                "resistance_catalogue": "n/a",
+                "analysis_date": fasta_analysis.get("generated_at"),
+                "source": "artifact: " + (", ".join(available_tools) if available_tools else "no optional tools available"),
+            }
+        )
+
     resistance = _read_json_export("resistance_validation.json")
     if resistance:
         rows.append(

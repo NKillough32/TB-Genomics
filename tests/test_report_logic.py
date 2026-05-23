@@ -1,4 +1,5 @@
 from backend.routers.cases import _confidence_tier, _pct, _pct_label
+from backend.routers.outbreak_html_builder import _format_optional_float
 
 
 def test_pct_uses_matching_denominator():
@@ -9,6 +10,12 @@ def test_pct_uses_matching_denominator():
 def test_pct_handles_empty_denominator():
     assert _pct(0, 0) is None
     assert _pct_label(None) == "n/a"
+
+
+def test_report_optional_float_handles_null_artifact_values():
+    assert _format_optional_float(None) == "n/a"
+    assert _format_optional_float("not-a-number") == "n/a"
+    assert _format_optional_float(0.12345) == "0.123"
 
 
 def test_model_only_probability_stays_exploratory_without_snp_support():

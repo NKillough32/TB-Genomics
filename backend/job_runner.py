@@ -49,6 +49,7 @@ ALLOWED_JOBS = {
     "run_clustering": [python_exe, "scripts/run_clustering.py"],
     "export_outbreaker": [python_exe, "scripts/export_outbreaker.py"],
     "run_lineage_dr_validation": [python_exe, "scripts/run_lineage_dr_validation.py"],
+    "run_fasta_analysis": [python_exe, "scripts/run_fasta_analysis.py"],
     "generate_alerts": [python_exe, "scripts/generate_alerts.py"],
     "run_outbreaker2": ["Rscript", "outbreaker2/run_outbreaker2.R"],
     "run_transmission_synthesis": [python_exe, "scripts/run_transmission_synthesis.py"],
@@ -399,6 +400,7 @@ def run_job(job_name):
 PIPELINE_STEPS = [
     "derive_sequence_clusters",
     "export_outbreaker",
+    "run_fasta_analysis",
     "run_lineage_dr_validation",
     "generate_alerts",
     "run_outbreaker2",

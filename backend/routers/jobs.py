@@ -18,6 +18,7 @@ router = APIRouter(prefix="/jobs", tags=["jobs"])
 PUBLIC_HEALTH_ACTION_JOBS = {
     "run_lineage_dr_validation",
     "derive_sequence_clusters",
+    "run_fasta_analysis",
     "export_outbreaker",
     "run_outbreaker2",
     "compare_clustering_methods",
@@ -70,6 +71,7 @@ def last_run_times():
     artifacts = {
         "lineage_dr_validation": EXPORTS_DIR / "lineage_dr_validation.json",
         "sequence_clusters": EXPORTS_DIR / "sequence_clustering_summary.json",
+        "fasta_analysis": EXPORTS_DIR / "fasta_analysis_summary.json",
         "alerts": EXPORTS_DIR / "alert_generation_summary.json",
         "outbreaker2": EXPORTS_DIR / "outbreaker_summary.json",
         "cluster_comparison": EXPORTS_DIR / "cluster_method_comparison.json",

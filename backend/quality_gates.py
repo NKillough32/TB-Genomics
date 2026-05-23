@@ -160,6 +160,35 @@ def dependency_health() -> list[dict[str, Any]]:
         )
     )
 
+    fasta_tool_specs = {
+        "seqkit": ("SeqKit", ["seqkit", "seqkit.exe"]),
+        "snp_sites": ("SNP-sites", ["snp-sites", "snp-sites.exe"]),
+        "snp_dists": ("snp-dists", ["snp-dists", "snp-dists.exe"]),
+        "iqtree": ("IQ-TREE", ["iqtree3", "iqtree3.exe", "iqtree2", "iqtree2.exe", "iqtree", "iqtree.exe"]),
+        "treetime": ("TreeTime", ["treetime", "treetime.exe"]),
+    }
+    fasta_analysis = _load_json("fasta_analysis_summary.json") or {}
+    fasta_tools = fasta_analysis.get("tools") if isinstance(fasta_analysis.get("tools"), dict) else {}
+    for key, (label, candidates) in fasta_tool_specs.items():
+        tool_record = fasta_tools.get(key) if isinstance(fasta_tools.get(key), dict) else {}
+        executable = tool_record.get("executable") or _which_many(candidates)
+        wsl_command = tool_record.get("wsl_command")
+        available = bool(executable or wsl_command or tool_record.get("status") == "available")
+        runner = tool_record.get("runner") or ("local" if executable else ("wsl" if wsl_command else None))
+        deps.append(
+            _dep(
+                key,
+                label,
+                "available" if available else "warning",
+                f"{label} is available for advanced FASTA analysis via {runner}."
+                if available
+                else f"{label} is not installed. Advanced FASTA analysis will skip this optional tool.",
+                executable=str(executable) if executable else None,
+                process_blocking=False,
+                details=tool_record,
+            )
+        )
+
     return deps
 
 
@@ -490,6 +519,7 @@ def workflow_stages(db: Session) -> list[dict[str, Any]]:
     case_count = _scalar(db, "SELECT COUNT(*) FROM cases")
     artifacts = {
         "sequence_clusters": _artifact_status("sequence_clustering_summary.json"),
+        "fasta_analysis": _artifact_status("fasta_analysis_summary.json"),
         "outbreaker_inputs_cases": _artifact_status("cases.csv"),
         "outbreaker_inputs_fasta": _artifact_status("dna.fasta"),
         "lineage_dr": _artifact_status("lineage_dr_validation.json"),
@@ -512,6 +542,7 @@ def workflow_stages(db: Session) -> list[dict[str, Any]]:
         stage("uploads", "Upload files", upload_count > 0, f"{upload_count} file(s) currently in uploads/.", {"upload_count": upload_count}),
         stage("load_data", "Load data", case_count > 0, f"{case_count} case row(s) loaded.", {"case_count": case_count}),
         stage("sequence_clusters", "Derive sequence clusters", artifacts["sequence_clusters"]["exists"], "Sequence clustering artifact present." if artifacts["sequence_clusters"]["exists"] else "Sequence clustering has not run.", artifacts["sequence_clusters"]),
+        stage("fasta_analysis", "Run advanced FASTA analysis", artifacts["fasta_analysis"]["exists"], "Advanced FASTA analysis artifact present." if artifacts["fasta_analysis"]["exists"] else "Advanced FASTA analysis has not run.", artifacts["fasta_analysis"]),
         stage("outbreaker_inputs", "Generate outbreaker2 inputs", outbreaker_inputs_complete, "Outbreaker2 input CSV/FASTA present." if outbreaker_inputs_complete else "Outbreaker2 inputs are incomplete.", {"cases": artifacts["outbreaker_inputs_cases"], "dna_fasta": artifacts["outbreaker_inputs_fasta"]}),
         stage("lineage_dr", "Run lineage/DR validation", artifacts["lineage_dr"]["exists"], "Lineage/DR validation artifact present." if artifacts["lineage_dr"]["exists"] else "Lineage/DR validation has not run.", artifacts["lineage_dr"]),
         stage("outbreaker2", "Run outbreaker2", artifacts["outbreaker2"]["exists"], "Outbreaker2 summary artifact present." if artifacts["outbreaker2"]["exists"] else "Outbreaker2 has not run.", artifacts["outbreaker2"]),

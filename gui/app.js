@@ -109,6 +109,7 @@ async function loadKPIBanner(){
 			const lines = [
 				`Lineage/DR: ${fmt(lr.lineage_dr_validation)}`,
 				`Seq clusters: ${fmt(lr.sequence_clusters)}`,
+				`FASTA analysis: ${fmt(lr.fasta_analysis)}`,
 				`Outbreaker2: ${fmt(lr.outbreaker2)}`,
 				`Comparison: ${fmt(lr.cluster_comparison)}`,
 			];

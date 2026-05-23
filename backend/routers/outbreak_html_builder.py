@@ -43,6 +43,16 @@ from backend.synthesis.transmission_synthesis import SYNTHESIS_FORMAT_VERSION
 logger = logging.getLogger(__name__)
 
 
+def _format_optional_float(value, digits: int = 3) -> str:
+    """Format optional numeric artifact values without treating null as zero."""
+    if value is None:
+        return "n/a"
+    try:
+        return str(round(float(value), digits))
+    except (TypeError, ValueError):
+        return "n/a"
+
+
 def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa: C901
     """Build a rich, PDF-aligned static HTML outbreak report from database counts and export artifacts."""
     import datetime as _dt
@@ -69,6 +79,7 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
     secondary_validation_data = _load_export_json("secondary_engine_validation.json")
     method_comparison_data = _load_export_json("cluster_method_comparison.json")
     sequence_summary_data = _load_export_json("sequence_clustering_summary.json")
+    fasta_analysis_data = _load_export_json("fasta_analysis_summary.json")
 
     synthesis_pairs = synthesis_data.get("pairs") if isinstance(synthesis_data, dict) else []
     if not isinstance(synthesis_pairs, list):
@@ -2080,9 +2091,9 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
             ("Sequence assigned cases", str(coverage.get("sequence_assigned_cases", 0))),
             ("Outbreaker assigned cases", str(coverage.get("outbreaker_assigned_cases", 0))),
             ("Overlap cases", str(coverage.get("overlap_cases", 0))),
-            ("Pairwise precision", str(round(float(agreement.get("pairwise_precision_outbreaker_vs_sequence", 0.0)), 3))),
-            ("Pairwise recall", str(round(float(agreement.get("pairwise_recall_outbreaker_vs_sequence", 0.0)), 3))),
-            ("Pairwise Jaccard", str(round(float(agreement.get("pairwise_jaccard", 0.0)), 3))),
+            ("Pairwise precision", _format_optional_float(agreement.get("pairwise_precision_outbreaker_vs_sequence"))),
+            ("Pairwise recall", _format_optional_float(agreement.get("pairwise_recall_outbreaker_vs_sequence"))),
+            ("Pairwise Jaccard", _format_optional_float(agreement.get("pairwise_jaccard"))),
         ]
         comp_html = "<table class='kv-table'><tbody>" + "".join(f"<tr><th>{_safe_html(k)}</th><td>{_safe_html(v)}</td></tr>" for k, v in comp_kv) + "</tbody></table>"
     else:
@@ -2095,6 +2106,24 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
         seq_cluster_html = "<table class='kv-table'><tbody>" + "".join(f"<tr><th>{_safe_html(k)}</th><td>{_safe_html(v)}</td></tr>" for k, v in seq_kv) + "</tbody></table>"
     else:
         seq_cluster_html = '<p class="muted">No sequence clustering summary artifact.</p>'
+
+    # 15b. Advanced FASTA analysis snapshot
+    fasta_analysis_html = ""
+    if isinstance(fasta_analysis_data, dict):
+        fasta_input = fasta_analysis_data.get("input") if isinstance(fasta_analysis_data.get("input"), dict) else {}
+        fasta_runs = fasta_analysis_data.get("runs") if isinstance(fasta_analysis_data.get("runs"), dict) else {}
+        completed_tools = [key for key, run in fasta_runs.items() if isinstance(run, dict) and run.get("status") == "completed"]
+        failed_tools = [key for key, run in fasta_runs.items() if isinstance(run, dict) and run.get("status") in {"failed", "error", "timeout"}]
+        fasta_kv = [
+            ("Status", str(fasta_analysis_data.get("status") or "unknown")),
+            ("Input FASTA", os.path.basename(str(fasta_analysis_data.get("input_fasta") or "n/a"))),
+            ("Samples", str(fasta_input.get("sample_count", "n/a"))),
+            ("Completed tools", ", ".join(completed_tools) if completed_tools else "none"),
+            ("Failed tools", ", ".join(failed_tools) if failed_tools else "none"),
+        ]
+        fasta_analysis_html = "<table class='kv-table'><tbody>" + "".join(f"<tr><th>{_safe_html(k)}</th><td>{_safe_html(v)}</td></tr>" for k, v in fasta_kv) + "</tbody></table>"
+    else:
+        fasta_analysis_html = '<p class="muted">No advanced FASTA analysis artifact found.</p>'
 
     # 16. Case-level actions (from CSV)
     action_limit_label = "all rows" if full else "first 25 rows"
@@ -2270,6 +2299,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
   <details><summary>Transmission network artifact</summary><div><pre>{_safe_html(json.dumps(transmission_data, indent=2, default=str) if transmission_data else 'No artifact found.')}</pre></div></details>
   <details><summary>Decycled consensus artifact</summary><div><pre>{_safe_html(json.dumps(decycled_consensus_data, indent=2, default=str) if decycled_consensus_data else 'No artifact found.')}</pre></div></details>
   <details><summary>Sequence clustering summary</summary><div><pre>{_safe_html(json.dumps(sequence_summary_data, indent=2, default=str) if sequence_summary_data else 'No artifact found.')}</pre></div></details>
+  <details><summary>Advanced FASTA analysis</summary><div><pre>{_safe_html(json.dumps(fasta_analysis_data, indent=2, default=str) if fasta_analysis_data else 'No artifact found.')}</pre></div></details>
   <details><summary>Lineage/DR validation</summary><div><pre>{_safe_html(json.dumps(lineage_dr_data, indent=2, default=str) if lineage_dr_data else 'No artifact found.')}</pre></div></details>
   <details><summary>Resistance validation</summary><div><pre>{_safe_html(json.dumps(resistance_validation_data, indent=2, default=str) if resistance_validation_data else 'No artifact found.')}</pre></div></details>
 </div>"""
@@ -2608,6 +2638,8 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
       {comp_html}
       <h3>Sequence clustering snapshot</h3>
       {seq_cluster_html}
+      <h3>Advanced FASTA analysis</h3>
+      {fasta_analysis_html}
     </section>
 
     <!-- DATA PROVENANCE -->

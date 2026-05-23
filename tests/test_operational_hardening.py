@@ -245,6 +245,13 @@ def test_cors_origins_keep_local_defaults(monkeypatch):
     assert _cors_origins() == ["http://localhost:8081", "http://127.0.0.1:8081"]
 
 
+def test_advanced_fasta_analysis_job_is_registered():
+    from backend.job_runner import ALLOWED_JOBS, PIPELINE_STEPS
+
+    assert "run_fasta_analysis" in ALLOWED_JOBS
+    assert "run_fasta_analysis" in PIPELINE_STEPS
+
+
 class _ScalarResult:
     def __init__(self, value):
         self.value = value

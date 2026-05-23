@@ -222,9 +222,27 @@ Scripts are wired as named jobs and called by the backend job runner.
 Full pipeline order:
 1. Derive sequence clusters.
 2. Export outbreaker inputs (`exports/cases.csv` and `exports/dna.fasta`).
-3. Run lineage and drug-resistance validation against the active FASTA.
-4. Run outbreaker2.
-5. Compare clustering methods.
+3. Run advanced FASTA analysis.
+4. Run lineage and drug-resistance validation against the active FASTA.
+5. Generate rule-based alerts.
+6. Run outbreaker2.
+7. Compare clustering methods.
+8. Run transmission synthesis.
+
+Advanced FASTA analysis:
+- Job name: `run_fasta_analysis`.
+- Uses `FASTA_ANALYSIS_FASTA` / `TB_FASTA_ANALYSIS_FASTA` when set, otherwise `exports/dna.fasta` or the newest FASTA in `exports/` or `uploads/`.
+- Detects and runs optional external tools when available: SeqKit, SNP-sites, snp-dists, IQ-TREE, and TreeTime.
+- Uses local executables first, then WSL micromamba fallback when `FASTA_ANALYSIS_WSL_FALLBACK=1` (default) and `FASTA_ANALYSIS_WSL_ENV` / `TBPROFILER_WSL_ENV` points to the tool environment.
+- Writes `exports/fasta_analysis_summary.json` plus tool outputs under `exports/fasta_analysis/`.
+- Missing tools are recorded as warnings rather than failing the whole workflow.
+- Useful outputs include FASTA statistics, extracted SNP-site alignment, an external SNP distance matrix, a maximum-likelihood tree, and a dated tree when IQ-TREE and TreeTime are both available.
+
+WSL tool install example:
+
+```
+micromamba install -y -n tbtools -c conda-forge -c bioconda seqkit snp-sites snp-dists iqtree treetime
+```
 
 TBProfiler (primary engine):
 - Uses the active FASTA selected by `LINEAGE_DR_FASTA` / `TB_LINEAGE_DR_FASTA`, or `exports/dna.fasta` from the current pipeline run.
@@ -476,5 +494,3 @@ The near-term implementation target is documented in
 token-based RBAC deployment, validated ingest, operational readiness checks,
 structured epidemiology linkage, reproducible reports, tests, CI, and governance
 caveats for an internal pilot.
-
-

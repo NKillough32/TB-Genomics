@@ -234,7 +234,10 @@ def generate_transmission_network():
                     COUNT(*) OVER (PARTITION BY cc.cluster_id) AS cluster_size
                 FROM case_clusters cc
                 JOIN cases c ON cc.sample_id = c.pseudonymised_case_id
+                LEFT JOIN sample_qc_metrics sqm ON sqm.sample_id = c.pseudonymised_case_id
                 LEFT JOIN tb_interpretation ti ON ti.sample_id = c.pseudonymised_case_id
+                WHERE LOWER(COALESCE(sqm.qc_status, 'not_reported')) IN ('pass', 'passed')
+                  AND COALESCE(sqm.contamination_flag, FALSE) = FALSE
                 ORDER BY cc.cluster_id, c.specimen_date
                 """
             )
@@ -256,7 +259,10 @@ def generate_transmission_network():
                         ti.lineage,
                         ti.predicted_drug_resistance
                     FROM cases c
+                    LEFT JOIN sample_qc_metrics sqm ON sqm.sample_id = c.pseudonymised_case_id
                     LEFT JOIN tb_interpretation ti ON ti.sample_id = c.pseudonymised_case_id
+                    WHERE LOWER(COALESCE(sqm.qc_status, 'not_reported')) IN ('pass', 'passed')
+                      AND COALESCE(sqm.contamination_flag, FALSE) = FALSE
                     ORDER BY c.specimen_date DESC NULLS LAST
                     LIMIT 20
                     """
@@ -494,6 +500,8 @@ def generate_transmission_network():
         key_nodes = sorted(graph.nodes(), key=lambda n: graph.nodes[n].get("risk_score", 0), reverse=True)[:10]
         insights = {
             "generated_at": str(np.datetime64("now")),
+            "inference_source": "priority_visualization_heuristic",
+            "provenance": "derived_visualization",
             "node_count": graph.number_of_nodes(),
             "edge_count": graph.number_of_edges(),
             "cluster_count": len(cluster_order),
@@ -524,6 +532,18 @@ def generate_transmission_network():
                     "incoming_links": int(graph.in_degree(node)),
                 }
                 for node in key_nodes
+            ],
+            "edges": [
+                {
+                    "source": src,
+                    "target": dst,
+                    "source_display": graph.nodes[src].get("display_case_id", str(src)[:8]),
+                    "target_display": graph.nodes[dst].get("display_case_id", str(dst)[:8]),
+                    "probability": data.get("probability"),
+                    "credibility_class": data.get("confidence"),
+                    "inference": "priority_visualization_heuristic",
+                }
+                for src, dst, data in graph.edges(data=True)
             ],
             "clusters": [
                 {

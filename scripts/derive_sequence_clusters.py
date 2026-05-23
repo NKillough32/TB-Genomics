@@ -25,6 +25,11 @@ def _snp_distance(seq_a: str, seq_b: str) -> tuple[int, int, int, str]:
     return result.distance, result.comparable_sites, result.ambiguous_sites, result.status
 
 
+def _qc_pass(row) -> bool:
+    status = str(row.get("qc_status") or "").strip().lower()
+    return status in {"pass", "passed"} and not bool(row.get("contamination_flag"))
+
+
 class UnionFind:
     def __init__(self, items):
         self.parent = {item: item for item in items}
@@ -121,9 +126,12 @@ def main() -> None:
                     c.pseudonymised_case_id::text AS case_id,
                     c.specimen_date,
                     c.geographic_region,
-                    cs.sequence
+                    cs.sequence,
+                    sqm.qc_status,
+                    sqm.contamination_flag
                 FROM consensus_sequences cs
                 JOIN cases c ON c.pseudonymised_case_id = cs.sample_id
+                LEFT JOIN sample_qc_metrics sqm ON sqm.sample_id = cs.sample_id
                 ORDER BY c.specimen_date ASC NULLS LAST
                 """
             )
@@ -139,8 +147,11 @@ def main() -> None:
                 "sequence": (row["sequence"] or "").strip().upper(),
             }
             for row in rows
-            if row.get("sequence")
+            if row.get("sequence") and _qc_pass(row)
         ]
+        excluded = len([row for row in rows if row.get("sequence") and not _qc_pass(row)])
+        if excluded:
+            print(f"Excluded {excluded} sequence row(s) from clustering because QC failed, was missing, or contamination was flagged")
 
         # Scale guard: limit pairwise comparisons to avoid timeouts
         if max_sequences > 0 and len(samples) > max_sequences:

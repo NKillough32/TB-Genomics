@@ -424,6 +424,10 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
             else "n/a"
         )
         enriched_network_edges.append(enriched)
+    enriched_high_confidence_edges = [
+        edge for edge in enriched_network_edges
+        if float(edge.get("probability") or 0.0) >= high_posterior_threshold
+    ]
     best_incoming: dict = {}
     best_outgoing: dict = {}
     outbreaker_pair_prob: dict = {}
@@ -974,16 +978,22 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
         )
         if _qc_prob:
             _warn = "Pairwise SNP required before transmission interpretation."
-            _act = "Repeat/verify sequence before action."
+            _act = "Tier D - repeat sequencing/QC review only; do not use for model-driven transmission action."
         elif _lp is None:
             _warn = "Outbreaker-only link: requires genomic validation."
-            _act = "Model-prioritised exposure review - confirm with pairwise SNP and epidemiology before action."
+            _act = "Tier C - model posterior signal only; do not escalate unless SNP and epidemiology support it."
+        elif _lp <= 5:
+            _warn = "Close SNP distance; epidemiology must corroborate the direction before field escalation."
+            _act = "Tier A - urgent contact tracing review if a plausible epi link is confirmed."
         elif _lp <= 12:
             _warn = "Pairwise SNP supports cluster linkage, but epidemiology must still corroborate the direction."
-            _act = "Confirm with pairwise SNP and epidemiology before operational action."
+            _act = "Tier B - MDT cluster review; seek exposure, timeline, and contact-tracing corroboration."
+        elif _lp > 25:
+            _warn = "Pairwise SNP distance is too high for recent direct transmission in this report."
+            _act = "Tier E - no transmission action unless field epidemiology identifies an independent link."
         else:
             _warn = "Pairwise SNP distance is too high for direct transmission interpretation."
-            _act = "Model-prioritised exposure review - confirm with pairwise SNP and epidemiology before action."
+            _act = "Tier C - review as SNP/model discordance; do not escalate from model posterior alone."
         _case_action_csv.append([
             _short_case_id(_cid),
             _short_case_id(_clid) if _clid else "none",
@@ -1015,10 +1025,19 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
     row_limit = None if full else 25
     action_rows_csv = _load_export_csv("appendix_a_case_level_actions.csv", limit=row_limit)
     discordance_rows_csv = _load_export_csv("appendix_b_full_discordance_review.csv", limit=row_limit)
+    excluded_samples_csv = _load_export_csv("outbreaker_excluded_samples.csv", limit=row_limit)
+    appendix_a_exists = os.path.exists(_export_path("appendix_a_case_level_actions.csv"))
+    appendix_b_exists = os.path.exists(_export_path("appendix_b_full_discordance_review.csv"))
+    appendix_a_missing = not appendix_a_exists or not action_rows_csv
+    appendix_b_missing = not appendix_b_exists
+    appendix_b_empty_valid = appendix_b_exists and not discordance_rows_csv
 
     # -- Key nodes & edges from network JSON ------------------------------------
     key_nodes = (transmission_data or {}).get("key_nodes") or []
     network_edges = (transmission_data or {}).get("edges") or (transmission_data or {}).get("transmission_edges") or []
+    raw_network_node_count = int((transmission_data or {}).get("node_count") or 0)
+    raw_network_edge_count = int((transmission_data or {}).get("edge_count") or 0)
+    raw_high_posterior_edge_count = int((transmission_data or {}).get("high_confidence_edges") or 0)
 
     # -- Report metadata --------------------------------------------------------
     report_label = "Full HTML" if full else "Short HTML"
@@ -1304,6 +1323,23 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
         if _e.get("target"):
             _model_nodes.add(str(_e["target"]))
     denom_model_nodes = len(_model_nodes)
+    qc_pass_case_ids = {
+        str(r.get("case_id"))
+        for r in case_rows
+        if str(r.get("qc_status") or "").lower() in ("pass", "passed") and not bool(r.get("contamination_flag"))
+    }
+    qc_pass_model_nodes = len(_model_nodes.intersection(qc_pass_case_ids))
+    raw_outbreaker_nodes = int((summary_data or {}).get("case_count") or raw_network_node_count or denom_model_nodes)
+    raw_posterior_edges = max(raw_network_edge_count, len(transmission_edges))
+    edges_ge_threshold = max(raw_high_posterior_edge_count, high_confidence_all_count)
+    edges_ge_threshold_snp_supported = len(genomic_pairs)
+    edges_ge_threshold_snp_supported_qc = len([
+        item for item in genomic_pairs
+        if item.get("qc") == "pass/pass" or item.get("qc") == "passed/passed"
+    ])
+    diagnostics_ready = model_reliability != "Exploratory"
+    qc_ready = extract_qc_pass_pct is not None and extract_qc_pass_pct >= 90
+    edges_eligible_for_escalation = edges_ge_threshold_snp_supported_qc if diagnostics_ready and qc_ready else 0
     model_node_note = (
         "Includes samples beyond current QC-pass set; model output is not operationally usable until QC is resolved"
         if denom_model_nodes > denom_qc_pass else
@@ -1323,7 +1359,12 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
   <tr><td>Culture-positive / sequencing-eligible</td><td>Cases with a consensus sequence loaded</td><td><strong>{_safe_html(str(denom_culture_pos))}</strong></td><td>Source: consensus_sequences</td></tr>
   <tr><td>Sequenced samples</td><td>Cases with sequence data in this extract</td><td><strong>{_safe_html(str(denom_sequenced))}</strong></td><td></td></tr>
   <tr><td>QC-pass genomes</td><td>Genomes passing QC - used for SNP clustering</td><td><strong>{_safe_html(str(denom_qc_pass))}</strong></td><td>Fail/contaminated excluded from inference</td></tr>
-  <tr><td>outbreaker2 model nodes</td><td>Cases/samples included in transmission model</td><td><strong>{_safe_html(str(denom_model_nodes))}</strong></td><td>{_safe_html(model_node_note)}</td></tr>
+  <tr><td>Raw outbreaker2 nodes</td><td>Cases/samples reported by outbreaker2 summary or network JSON</td><td><strong>{_safe_html(str(raw_outbreaker_nodes))}</strong></td><td>Raw model denominator; may include samples excluded from operational interpretation</td></tr>
+  <tr><td>QC-pass outbreaker2 nodes</td><td>Raw model nodes that currently pass QC</td><td><strong>{_safe_html(str(qc_pass_model_nodes))}</strong></td><td>{_safe_html(model_node_note)}</td></tr>
+  <tr><td>Raw posterior edges</td><td>Posterior links reported in network JSON or detailed edge rows</td><td><strong>{_safe_html(str(raw_posterior_edges))}</strong></td><td>Exploratory model output</td></tr>
+  <tr><td>Edges &ge;{_safe_html(high_posterior_label)}</td><td>Raw posterior edges meeting the configured high-posterior threshold</td><td><strong>{_safe_html(str(edges_ge_threshold))}</strong></td><td>Hypotheses only</td></tr>
+  <tr><td>Edges &ge;{_safe_html(high_posterior_label)} and SNP &le;{_safe_html(str(low_snp_threshold))}</td><td>High-posterior edges with pairwise SNP support</td><td><strong>{_safe_html(str(edges_ge_threshold_snp_supported))}</strong></td><td>Require QC-pass and epidemiological corroboration</td></tr>
+  <tr><td>Edges eligible for operational escalation</td><td>High-posterior, SNP-supported, QC-pass, and diagnostics-ready links</td><td><strong>{_safe_html(str(edges_eligible_for_escalation))}</strong></td><td>Zero means no model link should trigger field action from this report</td></tr>
 </tbody></table></div>"""
 
     # QC thresholds box HTML
@@ -1371,6 +1412,29 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
   Timeline (symptom onset, diagnosis, isolation, treatment start, sequencing date).
   Complete these fields in the case management system for MDT review.
 </div>"""
+    region_values = sorted({str(r.get("geographic_region") or "").strip() for r in case_rows if r.get("geographic_region")})
+    geography_detail = ", ".join(region_values[:6]) if region_values else "not recorded"
+    geography_limitation = (
+        "Only broad country-level geography is present; HSC Trust/LGD/PHA locality/postcode-sector fields are needed for operational NI clustering."
+        if region_values and set(region_values) <= {"United Kingdom", "UK", "Great Britain", "Northern Ireland"}
+        else "Operational locality fields should still be confirmed before MDT sign-off."
+    )
+    epi_interpretation_rows = [
+        ("Shared geography", geography_detail, geography_limitation),
+        ("Shared setting", "Not confirmed in genomic pipeline", "Review household, workplace, healthcare, congregate, prison/hostel and social-setting fields."),
+        ("Pulmonary or smear-positive status", "Not confirmed in genomic pipeline", "Required to judge infectiousness and plausibility of onward transmission."),
+        ("Contact tracing status", "Not confirmed in genomic pipeline", "Record whether named contacts and shared venues have been identified and traced."),
+        ("Symptom onset plausibility", "Partially available only if symptom_onset_date is populated", "Confirm symptom onset/diagnosis/treatment dates before interpreting directionality."),
+        ("Epi links despite SNP >12", "Not assessable from current fields", "Any claimed link with SNP >12 must be documented as shared source/reactivation or separately justified by field epi."),
+    ]
+    epi_interpretation_html = (
+        "<div class='tbl-wrap'><table><thead><tr><th>Question</th><th>Current evidence</th><th>Operational limitation / action</th></tr></thead><tbody>"
+        + "".join(
+            f"<tr><td>{_safe_html(q)}</td><td>{_safe_html(e)}</td><td>{_safe_html(a)}</td></tr>"
+            for q, e, a in epi_interpretation_rows
+        )
+        + "</tbody></table></div>"
+    )
 
     synthesis_parameters = synthesis_data.get("parameters") if isinstance(synthesis_data, dict) else {}
     if not isinstance(synthesis_parameters, dict):
@@ -1510,7 +1574,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
     # -------------------------------------------------------------------------
 
     # 1. Status banner
-    _appendices_missing = not action_rows_csv or not discordance_rows_csv
+    _appendices_missing = appendix_a_missing or appendix_b_missing
     _tbp_import = (lineage_dr_data or {}).get("tbprofiler_db_import") or {}
     _mk_import = (lineage_dr_data or {}).get("mykrobe_db_import") or {}
     _dr_imported_rows = int((_tbp_import.get("imported_rows") or 0) + (_mk_import.get("imported_rows") or 0))
@@ -1570,6 +1634,15 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
         + ''.join(f'<li>{_safe_html(item)}</li>' for item in model_ready_blockers)
         + '</ul></div>'
     )
+    executive_decision_html = f"""
+<div class="tbl-wrap"><table><thead><tr><th>Operational question</th><th>Current answer</th></tr></thead><tbody>
+  <tr><td>Circulation status</td><td><strong>{'Not ready' if (missing_repro or _appendices_missing or not model_operational_ready) else 'Ready for governance review'}</strong></td></tr>
+  <tr><td>Transmission conclusion</td><td>No SNP-supported direct transmission links should be escalated from this report unless listed as operationally eligible below.</td></tr>
+  <tr><td>Main blocker</td><td>QC pass rate { _safe_html(extract_qc_pass_label) }; target &ge;90%, with failed/not-reported samples requiring repeat or exclusion sign-off.</td></tr>
+  <tr><td>Model status</td><td>outbreaker2 exploratory only until QC-filtered inputs and posterior diagnostics pass.</td></tr>
+  <tr><td>Immediate actions</td><td>Repeat sequencing/QC review, validate resistance pipeline outputs, complete field epi domains, and record MDT decisions.</td></tr>
+</tbody></table></div>
+"""
     if missing_repro:
         status_html = f'<span class="status-banner status-draft">DRAFT - {len(missing_repro)} reproducibility field(s) missing</span>'
     elif _appendices_missing:
@@ -1605,7 +1678,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
         f'<div class="callout callout-alert" style="margin-bottom:.6rem">'
         f'<strong>No SNP-supported direct transmission links identified.</strong> '
         f'Zero pairwise SNP links at &le;12 SNPs exist in this dataset. '
-        f'All {high_confidence_all_count} high-posterior model edge(s) are '
+        f'All {edges_ge_threshold} high-posterior model edge(s) are '
         f'<em>exploratory only</em> and must not trigger field investigation without '
         f'SNP &le;12 and epidemiological corroboration.</div>'
     ) if pairwise_links_le_12 == 0 else ""
@@ -1613,13 +1686,13 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
 <div class="section-note" style="margin-top:.7rem">
   <strong>Usefulness of current outbreaker2 outputs:</strong>
   The generated summary JSON, transmission network JSON, RDS object, diagnostic plots, tree, and derived pair table are useful for
-  MDT review and audit. They are not yet sufficient for operational transmission inference because model inputs are not limited to
-  QC-pass genomes and the current posterior sample count is {_safe_html(str(posterior_samples))}.
+  MDT review and audit. They are not yet sufficient for operational transmission inference until inputs are restricted to
+  QC-pass genomes and posterior diagnostics pass.
 </div>
 <div class="tbl-wrap"><table><thead><tr><th>Output area</th><th>Current state</th><th>Refinement needed</th></tr></thead><tbody>
-  <tr><td>Model input set</td><td>{_safe_html(str(denom_model_nodes))} model node(s), {_safe_html(str(denom_qc_pass))} QC-pass genome(s)</td><td>Run outbreaker2 only on QC-pass, non-contaminated sequenced samples; export excluded cases with reasons.</td></tr>
-  <tr><td>Posterior support</td><td>{_safe_html(str(high_confidence_all_count))} high-posterior model edge(s)</td><td>Label as hypotheses; add posterior support distribution and alternative ancestors per edge in reviewer tables.</td></tr>
-  <tr><td>Diagnostics</td><td>{_safe_html(str(posterior_samples))} posterior sample(s) after burn-in</td><td>Increase retained posterior samples and report ESS/R-hat or equivalent multi-chain diagnostics before operational use.</td></tr>
+  <tr><td>Model input set</td><td>{_safe_html(str(raw_outbreaker_nodes))} raw node(s), {_safe_html(str(qc_pass_model_nodes))} QC-pass model node(s)</td><td>Run outbreaker2 only on QC-pass, non-contaminated sequenced samples; export excluded cases with reasons.</td></tr>
+  <tr><td>Posterior support</td><td>{_safe_html(str(edges_ge_threshold))} high-posterior model edge(s)</td><td>Label as hypotheses; add posterior support distribution and alternative ancestors per edge in reviewer tables.</td></tr>
+  <tr><td>Diagnostics</td><td>{_safe_html(str(posterior_samples))} posterior sample(s); ESS {_safe_html(str((summary_data or {}).get("mcmc_effective_sample_size", "n/a")))}</td><td>Increase retained posterior samples, run multiple chains, and report ESS/R-hat or equivalent diagnostics before operational use.</td></tr>
   <tr><td>Review table</td><td>Pairs are classified against SNP/QC evidence in the report</td><td>Make this the primary operational artifact, with final MDT adjudication fields and exportable CSV.</td></tr>
 </tbody></table></div>"""
 
@@ -1633,7 +1706,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
   {_metric_card("QC-pass genomes", str(denom_qc_pass), _qc_sub, alert=extract_qc_pass_pct is not None and extract_qc_pass_pct < 90)}
   {_metric_card("QC unresolved", str(qc_status_counts['fail'] + qc_status_counts['not_reported'] + qc_status_counts['contamination']), f"{qc_status_counts['pass']} passed", alert=(qc_status_counts['fail'] + qc_status_counts['contamination']) > 0)}
   {_metric_card("Open clusters", str(open_clusters), f"{high_priority_open} priority >10")}
-  {_metric_card("High-posterior model links", str(high_confidence_all_count), "Posterior >=0.70 - not confirmed transmission")}
+  {_metric_card("High-posterior model links", str(edges_ge_threshold), "Posterior >=0.70 - not confirmed transmission")}
   {_metric_card("SNP links <=12", str(pairwise_links_le_12), "Direct transmission candidates")}
   {_metric_card("Transmission inference", "Not ready" if not model_operational_ready else "MDT review", "Model output remains provisional" if not model_operational_ready else "Requires epi corroboration", alert=not model_operational_ready)}
 </div>"""
@@ -1660,7 +1733,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
 <tbody>
 <tr><td>1</td><td>Repeat sequencing / QC review for all failed or contaminated samples</td><td>Laboratory / Bioinformatics</td><td>48 h</td><td><span class="badge badge-red">Open</span></td><td>{gen_at}</td><td>If repeat fails again: exclude from cluster; flag to MDT</td></tr>
 <tr><td>2</td><td>Validate drug-resistance pipeline gene-drug mapping; suppress unusual mappings from operational reports</td><td>Bioinformatics / Microbiology</td><td>Immediate</td><td><span class="badge badge-red">Open</span></td><td>{gen_at}</td><td>If validation fails: quarantine resistance calls until pipeline fix confirmed</td></tr>
-<tr><td>3</td><td>Confirm phenotypic DST for all genomic resistance signals before clinical use</td><td>TB Microbiology / MDT</td><td>Immediate</td><td><span class="badge badge-red">Open</span></td><td>{gen_at}</td><td>If DST unavailable: treat as MDR pending result; notify clinician</td></tr>
+<tr><td>3</td><td>Confirm phenotypic DST for all non-susceptible genomic resistance predictions before clinical use</td><td>TB Microbiology / MDT</td><td>Immediate</td><td><span class="badge badge-red">Open</span></td><td>{gen_at}</td><td>If DST unavailable: label as unvalidated genomic prediction; do not treat a populated result field as resistance.</td></tr>
 <tr><td>4</td><td>Complete epidemiological data for all open clusters (demographics, setting, contacts)</td><td>TB Nurses / HPT / PHA</td><td>Next MDT</td><td><span class="badge badge-amber">In progress</span></td><td>{gen_at}</td><td>If epi incomplete at MDT: defer cluster closure; document gap</td></tr>
 <tr><td>5</td><td>Do not escalate model-only links to field investigation without SNP <=12 + epi corroboration</td><td>HPT / TB Nurses / MDT</td><td>Ongoing</td><td><span class="badge badge-amber">Standing</span></td><td>{gen_at}</td><td>If field escalation requested: require written MDT decision and documented epi rationale</td></tr>
 <tr><td>6</td><td>{repro_action}</td><td>Bioinformatics / Lab Director</td><td>Before circulation</td><td>{repro_status}</td><td>{gen_at}</td><td>{repro_trigger}</td></tr>
@@ -1685,6 +1758,22 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
     mdt_table_body = "".join(f"<tr><td>{_safe_html(a)}</td><td>{_safe_html(b)}</td><td>{_safe_html(c)}</td></tr>" for a, b, c in mdt_rows)
     mdt_html = f"""<div class="tbl-wrap"><table><thead><tr><th>Priority area</th><th>Current signal</th><th>Required MDT action</th></tr></thead>
 <tbody>{mdt_table_body}</tbody></table></div>"""
+    mdt_signoff_rows = [
+        ("QC failures", "Accepted / deferred", "Repeat sequencing or documented exclusion required before inference", "Laboratory / Bioinformatics", "", ""),
+        ("Cluster status", "Open / closed / deferred", "Close only when genomic, QC, and field epi criteria are reconciled", "MDT Chair / PHA", "", ""),
+        ("Resistance outputs", "Accepted / suppressed", "Suppress unvalidated or unlinked genomic resistance outputs from clinical summaries", "TB Microbiology / MDT", "", ""),
+        ("Field investigation", "Yes / no", "Escalate only when SNP/QC evidence and epi plausibility support action", "HPT / TB Nurses", "", ""),
+        ("External circulation", "Approved / not approved", "Requires complete appendices, reproducibility metadata, MDT rationale, and IG approval", "Responsible public health physician", "", ""),
+    ]
+    mdt_signoff_html = (
+        "<h3>Formal MDT sign-off log</h3>"
+        "<div class='tbl-wrap'><table><thead><tr><th>Item</th><th>MDT decision</th><th>Rationale</th><th>Responsible person</th><th>Date</th><th>Follow-up</th></tr></thead><tbody>"
+        + "".join(
+            f"<tr><td>{_safe_html(item)}</td><td>{_safe_html(decision)}</td><td>{_safe_html(rationale)}</td><td>{_safe_html(owner)}</td><td>{_safe_html(date)}</td><td>{_safe_html(follow)}</td></tr>"
+            for item, decision, rationale, owner, date, follow in mdt_signoff_rows
+        )
+        + "</tbody></table></div>"
+    )
 
     # 5. KPI table with progress bars
     kpi_kv = ""
@@ -1812,6 +1901,37 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
                 rows_out += f"<tr><th>{_safe_html(label)}</th><td>{_safe_html(fv)}</td></tr>"
         if rows_out:
             analysis_html = f"<table class='kv-table'><tbody>{rows_out}</tbody></table>"
+        coda = summary_data.get("coda_diagnostics") if isinstance(summary_data.get("coda_diagnostics"), dict) else {}
+        effective = coda.get("effective_size") if isinstance(coda.get("effective_size"), dict) else {}
+        gelman = coda.get("gelman_rubin") if isinstance(coda.get("gelman_rubin"), dict) else {}
+        geweke = coda.get("geweke") if isinstance(coda.get("geweke"), dict) else {}
+        heidelberg = coda.get("heidelberg") if isinstance(coda.get("heidelberg"), dict) else {}
+        diagnostic_rows = [
+            ("Posterior reliable", str(summary_data.get("posterior_reliable", "n/a"))),
+            ("Reliability status", str(summary_data.get("posterior_reliability_status", "n/a"))),
+            ("MCMC ESS", str(summary_data.get("mcmc_effective_sample_size", "n/a"))),
+            ("Minimum ancestry ESS", str(summary_data.get("alpha_mcmc_effective_sample_size_min", "n/a"))),
+            ("Chains", str(summary_data.get("chains", "n/a"))),
+            ("Gelman-Rubin status", str(gelman.get("status", "not_run"))),
+            ("Gelman-Rubin max PSRF", str(gelman.get("psrf_max", "n/a"))),
+            ("Geweke max |z|", str(geweke.get("max_abs_z", "n/a"))),
+            ("Heidelberg failed count", str(heidelberg.get("failed_count", "n/a"))),
+        ]
+        ess_rows = "".join(
+            f"<tr><td>{_safe_html(str(k))}</td><td>{_safe_html(str(v))}</td></tr>"
+            for k, v in effective.items()
+        ) or '<tr><td colspan="2" class="muted">No per-parameter ESS available.</td></tr>'
+        analysis_html += (
+            "<h3>MCMC reliability diagnostics</h3>"
+            "<div class='callout callout-alert'><strong>Do not use posterior transmission direction operationally unless diagnostics pass.</strong> "
+            "Run multiple chains, increase retained posterior samples, and review ESS, chain agreement, entropy, and alternative infectors before presenting a definitive tree.</div>"
+            "<div class='tbl-wrap'><table><thead><tr><th>Diagnostic</th><th>Value</th></tr></thead><tbody>"
+            + "".join(f"<tr><td>{_safe_html(k)}</td><td>{_safe_html(v)}</td></tr>" for k, v in diagnostic_rows)
+            + "</tbody></table></div>"
+            "<details><summary>ESS by parameter</summary><div class='tbl-wrap'><table><thead><tr><th>Parameter</th><th>ESS</th></tr></thead><tbody>"
+            + ess_rows
+            + "</tbody></table></div></details>"
+        )
     if not analysis_html:
         analysis_html = '<p class="muted">No outbreaker2 analysis artifact found.</p>'
 
@@ -1843,9 +1963,9 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
         ("Interpreted samples", str(interpreted)),
         ("Samples with lineage", str(with_lineage)),
         ("Lineage coverage", lin_cov),
-        ("Samples with resistance calls", str(with_resist)),
+        ("Samples with resistance results available", str(with_resist)),
         ("Resistance coverage", res_cov),
-        ("Any resistance signal", str(analysis_epi_summary.get("samples_with_any_resistance_signal", 0))),
+        ("Any non-susceptible genomic resistance prediction", str(analysis_epi_summary.get("samples_with_any_resistance_signal", 0))),
         ("Rifampicin-resistant (suspected)", str(analysis_epi_summary.get("rifampicin_resistant_suspected", 0))),
         ("Isoniazid-resistant (suspected)", str(analysis_epi_summary.get("isoniazid_resistant_suspected", 0))),
         ("MDR (suspected)", str(analysis_epi_summary.get("mdr_suspected", 0))),
@@ -2005,7 +2125,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
                 f'</p>'
             )
     else:
-        dr_table_html = '<p class="muted">No reportable resistance-mutation details found.</p>'
+        dr_table_html = '<p class="muted">No validated reportable resistance mutations detected.</p>'
         if suppressed_mutations:
             dr_table_html += (
                 f'<p class="muted" style="margin-top:.4rem">'
@@ -2141,9 +2261,24 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
          ("Posterior", "Posterior"), ("Code", "Code"), ("Interpretation", "Interpretation")],
         "No discordance review export found."
     )
+    excluded_samples_html = _data_table_html(
+        excluded_samples_csv,
+        [
+            ("Sample", "sample_id"),
+            ("Reason excluded", "reason_excluded"),
+            ("QC parameter", "qc_parameter_breached"),
+            ("QC status", "qc_status"),
+            ("Mean depth", "mean_depth"),
+            ("Coverage breadth", "coverage_breadth"),
+            ("Ambiguous bases %", "ambiguous_base_percent"),
+            ("Contamination", "contamination_flag"),
+            ("Repeat sequencing", "repeat_sequencing_required"),
+        ],
+        "No outbreaker2 exclusion export found. Re-run outbreaker input export to generate this required audit table."
+    )
 
     # Appendix A/B class and content (precomputed here since data is available)
-    if action_rows_csv:
+    if not appendix_a_missing:
         appendix_a_class = 'card'
         appendix_a_body_html = f'<details open><summary>Table A1 \u2014 Case actions ({_safe_html(action_limit_label)})</summary><div>{actions_csv_html}</div></details>'
     else:
@@ -2152,9 +2287,18 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
     if discordance_rows_csv:
         appendix_b_class = 'card'
         appendix_b_body_html = f'<details open><summary>Discordance table ({_safe_html(action_limit_label)})</summary><div>{discordance_csv_html}</div></details>'
+    elif appendix_b_empty_valid:
+        appendix_b_class = 'card'
+        appendix_b_body_html = (
+            '<div class="callout"><strong>No discordant pairs identified.</strong> '
+            'Appendix B was generated successfully, but the current QC-filtered/model/SNP comparison produced no discordant rows. '
+            'Reason: no pairs met the discordance definitions after applying the current thresholds, or the detailed model edge list was empty.</div>'
+            '<div class="tbl-wrap"><table><thead><tr><th>Case pair</th><th>Pairwise SNP result</th><th>Outbreaker2</th><th>Pairwise SNP</th><th>Posterior</th><th>Code</th><th>Interpretation</th></tr></thead>'
+            '<tbody><tr><td colspan="7" class="muted">Valid empty appendix - no discordant pairs identified.</td></tr></tbody></table></div>'
+        )
     else:
         appendix_b_class = 'card card-alert'
-        appendix_b_body_html = '<div class="callout callout-alert"><strong>REPORT INCOMPLETE &#8212; Appendix B is missing.</strong> No discordance data was generated. This may indicate insufficient sequencing data or no discordant model/SNP pairs in the current dataset. Ensure sequencing results are loaded and re-generate this HTML report.</div>'
+        appendix_b_body_html = '<div class="callout callout-alert"><strong>REPORT INCOMPLETE &#8212; Appendix B generation failed.</strong> The required discordance-review CSV is absent. This is different from having no discordant pairs. Re-run report generation and check pipeline/export logs.</div>'
 
     # By-cluster epi-completeness table (all domains default Red - field epi not in pipeline)
     if cluster_action_rows:
@@ -2213,12 +2357,17 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
         "No priority-node data."
     )
     network_edges_html = _data_table_html(
-        enriched_network_edges[:15 if not full else None],
+        enriched_high_confidence_edges[:15 if not full else None],
         [("From", "source_display"), ("To", "target_display"), ("Posterior probability", "probability"),
          ("Credibility", "credibility_class"), ("Entropy", "posterior_entropy"),
          ("Chain agreement", "chain_agreement"), ("Chain probability range", "probability_range_by_chain"),
          ("Inference", "inference")],
-        "No transmission-link data."
+        (
+            f"Network summary reports {raw_high_posterior_edge_count} high-posterior edge(s), "
+            "but no detailed edge records were present in transmission_network.json."
+            if raw_high_posterior_edge_count else
+            "No high-posterior transmission-link data."
+        )
     )
     network_meta_html = ""
     if isinstance(transmission_data, dict):
@@ -2412,6 +2561,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
     <a href="#mutations">Mutation details</a>
     <h3>Clusters</h3>
     <a href="#clusters">Cluster epidemiology</a>
+    <a href="#epi-interpretation">Epi interpretation</a>
     <a href="#cluster-pri">Cluster prioritisation</a>
     <h3>Methods</h3>
     <a href="#methods">Methods &amp; pipeline</a>
@@ -2428,11 +2578,12 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
     <!-- =================================================================== -->
     <section class="card" id="executive">
       <h2>Executive summary</h2>
+      {executive_decision_html}
       {dashboard_html}
       {model_readiness_html}
       {analysis_quality_warnings_html}
       {confidence_gate_table_html}
-      {_qc_warning_html}{_snp_warning_html}{_dr_unlinked_warning_html}{_dr_skipped_warning_html}{'<div class="callout callout-alert"><strong>DRAFT REPORT:</strong> Missing reproducibility fields: ' + _safe_html(', '.join(missing_repro)) + '. External circulation is blocked until these are populated.</div>' if missing_repro else '<div class="callout"><strong>Artifact completeness gate passed.</strong> Reproducibility metadata and appendices are present. Operational use still requires MDT, QC, and information-governance review.</div>'}
+      {_qc_warning_html}{_snp_warning_html}{_dr_unlinked_warning_html}{_dr_skipped_warning_html}{'<div class="callout callout-alert"><strong>DRAFT REPORT:</strong> Missing reproducibility fields: ' + _safe_html(', '.join(missing_repro)) + '. External circulation is blocked until these are populated.</div>' if missing_repro else ('<div class="callout callout-alert"><strong>Artifact completeness gate requires review.</strong> Required appendix export is missing: ' + _safe_html(', '.join([name for name, missing in [('Appendix A', appendix_a_missing), ('Appendix B', appendix_b_missing)] if missing])) + '. External circulation is blocked until report generation succeeds.</div>' if _appendices_missing else '<div class="callout"><strong>Artifact completeness gate passed.</strong> Reproducibility metadata and required appendix artifacts are present. Operational use still requires MDT, QC, and information-governance review.</div>')}
     </section>
 
     <!-- TOP ACTIONS -->
@@ -2446,6 +2597,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
     <section class="card" id="mdt">
       <h2>MDT governance summary</h2>
       {mdt_html}
+      {mdt_signoff_html}
       <p class="muted" style="margin-top:.5rem">Full MDT action sheet with final discordant-pair counts is in Appendix B.</p>
     </section>
 
@@ -2517,7 +2669,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
       {adj_model_html}
       {adj_discordant_html}
       {adj_qcunres_html}
-            {('<p class="muted">No high-posterior (&ge;' + _safe_html(high_posterior_label) + ') model edges found in transmission network.</p>' if not high_confidence_edges else '')}
+            {('<p class="muted">No detailed high-posterior (&ge;' + _safe_html(high_posterior_label) + ') edge rows are available in the transmission network artifact.</p>' if not high_confidence_edges and not raw_high_posterior_edge_count else '')}
     </section>
 
     <!-- SNP SUMMARY -->
@@ -2545,7 +2697,10 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
       <h3>Counts and denominators in this report</h3>
       <div class="section-note">Definitions match the denominator box above. All model-prioritised links are hypotheses only - zero SNP-supported links means no validated direct transmission candidates at this time.</div>
       <div class="tbl-wrap"><table><thead><tr><th>Metric</th><th>Count</th><th>Definition</th></tr></thead><tbody>
-        <tr><td>High-posterior model links &ge;{_safe_html(high_posterior_label)}</td><td>{_safe_html(str(high_confidence_all_count))}</td><td>All outbreaker2 edges with posterior probability &ge;{_safe_html(high_posterior_label)}; these are hypotheses, not confirmed transmission links</td></tr>
+        <tr><td>Raw posterior edges</td><td>{_safe_html(str(raw_posterior_edges))}</td><td>All posterior links reported by the network artifact or detailed edge rows</td></tr>
+        <tr><td>High-posterior model links &ge;{_safe_html(high_posterior_label)}</td><td>{_safe_html(str(edges_ge_threshold))}</td><td>All outbreaker2 edges with posterior probability &ge;{_safe_html(high_posterior_label)}; these are hypotheses, not confirmed transmission links</td></tr>
+        <tr><td>High-posterior + SNP &le;{_safe_html(str(low_snp_threshold))}</td><td>{_safe_html(str(edges_ge_threshold_snp_supported))}</td><td>Model links with genomic support under the current SNP threshold</td></tr>
+        <tr><td>Operationally eligible escalation links</td><td>{_safe_html(str(edges_eligible_for_escalation))}</td><td>Requires high posterior, SNP support, QC-pass genomes, passed diagnostics, and epidemiological corroboration</td></tr>
         <tr><td>Discordant pairs reviewed</td><td>{_safe_html(str(len(discordant_pairs)))}</td><td>All model-linked pairs showing SNP/model discordance requiring adjudication</td></tr>
         <tr><td>Displayed network links</td><td>{_safe_html(str(high_confidence_snapshot_count))}</td><td>Links in network JSON snapshot (may be filtered for display)</td></tr>
       </tbody></table></div>
@@ -2577,6 +2732,9 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
       {qc_summary_html}
       <h3>QC pass/fail thresholds applied</h3>
       {qc_thresholds_html}
+      <h3>Samples excluded from outbreaker2 modelling</h3>
+      <div class="section-note">QC-fail, contaminated, QC-not-reported, and missing-consensus samples are excluded before modelling. Repeat sequencing is required unless the MDT formally accepts exclusion.</div>
+      {excluded_samples_html}
       <h3>Sample-level QC detail</h3>
       <div class="section-note" style="margin-top:.6rem">
         Samples highlighted red require repeat sequencing or resolution before operational inference.
@@ -2626,6 +2784,12 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
       <p class="muted">Genomic summary + growth status for all active clusters. RR/MDR column = rifampicin-resistant / MDR-TB suspected cases.</p>
       <div class="fig-inline">{_figure_card("outbreaker_phylo")}</div>
       {cluster_epi_html}
+    </section>
+
+    <section class="card" id="epi-interpretation">
+      <h2>Epidemiological interpretation and limitations</h2>
+      <div class="section-note">This section separates genomic findings from field epidemiology. Operational outbreak conclusions require both.</div>
+      {epi_interpretation_html}
     </section>
 
     <section class="card" id="cluster-pri">

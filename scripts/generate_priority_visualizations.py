@@ -57,8 +57,14 @@ def _resistant_drug_count(resistance_payload) -> int:
     if not isinstance(resistance, dict):
         return 0
 
+    resistant_drugs = resistance.get("resistant_drugs")
+    if isinstance(resistant_drugs, list):
+        return len([drug for drug in resistant_drugs if str(drug).strip()])
+
     count = 0
-    for _, value in resistance.items():
+    for key, value in resistance.items():
+        if key in {"classification", "catalogue", "resistant_drugs"}:
+            continue
         marker = str(value).strip().lower()
         if marker in {"r", "resistant"}:
             count += 1
@@ -116,9 +122,25 @@ def _normalise_resistance_drug_key(value: str) -> str | None:
 
 
 def _display_resistance_drug(value: str) -> str:
+    if value == "overall_tbprofiler":
+        return "Overall"
     if value == "aminoglycosides / injectables":
         return "Injectables"
     return _title_case_drug(value)
+
+
+def _classification_matrix_value(resistance: dict) -> int:
+    classification = str(resistance.get("classification") or "").strip().lower()
+    resistant_drugs = resistance.get("resistant_drugs")
+    if isinstance(resistant_drugs, list) and resistant_drugs:
+        return 3
+    if classification in {"sensitive", "susceptible", "none", "no_resistance", "no resistance"}:
+        return 1
+    if classification in {"resistant", "mdr", "rr", "xdr", "pre-xdr", "pre_xdr"}:
+        return 3
+    if classification in {"intermediate"}:
+        return 2
+    return 0
 
 
 def _estimate_transmission_probability(source: dict, target: dict) -> float:
@@ -616,13 +638,18 @@ def generate_resistance_heatmap():
             for case in cases_data:
                 normalised = {}
                 for key, value in case['resistance'].items():
+                    if key in {"classification", "catalogue", "resistant_drugs"}:
+                        normalised[key] = value
+                        continue
                     canonical_key = _normalise_resistance_drug_key(key)
                     if canonical_key:
                         normalised[canonical_key] = value
                 case['resistance'] = normalised
-                all_drugs.update(normalised.keys())
+                all_drugs.update(key for key in normalised.keys() if key not in {"classification", "catalogue", "resistant_drugs"})
 
             all_drugs = [drug for drug in _DRUG_DISPLAY_ORDER if drug in all_drugs][:8]
+            if not all_drugs and any(case["resistance"] for case in cases_data):
+                all_drugs = ["overall_tbprofiler"]
             cases_data.sort(key=lambda c: (-c["resistant_count"], c["region"], c["case_id"]))
 
             # Build matrix: rows=cases, cols=drugs
@@ -633,16 +660,19 @@ def generate_resistance_heatmap():
                 case_ids.append(case['case_id'])
                 row = []
                 for drug in all_drugs:
-                    raw_pred = case['resistance'].get(drug)
-                    pred = str(raw_pred or 'unknown').strip().lower()
-                    if pred in {'r', 'resistant'}:
-                        row.append(3)  # Red: Resistant
-                    elif pred in {'i', 'intermediate'}:
-                        row.append(2)  # Amber: Intermediate
-                    elif raw_pred is None or pred in {'', 'unknown', 'none', 'null'}:
-                        row.append(0)  # Grey: No call
+                    if drug == "overall_tbprofiler":
+                        row.append(_classification_matrix_value(case["resistance"]))
                     else:
-                        row.append(1)  # Green: Susceptible
+                        raw_pred = case['resistance'].get(drug)
+                        pred = str(raw_pred or 'unknown').strip().lower()
+                        if pred in {'r', 'resistant'}:
+                            row.append(3)  # Red: Resistant
+                        elif pred in {'i', 'intermediate'}:
+                            row.append(2)  # Amber: Intermediate
+                        elif raw_pred is None or pred in {'', 'unknown', 'none', 'null'}:
+                            row.append(0)  # Grey: No call
+                        else:
+                            row.append(1)  # Green: Susceptible
                 resistance_matrix.append(row)
 
             if len(resistance_matrix) < 2:
@@ -669,10 +699,12 @@ def generate_resistance_heatmap():
             ax.grid(which='minor', color='white', linestyle='-', linewidth=1.4)
             ax.tick_params(which='minor', bottom=False, left=False)
 
-            ax.set_xlabel('Drug Class', fontsize=11, fontweight='bold')
+            x_label = 'Resistance Call' if all_drugs == ["overall_tbprofiler"] else 'Drug Class'
+            ax.set_xlabel(x_label, fontsize=11, fontweight='bold')
             ax.set_ylabel('Case Isolates', fontsize=11, fontweight='bold')
+            title_suffix = "overall classification" if all_drugs == ["overall_tbprofiler"] else "resistance burden"
             ax.set_title(
-                f'Drug Resistance Profile Heatmap\n{len(case_ids)} cases sorted by resistance burden',
+                f'Drug Resistance Profile Heatmap\n{len(case_ids)} cases sorted by {title_suffix}',
                 fontsize=14,
                 fontweight='bold',
                 pad=12,

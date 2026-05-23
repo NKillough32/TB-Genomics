@@ -11,6 +11,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from backend.data_safety import get_data_safety_status
+from backend.routers.analytics import advanced_fasta_summary
 from backend.routers.dependencies import get_db
 from backend.routers.case_overview import data_readiness, surveillance_kpis
 from backend.runtime_paths import export_path
@@ -617,6 +618,7 @@ def build_actionable_surveillance_report(
         "resistance_calls": resistance_calls,
         "suggested_investigation_actions": _suggested_investigation_actions(cluster_dossiers, immediate_actions),
         "lineage_dr_summary": _lineage_dr_summary(),
+        "advanced_fasta_summary": advanced_fasta_summary(db),
         "analysis_provenance": _analysis_provenance(db),
         "validation_status": risk_summary.get("validation_status", "heuristic_non_validated"),
         "warning": risk_summary.get(
@@ -651,6 +653,7 @@ def render_actionable_surveillance_report_html(report: dict[str, Any]) -> str:
     kpis = report.get("surveillance_kpis") or {}
     readiness = report.get("data_readiness") or {}
     lineage = report.get("lineage_dr_summary") or {}
+    fasta_summary = report.get("advanced_fasta_summary") or {}
 
     action_items = "".join(f"<li>{_h(action)}</li>" for action in summary.get("immediate_actions", []))
     readiness_rows = [
@@ -710,6 +713,14 @@ def render_actionable_surveillance_report_html(report: dict[str, Any]) -> str:
     if lineage.get("limitation_codes"):
         lineage_warning_parts.append("Limitations: " + ", ".join(lineage.get("limitation_codes") or []))
     lineage_warning = " ".join(lineage_warning_parts)
+    fasta_stats = fasta_summary.get("seqkit_stats") or {}
+    fasta_agreement = fasta_summary.get("snp_matrix_agreement") or {}
+    fasta_iqtree = fasta_summary.get("iqtree") or {}
+    fasta_clock = fasta_summary.get("molecular_clock") or {}
+    fasta_counts = fasta_summary.get("artifact_counts") or {}
+    fasta_input = fasta_summary.get("input") or {}
+    fasta_count_rows = [{"output": key.replace("_", " "), "count": value} for key, value in fasta_counts.items()]
+    fasta_warning = " ".join(str(item) for item in fasta_summary.get("warnings") or [])
     alert_rows = [
         {
             "severity": item.get("severity"),
@@ -944,6 +955,23 @@ ul{{margin:8px 0 0 20px;padding:0;}}
         ("Database", "database"),
     ], "No normalized resistance calls recorded.")}
     {f'<p class="warning"><strong>Lineage/DR limitation:</strong> {_h(lineage_warning)}</p>' if lineage_warning else ''}
+  </section>
+
+  <section>
+    <h2>Advanced FASTA Analysis</h2>
+    <div class="grid">
+      {_metric_card("Analysis status", fasta_summary.get("status", "not_available"))}
+      {_metric_card("Samples", fasta_input.get("sample_count", fasta_stats.get("num_seqs", "n/a")))}
+      {_metric_card("Consensus bases", fasta_stats.get("sum_len", "n/a"), f"avg={fasta_stats.get('avg_len', 'n/a')}")}
+      {_metric_card("SNP matrix check", fasta_agreement.get("status", "n/a"), f"pairs={fasta_agreement.get('compared_pairs', 0)} mismatches={fasta_agreement.get('mismatch_count', 0)}")}
+      {_metric_card("IQ-TREE model", fasta_iqtree.get("model", "n/a"))}
+      {_metric_card("TreeTime r^2", fasta_clock.get("r_squared", "n/a"), f"rate={fasta_clock.get('rate', 'n/a')}")}
+    </div>
+    {_simple_table(fasta_count_rows, [
+        ("Output", "output"),
+        ("Count", "count"),
+    ], "No advanced FASTA output counts available.")}
+    {f'<p class="warning"><strong>FASTA review warning:</strong> {_h(fasta_warning)}</p>' if fasta_warning else ''}
   </section>
 
   <section>

@@ -1859,6 +1859,62 @@ async function loadSnpMatrixView(){
 	}
 }
 
+async function loadAdvancedFastaSummaryView(){
+	const view=document.getElementById('analyticsPrimaryView');
+	view.textContent='Loading advanced FASTA summary...';
+	try{
+		const d=await fetch(`${API}/analytics/advanced-fasta-summary`).then(r=>r.json());
+		const stats=d.seqkit_stats||{};
+		const agree=d.snp_matrix_agreement||{};
+		const iq=d.iqtree||{};
+		const clock=d.molecular_clock||{};
+		const counts=d.artifact_counts||{};
+		let html='<h4>Advanced FASTA Analysis</h4>';
+		html+=`<div class="kpi-strip">Status: ${escapeHtml(d.status||'unknown')} | Samples: ${escapeHtml((d.input||{}).sample_count??stats.num_seqs??'n/a')} | SNP matrix: ${escapeHtml(agree.status||'n/a')}</div>`;
+		if(Array.isArray(d.warnings)&&d.warnings.length){
+			html+='<div class="result-panel" style="border-color:#f59e0b;background:#fffbeb"><strong>Review warnings</strong><ul>';
+			for(const w of d.warnings.slice(0,6)) html+=`<li>${escapeHtml(w)}</li>`;
+			html+='</ul></div>';
+		}
+		html+='<div class="analytics-grid">';
+		html+='<div><h5>FASTA QC</h5><table class="data-table"><tbody>';
+		for(const [label,key] of [['Sequences','num_seqs'],['Total length','sum_len'],['Min length','min_len'],['Average length','avg_len'],['Max length','max_len']]){
+			html+=`<tr><th>${escapeHtml(label)}</th><td>${escapeHtml(stats[key]??'n/a')}</td></tr>`;
+		}
+		html+='</tbody></table></div>';
+		html+='<div><h5>SNP Matrix Validation</h5><table class="data-table"><tbody>';
+		html+=`<tr><th>Compared pairs</th><td>${escapeHtml(agree.compared_pairs??0)}</td></tr>`;
+		html+=`<tr><th>Mismatches</th><td>${escapeHtml(agree.mismatch_count??0)}</td></tr>`;
+		html+=`<tr><th>Max delta</th><td>${escapeHtml(agree.max_abs_delta??'n/a')}</td></tr>`;
+		html+='</tbody></table></div>';
+		html+='<div><h5>IQ-TREE</h5><table class="data-table"><tbody>';
+		for(const [label,key] of [['Input','input_data'],['Model','model'],['Parsimony sites','parsimony_informative_sites'],['Log likelihood','log_likelihood'],['Tree length','total_tree_length']]){
+			html+=`<tr><th>${escapeHtml(label)}</th><td>${escapeHtml(iq[key]??'n/a')}</td></tr>`;
+		}
+		html+='</tbody></table></div>';
+		html+='<div><h5>TreeTime</h5><table class="data-table"><tbody>';
+		html+=`<tr><th>Clock rate</th><td>${escapeHtml(clock.rate??'n/a')}</td></tr>`;
+		html+=`<tr><th>Root-tip r^2</th><td>${escapeHtml(clock.r_squared??'n/a')}</td></tr>`;
+		html+='</tbody></table></div>';
+		html+='</div>';
+		html+='<h5>Raw output counts</h5><table class="data-table"><thead><tr><th>Output</th><th>Count</th></tr></thead><tbody>';
+		for(const [key,value] of Object.entries(counts)){
+			html+=`<tr><td>${escapeHtml(key.replaceAll('_',' '))}</td><td>${escapeHtml(value)}</td></tr>`;
+		}
+		html+='</tbody></table>';
+		if(Array.isArray(agree.mismatches)&&agree.mismatches.length){
+			html+='<h5>SNP matrix mismatches</h5><table class="data-table"><thead><tr><th>Case A</th><th>Case B</th><th>Internal</th><th>snp-dists</th><th>Delta</th></tr></thead><tbody>';
+			for(const m of agree.mismatches.slice(0,10)){
+				html+=`<tr><td>${escapeHtml(m.case_a_short)}</td><td>${escapeHtml(m.case_b_short)}</td><td>${escapeHtml(m.internal_distance)}</td><td>${escapeHtml(m.external_distance)}</td><td>${escapeHtml(m.delta)}</td></tr>`;
+			}
+			html+='</tbody></table>';
+		}
+		view.innerHTML=html;
+	}catch(e){
+		view.textContent='Failed to load advanced FASTA summary: '+e;
+	}
+}
+
 async function loadPhyloTreeView(){
 	const view=document.getElementById('analyticsPrimaryView');
 	view.textContent='Loading phylogenetic view...';

@@ -2,6 +2,7 @@
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 from itertools import combinations
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -169,6 +170,134 @@ def _export_json(path: str) -> dict | None:
             return data if isinstance(data, dict) else None
     except Exception:
         return None
+
+
+def _read_export_text(path: str) -> str:
+    try:
+        full_path = Path(EXPORTS_DIR) / path
+        if not full_path.exists() or not full_path.is_file():
+            return ""
+        return full_path.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return ""
+
+
+def _parse_tsv(text_value: str) -> list[dict[str, str]]:
+    lines = [line for line in text_value.splitlines() if line.strip()]
+    if not lines:
+        return []
+    headers = lines[0].split("\t")
+    rows = []
+    for line in lines[1:]:
+        values = line.split("\t")
+        rows.append({header: values[idx] if idx < len(values) else "" for idx, header in enumerate(headers)})
+    return rows
+
+
+def _parse_molecular_clock(text_value: str) -> dict:
+    result = {}
+    for line in text_value.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("--rate:"):
+            result["rate"] = stripped.split(":", 1)[1].strip()
+        elif stripped.startswith("--r^2:"):
+            raw = stripped.split(":", 1)[1].strip()
+            result["r_squared"] = raw
+            try:
+                result["r_squared_value"] = float(raw)
+            except ValueError:
+                pass
+    return result
+
+
+def _parse_iqtree_summary(text_value: str) -> dict:
+    result = {"warnings": []}
+    for line in text_value.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("Input data:"):
+            result["input_data"] = stripped.replace("Input data:", "").strip()
+        elif stripped.startswith("Number of parsimony informative sites:"):
+            result["parsimony_informative_sites"] = stripped.split(":", 1)[1].strip()
+        elif stripped.startswith("Model of substitution:"):
+            result["model"] = stripped.split(":", 1)[1].strip()
+        elif stripped.startswith("Log-likelihood of the tree:"):
+            result["log_likelihood"] = stripped.split(":", 1)[1].strip()
+        elif stripped.startswith("Total tree length"):
+            result["total_tree_length"] = stripped.split(":", 1)[1].strip()
+        elif stripped.startswith("WARNING:"):
+            result["warnings"].append(stripped)
+    return result
+
+
+def _external_snp_matrix() -> dict[str, dict[str, int]]:
+    rows = _parse_tsv(_read_export_text("fasta_analysis/snp_distance_matrix.tsv"))
+    if not rows:
+        return {}
+    matrix = {}
+    for row in rows:
+        case_id = row.get("") or row.get("ID") or row.get("id") or row.get("sample") or next(iter(row.values()), "")
+        if not case_id:
+            continue
+        matrix[case_id] = {}
+        for key, value in row.items():
+            if not key or key == case_id:
+                continue
+            try:
+                matrix[case_id][key] = int(float(value))
+            except (TypeError, ValueError):
+                continue
+    return matrix
+
+
+def _snp_matrix_agreement(db: Session) -> dict:
+    external = _external_snp_matrix()
+    if not external:
+        return {"status": "not_available", "message": "snp-dists matrix artifact not found."}
+
+    rows = db.execute(
+        text(
+            """
+            SELECT sample_id::text AS case_id, sequence
+            FROM consensus_sequences
+            WHERE sequence IS NOT NULL
+            """
+        )
+    ).mappings().all()
+    sequence_by_case = {str(row["case_id"]): str(row["sequence"]) for row in rows}
+
+    compared = 0
+    mismatches = []
+    max_abs_delta = 0
+    for left, right_values in external.items():
+        if left not in sequence_by_case:
+            continue
+        for right, external_distance in right_values.items():
+            if right not in sequence_by_case or left >= right:
+                continue
+            internal_distance = validated_snp_distance(sequence_by_case[left], sequence_by_case[right]).distance
+            delta = internal_distance - external_distance
+            compared += 1
+            max_abs_delta = max(max_abs_delta, abs(delta))
+            if delta != 0:
+                mismatches.append(
+                    {
+                        "case_a": left,
+                        "case_b": right,
+                        "case_a_short": left[:8],
+                        "case_b_short": right[:8],
+                        "internal_distance": internal_distance,
+                        "external_distance": external_distance,
+                        "delta": delta,
+                    }
+                )
+
+    return {
+        "status": "pass" if not mismatches and compared else ("review" if mismatches else "not_comparable"),
+        "compared_pairs": compared,
+        "mismatch_count": len(mismatches),
+        "max_abs_delta": max_abs_delta,
+        "mismatches": mismatches[:25],
+    }
 
 
 def _float_or_default(value: object, default: float = 0.0) -> float:
@@ -2248,6 +2377,46 @@ def snp_matrix(
         "matrix": matrix,
         "threshold_hint": snp_threshold,
         "message": f"Distances are pairwise SNP mismatches; <= {snp_threshold} indicates likely linkage under current setting.",
+        **_validation_notice(),
+    }
+
+
+@router.get("/advanced-fasta-summary")
+def advanced_fasta_summary(db: Session = Depends(get_db)):
+    """Summarize advanced FASTA artifacts that are otherwise only raw files."""
+    fasta_analysis = _export_json(str(Path(EXPORTS_DIR) / "fasta_analysis_summary.json")) or {}
+    seqkit_rows = _parse_tsv(_read_export_text("fasta_analysis/seqkit_stats.tsv"))
+    iqtree = _parse_iqtree_summary(_read_export_text("fasta_analysis/iqtree.iqtree"))
+    molecular_clock = _parse_molecular_clock(_read_export_text("fasta_analysis/treetime/molecular_clock.txt"))
+    snp_agreement = _snp_matrix_agreement(db)
+
+    artifact_counts = {
+        "tbprofiler_json": len(list((Path(EXPORTS_DIR) / "tbprofiler" / "results").glob("*.json"))),
+        "tbprofiler_vcf": len(list((Path(EXPORTS_DIR) / "tbprofiler" / "vcf").glob("*.vcf.gz"))),
+        "mykrobe_json": len(list((Path(EXPORTS_DIR) / "mykrobe").glob("*.json"))),
+        "case_action_rows": max(0, len(_read_export_text("appendix_a_case_level_actions.csv").splitlines()) - 1),
+        "discordance_review_rows": max(0, len(_read_export_text("appendix_b_full_discordance_review.csv").splitlines()) - 1),
+    }
+
+    warnings = list(iqtree.get("warnings") or [])
+    clock_r2 = molecular_clock.get("r_squared_value")
+    if clock_r2 is not None and clock_r2 < 0.1:
+        warnings.append(f"TreeTime root-to-tip temporal signal is weak (r^2={clock_r2:.2f}).")
+    if snp_agreement.get("status") == "review":
+        warnings.append(f"Internal SNP matrix differs from snp-dists for {snp_agreement.get('mismatch_count')} pair(s).")
+
+    return {
+        "status": fasta_analysis.get("status", "not_available"),
+        "generated_at": fasta_analysis.get("generated_at"),
+        "input": fasta_analysis.get("input", {}),
+        "tools": fasta_analysis.get("tools", {}),
+        "seqkit_stats": seqkit_rows[0] if seqkit_rows else {},
+        "snp_matrix_agreement": snp_agreement,
+        "iqtree": iqtree,
+        "molecular_clock": molecular_clock,
+        "artifact_counts": artifact_counts,
+        "warnings": warnings,
+        "outputs": fasta_analysis.get("outputs", {}),
         **_validation_notice(),
     }
 

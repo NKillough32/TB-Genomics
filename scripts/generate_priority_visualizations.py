@@ -114,6 +114,13 @@ _DRUG_DISPLAY_ORDER = [
     "aminoglycosides / injectables",
 ]
 
+_FIRST_LINE_DRUG_DISPLAY_ORDER = [
+    "isoniazid",
+    "rifampicin",
+    "ethambutol",
+    "pyrazinamide",
+]
+
 
 def _normalise_resistance_drug_key(value: str) -> str | None:
     cleaned = str(value or "").strip().lower().replace("-", " ").replace("_", " ")
@@ -170,7 +177,7 @@ def _normalise_resistance_profile(resistance: dict) -> dict:
 
     classification = str(normalised.get("classification") or "").strip().lower()
     if classification in {"sensitive", "susceptible", "none", "no_resistance", "no resistance"}:
-        for drug in _DRUG_DISPLAY_ORDER:
+        for drug in _FIRST_LINE_DRUG_DISPLAY_ORDER:
             normalised.setdefault(drug, "susceptible")
 
     return normalised

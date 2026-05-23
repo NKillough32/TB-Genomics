@@ -2183,11 +2183,16 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
     # 17. Transmission network section
     interactive_network_path = _export_path("outbreaker_interactive_network.html")
     interactive_network_available = os.path.exists(interactive_network_path)
+    interactive_network_route = "/cases/outbreaker-artifact/outbreaker_interactive_network.html"
+    interactive_network_link = (
+        f'<a href="{interactive_network_route}" data-backend-route="{interactive_network_route}" '
+        'target="_blank" rel="noopener">Open interactive transmission network</a>'
+    )
     interactive_network_html = (
         '<div class="callout" style="margin:.7rem 0">'
         '<strong>Interactive network available.</strong> Open the full HTML network to inspect risk-sized nodes, '
         'posterior-weighted edges, credibility colours, entropy, chain agreement, and alternative ancestors. '
-        '<a href="/cases/outbreaker-artifact/outbreaker_interactive_network.html" target="_blank" rel="noopener">Open interactive transmission network</a>'
+        f'{interactive_network_link}'
         '</div>'
         if interactive_network_available
         else '<div class="callout callout-warn" style="margin:.7rem 0"><strong>Interactive network not generated.</strong> Run outbreaker2 with visNetwork/htmlwidgets available to produce exports/outbreaker_interactive_network.html.</div>'
@@ -2393,7 +2398,7 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
     <h3>Analysis</h3>
     <a href="#analysis">outbreaker2 analysis</a>
     <a href="#transmission">Transmission network</a>
-    {'<a href="/cases/outbreaker-artifact/outbreaker_interactive_network.html" target="_blank" rel="noopener">Interactive network</a>' if interactive_network_available else ''}
+    {interactive_network_link.replace('Open interactive transmission network', 'Interactive network') if interactive_network_available else ''}
     <a href="#pairs">High-posterior model hypotheses</a>
     <a href="#snp-summary">Pairwise SNP summary</a>
     <a href="#interpretation">Outbreak interpretation</a>
@@ -2684,6 +2689,29 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
 </div>
 
 <script>
+/* -- Backend artifact links: reports may be opened from the static GUI server -- */
+(function(){{
+  var apiBase = "";
+  if(location.protocol === "file:"){{
+    apiBase = "http://127.0.0.1:8000";
+  }} else if(location.port === "8081"){{
+    apiBase = location.protocol + "//" + location.hostname + ":8000";
+  }} else if(location.protocol === "about:" && window.opener && window.opener.location && window.opener.location.port === "8081"){{
+    apiBase = window.opener.location.protocol + "//" + window.opener.location.hostname + ":8000";
+  }} else if(document.referrer){{
+    try {{
+      var referrerUrl = new URL(document.referrer);
+      if(referrerUrl.port === "8081"){{
+        apiBase = referrerUrl.protocol + "//" + referrerUrl.hostname + ":8000";
+      }}
+    }} catch(e) {{}}
+  }}
+  if(!apiBase) return;
+  document.querySelectorAll("[data-backend-route]").forEach(function(link){{
+    link.href = apiBase + link.getAttribute("data-backend-route");
+  }});
+}})();
+
 /* -- Mutation table: add Validation status column -- */
 (function(){{
   var mutTable = document.querySelector('#mutations table');

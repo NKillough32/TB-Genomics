@@ -70,6 +70,8 @@ def test_resistance_heatmap_expands_sensitive_summary_to_drug_columns():
     assert profile["isoniazid"] == "susceptible"
     assert profile["ethambutol"] == "susceptible"
     assert profile["pyrazinamide"] == "susceptible"
+    assert "fluoroquinolones" not in profile
+    assert "aminoglycosides / injectables" not in profile
 
 
 def test_resistance_heatmap_expands_resistant_drug_list_to_drug_columns():

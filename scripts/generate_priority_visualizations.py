@@ -143,6 +143,39 @@ def _classification_matrix_value(resistance: dict) -> int:
     return 0
 
 
+def _normalise_resistance_profile(resistance: dict) -> dict:
+    """Return canonical per-drug calls, expanding summary-only tool output when needed."""
+    normalised = {}
+    for key, value in resistance.items():
+        if key in {"classification", "catalogue", "resistant_drugs"}:
+            normalised[key] = value
+            continue
+        canonical_key = _normalise_resistance_drug_key(key)
+        if canonical_key:
+            normalised[canonical_key] = value
+
+    has_per_drug_call = any(
+        key not in {"classification", "catalogue", "resistant_drugs"}
+        for key in normalised
+    )
+    if has_per_drug_call:
+        return normalised
+
+    resistant_drugs = normalised.get("resistant_drugs")
+    if isinstance(resistant_drugs, list):
+        for drug in resistant_drugs:
+            canonical_key = _normalise_resistance_drug_key(str(drug))
+            if canonical_key:
+                normalised[canonical_key] = "resistant"
+
+    classification = str(normalised.get("classification") or "").strip().lower()
+    if classification in {"sensitive", "susceptible", "none", "no_resistance", "no resistance"}:
+        for drug in _DRUG_DISPLAY_ORDER:
+            normalised.setdefault(drug, "susceptible")
+
+    return normalised
+
+
 def _estimate_transmission_probability(source: dict, target: dict) -> float:
     score = 0.55
 
@@ -636,14 +669,7 @@ def generate_resistance_heatmap():
             # Extract resistance info using only canonical drug-class keys.
             all_drugs = set()
             for case in cases_data:
-                normalised = {}
-                for key, value in case['resistance'].items():
-                    if key in {"classification", "catalogue", "resistant_drugs"}:
-                        normalised[key] = value
-                        continue
-                    canonical_key = _normalise_resistance_drug_key(key)
-                    if canonical_key:
-                        normalised[canonical_key] = value
+                normalised = _normalise_resistance_profile(case['resistance'])
                 case['resistance'] = normalised
                 all_drugs.update(key for key in normalised.keys() if key not in {"classification", "catalogue", "resistant_drugs"})
 

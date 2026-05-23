@@ -1,7 +1,11 @@
 from backend.routers.cases import _confidence_tier, _pct, _pct_label
 from backend.routers.outbreak_html_builder import _format_optional_float
 from backend.routers.reports import render_actionable_surveillance_report_html
-from scripts.generate_priority_visualizations import _classification_matrix_value, _resistant_drug_count
+from scripts.generate_priority_visualizations import (
+    _classification_matrix_value,
+    _normalise_resistance_profile,
+    _resistant_drug_count,
+)
 
 
 def test_pct_uses_matching_denominator():
@@ -57,6 +61,22 @@ def test_resistance_heatmap_handles_overall_tbprofiler_classification():
     assert _classification_matrix_value(sensitive) == 1
     assert _classification_matrix_value(resistant) == 3
     assert _resistant_drug_count(resistant) == 2
+
+
+def test_resistance_heatmap_expands_sensitive_summary_to_drug_columns():
+    profile = _normalise_resistance_profile({"classification": "Sensitive", "resistant_drugs": []})
+
+    assert profile["rifampicin"] == "susceptible"
+    assert profile["isoniazid"] == "susceptible"
+    assert profile["ethambutol"] == "susceptible"
+    assert profile["pyrazinamide"] == "susceptible"
+
+
+def test_resistance_heatmap_expands_resistant_drug_list_to_drug_columns():
+    profile = _normalise_resistance_profile({"classification": "MDR-TB", "resistant_drugs": ["rifampicin", "INH"]})
+
+    assert profile["rifampicin"] == "resistant"
+    assert profile["isoniazid"] == "resistant"
 
 
 def test_model_only_probability_stays_exploratory_without_snp_support():

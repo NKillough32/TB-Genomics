@@ -109,52 +109,64 @@ def _lineage_epi_summary(db: Session) -> dict:
     }
 
     try:
-        base_row = db.execute(
+        dr_rows = db.execute(
             text(
                 """
-                WITH dr AS (
-                    SELECT LOWER(CAST(predicted_drug_resistance AS TEXT)) AS dr_text
-                    FROM tb_interpretation
-                    WHERE predicted_drug_resistance IS NOT NULL
-                    AND predicted_drug_resistance::text NOT IN ('null', '{}', '[]')
-                )
-                SELECT
-                    COUNT(*) FILTER (
-                        WHERE dr_text LIKE '%resistant%'
-                        OR dr_text LIKE '%\"r\"%'
-                    )::int AS samples_with_any_resistance_signal,
-                    COUNT(*) FILTER (
-                        WHERE dr_text LIKE '%rifamp%'
-                        AND (dr_text LIKE '%resistant%' OR dr_text LIKE '%\"r\"%')
-                    )::int AS rifampicin_resistant_suspected,
-                    COUNT(*) FILTER (
-                        WHERE dr_text LIKE '%isoniazid%'
-                        AND (dr_text LIKE '%resistant%' OR dr_text LIKE '%\"r\"%')
-                    )::int AS isoniazid_resistant_suspected,
-                    COUNT(*) FILTER (
-                        WHERE dr_text LIKE '%fluoro%'
-                        AND (dr_text LIKE '%resistant%' OR dr_text LIKE '%\"r\"%')
-                    )::int AS fluoroquinolone_resistant_suspected,
-                    COUNT(*) FILTER (
-                        WHERE dr_text LIKE '%rifamp%'
-                        AND dr_text LIKE '%isoniazid%'
-                        AND (dr_text LIKE '%resistant%' OR dr_text LIKE '%\"r\"%')
-                    )::int AS mdr_suspected
-                FROM dr
+                SELECT predicted_drug_resistance
+                FROM tb_interpretation
+                WHERE predicted_drug_resistance IS NOT NULL
+                AND predicted_drug_resistance::text NOT IN ('null', '{}', '[]')
                 """
             )
-        ).mappings().first()
+        ).mappings().all()
 
-        if base_row:
-            summary.update(
-                {
-                    "samples_with_any_resistance_signal": int(base_row["samples_with_any_resistance_signal"] or 0),
-                    "rifampicin_resistant_suspected": int(base_row["rifampicin_resistant_suspected"] or 0),
-                    "isoniazid_resistant_suspected": int(base_row["isoniazid_resistant_suspected"] or 0),
-                    "mdr_suspected": int(base_row["mdr_suspected"] or 0),
-                    "fluoroquinolone_resistant_suspected": int(base_row["fluoroquinolone_resistant_suspected"] or 0),
-                }
-            )
+        resistant_samples = 0
+        rifampicin = 0
+        isoniazid = 0
+        fluoroquinolone = 0
+        mdr = 0
+        for row in dr_rows:
+            profile = row.get("predicted_drug_resistance")
+            if isinstance(profile, str):
+                try:
+                    profile = json.loads(profile)
+                except Exception:
+                    profile = {}
+            if not isinstance(profile, dict):
+                continue
+
+            resistant_drugs: set[str] = set()
+            listed = profile.get("resistant_drugs")
+            if isinstance(listed, list):
+                resistant_drugs.update(str(drug).strip().lower() for drug in listed if str(drug).strip())
+
+            for drug, value in profile.items():
+                if drug in {"classification", "catalogue", "resistant_drugs"}:
+                    continue
+                marker = str(value or "").strip().lower()
+                if marker in {"r", "resistant", "resistance", "intermediate", "i", "non-susceptible", "nonsusceptible"}:
+                    resistant_drugs.add(str(drug).strip().lower())
+
+            classification = str(profile.get("classification") or "").strip().lower()
+            if resistant_drugs or classification in {"resistant", "rr", "mdr", "mdr-tb", "xdr", "xdr-tb", "pre-xdr", "pre_xdr"}:
+                resistant_samples += 1
+            has_rif = any("rifamp" in drug or drug == "rif" for drug in resistant_drugs)
+            has_inh = any("isoniazid" in drug or drug == "inh" for drug in resistant_drugs)
+            has_fq = any("fluoro" in drug or "quinolone" in drug or "moxi" in drug or "levo" in drug for drug in resistant_drugs)
+            rifampicin += int(has_rif)
+            isoniazid += int(has_inh)
+            fluoroquinolone += int(has_fq)
+            mdr += int(has_rif and has_inh)
+
+        summary.update(
+            {
+                "samples_with_any_resistance_signal": resistant_samples,
+                "rifampicin_resistant_suspected": rifampicin,
+                "isoniazid_resistant_suspected": isoniazid,
+                "mdr_suspected": mdr,
+                "fluoroquinolone_resistant_suspected": fluoroquinolone,
+            }
+        )
 
         lineage_rows = db.execute(
             text(

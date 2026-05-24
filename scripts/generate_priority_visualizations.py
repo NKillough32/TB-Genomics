@@ -460,7 +460,7 @@ def generate_transmission_network():
             nx.draw_networkx_edge_labels(graph, positions, edge_labels=edge_labels, ax=ax, font_size=6.5, font_color="#334155")
 
         ax.set_title(
-            "Posterior Transmission Network\n"
+            "Exploratory Posterior Transmission Hypothesis Graph\n"
             f"{graph.number_of_nodes()} cases | {graph.number_of_edges()} links | {high_conf_edges} high-confidence links | labelled priority cases",
             fontsize=15,
             fontweight="bold",

@@ -131,7 +131,7 @@ def main() -> int:
     if edge_labels:
         nx.draw_networkx_edge_labels(graph, positions, edge_labels=edge_labels, ax=ax, font_size=7, font_color="#1f2937")
 
-    ax.set_title("Transmission Tree (Derived From Posterior Network)", fontsize=14, fontweight="bold", pad=14)
+    ax.set_title("Exploratory Posterior Transmission Hypothesis Graph", fontsize=14, fontweight="bold", pad=14)
     ax.axis("off")
     fig.tight_layout()
     fig.savefig(out_path, dpi=130, bbox_inches="tight")

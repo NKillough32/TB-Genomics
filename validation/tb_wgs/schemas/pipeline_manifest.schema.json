@@ -32,9 +32,11 @@
   ],
   "required_outputs": [
     "sample_qc_metrics.csv",
+    "mapping_summary.csv",
     "variants.vcf.gz",
     "masked_alignment.fasta",
     "snp_distance_matrix.tsv",
+    "cluster_assignments.csv",
     "lineage_calls.csv",
     "resistance_calls.csv"
   ]

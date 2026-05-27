@@ -1,0 +1,10 @@
+{
+  "required_columns": [
+    "sample_id",
+    "cluster_id",
+    "cluster_method"
+  ],
+  "enum_columns": {
+    "cluster_method": ["snp_threshold"]
+  }
+}

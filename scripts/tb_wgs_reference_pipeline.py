@@ -336,10 +336,10 @@ def run_pipeline(args: argparse.Namespace) -> dict:
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "workflow_engine": "snakemake",
         "reference": "H37Rv NC_000962.3",
-        "reference_path": str(reference_path),
-        "mask_bed": str(mask_bed) if mask_bed else None,
+        "reference_path": reference_path.as_posix(),
+        "mask_bed": mask_bed.as_posix() if mask_bed else None,
         "mask_file_sha256": _sha256(mask_bed) if mask_bed else None,
-        "sample_sheet": str(sample_sheet),
+        "sample_sheet": sample_sheet.as_posix(),
         "sample_count": len(samples),
         "tb_profiler_version": "fixture",
         "tb_profiler_db_version": "fixture",
@@ -352,6 +352,7 @@ def run_pipeline(args: argparse.Namespace) -> dict:
             "masking",
             "masked_FASTA",
             "SNP_distance_matrix",
+            "cluster_assignment",
             "lineage",
             "resistance_calls",
             "pipeline_manifest",
@@ -363,7 +364,7 @@ def run_pipeline(args: argparse.Namespace) -> dict:
             "min_mean_depth": args.min_mean_depth,
             "cluster_threshold": args.cluster_threshold,
         },
-        "input_hashes": {str(path): _sha256(path) for path in input_files},
+        "input_hashes": {path.as_posix(): _sha256(path) for path in input_files},
         "output_hashes": {path.name: _sha256(path) for path in output_files},
     }
     manifest_path = outdir / "pipeline_manifest.json"
@@ -382,12 +383,11 @@ def _write_csv(path: Path, rows: list[dict], fieldnames: list[str] | None = None
 
 
 def _write_vcf_gz(path: Path, rows: list[dict]) -> None:
-    with gzip.GzipFile(filename=str(path), mode="wb", mtime=0) as raw_handle:
-        handle = raw_handle
-        lines = ["##fileformat=VCFv4.2\n", "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tSAMPLE\n"]
+    with path.open("wb") as fileobj, gzip.GzipFile(filename="", fileobj=fileobj, mode="wb", mtime=0) as handle:
+        lines = ["##fileformat=VCFv4.2\n", "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n"]
         for row in rows:
             lines.append(
-                f"{row['chrom']}\t{row['pos']}\t.\t{row['ref']}\t{row['alt']}\t.\tPASS\t.\t{row['sample_id']}\n"
+                f"{row['chrom']}\t{row['pos']}\t.\t{row['ref']}\t{row['alt']}\t.\tPASS\tSAMPLEID={row['sample_id']}\n"
             )
         handle.write("".join(lines).encode("utf-8"))
 

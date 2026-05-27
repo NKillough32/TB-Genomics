@@ -1,21 +1,22 @@
 process BCFTOOLS_CALL {
-  tag "bcftools_call"
+  tag "${sample_id}"
   container "quay.io/biocontainers/bcftools:1.21--h3a4d415_1"
 
   input:
-  path bam
+  tuple val(sample_id), path(bam), path(bai)
   path reference
 
   output:
-  path "variants.vcf.gz", emit: vcf
+  tuple val(sample_id), path("${sample_id}.variants.vcf.gz"), emit: vcf
 
   script:
   """
   # Production command placeholder:
-  # bcftools mpileup -f ${reference} ${bam} | bcftools call -mv -Oz -o variants.vcf.gz
+  # bcftools mpileup -f ${reference} ${bam} | bcftools call -mv -Oz -o ${sample_id}.variants.vcf.gz
+  # Requires sorted BAM plus index: ${bam} and ${bai}.
   python - <<'PY'
   import gzip
-  with gzip.open("variants.vcf.gz", "wt") as handle:
+  with gzip.open("${sample_id}.variants.vcf.gz", "wt") as handle:
       handle.write("##fileformat=VCFv4.2\\n#CHROM\\tPOS\\tID\\tREF\\tALT\\tQUAL\\tFILTER\\tINFO\\n")
   PY
   """

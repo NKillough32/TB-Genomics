@@ -4,9 +4,11 @@ process PIPELINE_MANIFEST {
 
   input:
   path sample_qc
+  path mapping_summary
   path variants
   path masked_alignment
   path snp_matrix
+  path cluster_assignments
   path lineage
   path resistance
 
@@ -19,9 +21,11 @@ process PIPELINE_MANIFEST {
   import hashlib, json, pathlib
   files = [
       "sample_qc_metrics.csv",
+      "mapping_summary.csv",
       "variants.vcf.gz",
       "masked_alignment.fasta",
       "snp_distance_matrix.tsv",
+      "cluster_assignments.csv",
       "lineage_calls.csv",
       "resistance_calls.csv",
   ]

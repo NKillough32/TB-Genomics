@@ -1,2 +1,0 @@
-sample_id,drug,gene,mutation,prediction,confidence,source_tool
-SAMPLE_C,Rifampicin,rpoB,fixture_pos28_A,resistant,1.0,fixture-resistance-caller

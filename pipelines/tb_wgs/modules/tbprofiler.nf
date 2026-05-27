@@ -1,19 +1,19 @@
 process TBPROFILER {
-  tag "tbprofiler"
+  tag "${sample_id}"
   container "quay.io/biocontainers/tb-profiler:6.6.5--pyhdfd78af_0"
 
   input:
-  path cleaned_reads
+  tuple val(sample_id), path(read1), path(read2)
 
   output:
-  path "lineage_calls.csv", emit: lineage
-  path "resistance_calls.csv", emit: resistance
+  tuple val(sample_id), path("${sample_id}.lineage_calls.csv"), emit: lineage
+  tuple val(sample_id), path("${sample_id}.resistance_calls.csv"), emit: resistance
 
   script:
   """
   # Production command placeholder:
-  # tb-profiler profile --read1 <R1> --read2 <R2> --prefix <sample>
-  echo "sample_id,lineage,sublineage,source_tool" > lineage_calls.csv
-  echo "sample_id,drug,gene,mutation,prediction,confidence,source_tool" > resistance_calls.csv
+  # tb-profiler profile --read1 ${read1} --read2 ${read2} --prefix ${sample_id}
+  echo "sample_id,lineage,sublineage,source_tool" > ${sample_id}.lineage_calls.csv
+  echo "sample_id,drug,gene,mutation,prediction,confidence,source_tool" > ${sample_id}.resistance_calls.csv
   """
 }

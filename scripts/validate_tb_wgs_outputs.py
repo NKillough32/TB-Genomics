@@ -11,9 +11,11 @@ from pathlib import Path
 
 REQUIRED_OUTPUTS = (
     "sample_qc_metrics.csv",
+    "mapping_summary.csv",
     "variants.vcf.gz",
     "masked_alignment.fasta",
     "snp_distance_matrix.tsv",
+    "cluster_assignments.csv",
     "lineage_calls.csv",
     "resistance_calls.csv",
     "pipeline_manifest.json",
@@ -160,6 +162,16 @@ def validate_contract(observed: Path, schema_dir: Path = SCHEMA_DIR) -> list[str
     _validate_table(
         observed / "lineage_calls.csv",
         _schema("lineage_calls.schema.json", schema_dir),
+        failures,
+    )
+    _validate_table(
+        observed / "mapping_summary.csv",
+        _schema("mapping_summary.schema.json", schema_dir),
+        failures,
+    )
+    _validate_table(
+        observed / "cluster_assignments.csv",
+        _schema("cluster_assignments.schema.json", schema_dir),
         failures,
     )
     _validate_table(

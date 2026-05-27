@@ -76,7 +76,7 @@ def test_tb_wgs_contract_validation_rejects_bad_qc_status(tmp_path):
 def test_tb_wgs_snakemake_contract_files_exist():
     assert Path("pipelines/tb_wgs/Snakefile").exists()
     assert Path("pipelines/tb_wgs/config/default.yml").exists()
-    assert Path("pipelines/tb_wgs/profiles/singularity/config.yaml").exists()
+    assert Path("pipelines/tb_wgs/snakemake_profiles/singularity/config.yaml").exists()
     assert Path("validation/tb_wgs/schemas/pipeline_manifest.schema.json").exists()
 
 
@@ -88,8 +88,10 @@ def test_tb_wgs_nextflow_contract_files_exist():
         "pipelines/tb_wgs/modules/bwa_mem.nf",
         "pipelines/tb_wgs/modules/samtools_qc.nf",
         "pipelines/tb_wgs/modules/bcftools_call.nf",
+        "pipelines/tb_wgs/modules/aggregate_sample_outputs.nf",
         "pipelines/tb_wgs/modules/mask_regions.nf",
         "pipelines/tb_wgs/modules/snp_dists.nf",
+        "pipelines/tb_wgs/modules/cluster_assignments.nf",
         "pipelines/tb_wgs/modules/tbprofiler.nf",
         "pipelines/tb_wgs/modules/pipeline_manifest.nf",
     ]
@@ -100,7 +102,7 @@ def test_tb_wgs_nextflow_contract_files_exist():
 def test_root_validation_harness_compares_reportable_outputs(tmp_path):
     report = run_validation(
         Path("validation/test_data/tb_wgs"),
-        Path("validation/expected_outputs/tb_wgs"),
+        Path("validation/tb_wgs/expected"),
         tmp_path / "observed",
     )
 

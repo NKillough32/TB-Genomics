@@ -12,6 +12,6 @@
     "confidence"
   ],
   "enum_columns": {
-    "prediction": ["susceptible", "intermediate", "resistant", "unknown"]
+    "prediction": ["susceptible", "intermediate", "resistant", "indeterminate", "unknown"]
   }
 }

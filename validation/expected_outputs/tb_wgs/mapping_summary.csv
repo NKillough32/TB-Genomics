@@ -1,4 +1,0 @@
-sample_id,reference,read_count,mapped_reads,mapped_percent
-SAMPLE_A,mini_tb_reference,1,1,100.0
-SAMPLE_B,mini_tb_reference,1,1,100.0
-SAMPLE_C,mini_tb_reference,1,1,100.0

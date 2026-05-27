@@ -3,7 +3,7 @@
 ## Dataset
 
 - Test data: `validation/test_data/tb_wgs`
-- Expected outputs: `validation/expected_outputs/tb_wgs`
+- Expected outputs: `validation/tb_wgs/expected`
 - Observed outputs: `validation/observed_outputs/tb_wgs`
 
 ## Required comparisons

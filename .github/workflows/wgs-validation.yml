@@ -30,7 +30,7 @@ jobs:
         run: |
           python validation/run_validation.py \
             --test-data validation/test_data/tb_wgs \
-            --expected validation/expected_outputs/tb_wgs \
+            --expected validation/tb_wgs/expected \
             --observed validation/observed_outputs/tb_wgs
 
       - name: Run WGS regression tests

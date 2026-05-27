@@ -1,0 +1,14 @@
+{
+  "required_columns": [
+    "sample_id",
+    "reference",
+    "read_count",
+    "mapped_reads",
+    "mapped_percent"
+  ],
+  "numeric_columns": [
+    "read_count",
+    "mapped_reads",
+    "mapped_percent"
+  ]
+}

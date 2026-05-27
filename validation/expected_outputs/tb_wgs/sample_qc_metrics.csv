@@ -1,4 +1,0 @@
-sample_id,read_count,total_bases,mean_depth,coverage_breadth,ambiguous_base_percent,contamination_flag,qc_status,qc_failure_reason
-SAMPLE_A,1,40,1.0,1.0,0.0,false,pass,
-SAMPLE_B,1,40,1.0,1.0,0.0,false,pass,
-SAMPLE_C,1,40,1.0,1.0,0.0,false,pass,

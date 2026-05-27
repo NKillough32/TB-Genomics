@@ -5,14 +5,18 @@ This directory defines the auditable path from raw reads to the standard artefac
 Required outputs:
 
 - `sample_qc_metrics.csv`
+- `mapping_summary.csv`
 - `variants.vcf.gz`
 - `masked_alignment.fasta`
 - `snp_distance_matrix.tsv`
+- `cluster_assignments.csv`
 - `lineage_calls.csv`
 - `resistance_calls.csv`
 - `pipeline_manifest.json`
 
 The validation fixture uses a deterministic in-repository reference implementation so CI can run quickly without large external TB databases. Production deployments should replace placeholder module commands with validated fastp/BWA/Samtools/Bcftools/TB-Profiler/snp-dists commands while preserving the same output contract.
+
+The Nextflow skeleton is structured around per-sample channel boundaries for read QC, mapping, QC summarisation, variant calling, and TBProfiler profiling. Cohort-level steps begin once sample-level outputs are gathered for masking, SNP distance calculation, cluster assignment, and manifest generation.
 
 Run the production-facing Nextflow workflow skeleton:
 
@@ -43,5 +47,5 @@ snakemake --snakefile pipelines/tb_wgs/Snakefile --cores 1 --use-singularity
 Or with the bundled profile:
 
 ```bash
-snakemake --snakefile pipelines/tb_wgs/Snakefile --profile pipelines/tb_wgs/profiles/singularity
+snakemake --snakefile pipelines/tb_wgs/Snakefile --profile pipelines/tb_wgs/snakemake_profiles/singularity
 ```

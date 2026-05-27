@@ -97,7 +97,7 @@ def run_validation(test_data: Path, expected: Path, observed: Path, clean: bool 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--test-data", default="validation/test_data/tb_wgs")
-    parser.add_argument("--expected", default="validation/expected_outputs/tb_wgs")
+    parser.add_argument("--expected", default="validation/tb_wgs/expected")
     parser.add_argument("--observed", default="validation/observed_outputs/tb_wgs")
     parser.add_argument("--keep-observed", action="store_true")
     return parser.parse_args()

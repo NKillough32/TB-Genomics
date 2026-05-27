@@ -94,6 +94,7 @@ def surveillance_kpis(weeks: int = 12, db: Session = Depends(get_db)) -> dict:
             {sequence_join}
             {qc_join}
             WHERE c.specimen_date >= CURRENT_DATE - (:weeks * INTERVAL '7 days')
+              AND COALESCE(c.entered_in_error, false) = false
             """
         ),
         params,
@@ -109,6 +110,7 @@ def surveillance_kpis(weeks: int = 12, db: Session = Depends(get_db)) -> dict:
             FROM cases c
             {sequence_join}
             WHERE c.specimen_date >= CURRENT_DATE - (:weeks * INTERVAL '7 days')
+              AND COALESCE(c.entered_in_error, false) = false
             GROUP BY COALESCE(c.geographic_region, 'Unknown')
             ORDER BY eligible_cases DESC, region
             """
@@ -132,6 +134,7 @@ def surveillance_kpis(weeks: int = 12, db: Session = Depends(get_db)) -> dict:
             FROM cases c
             LEFT JOIN tb_interpretation ti ON ti.sample_id = c.pseudonymised_case_id
             WHERE c.specimen_date >= CURRENT_DATE - (:weeks * INTERVAL '7 days')
+              AND COALESCE(c.entered_in_error, false) = false
             GROUP BY COALESCE(NULLIF(TRIM(ti.lineage), ''), 'unknown')
             ORDER BY case_count DESC, lineage ASC
             """
@@ -159,6 +162,7 @@ def surveillance_kpis(weeks: int = 12, db: Session = Depends(get_db)) -> dict:
                       AND specimen_date < CURRENT_DATE - INTERVAL '90 days'
                 )::int AS cases_prev_90
             FROM cases
+            WHERE COALESCE(entered_in_error, false) = false
             """
         )
     ).mappings().first() or {}
@@ -248,6 +252,7 @@ def list_cases(
                 ti.predicted_drug_resistance
             FROM cases c
             LEFT JOIN tb_interpretation ti ON ti.sample_id = c.pseudonymised_case_id
+            WHERE COALESCE(c.entered_in_error, false) = false
             ORDER BY c.created_at DESC
             LIMIT :limit OFFSET :offset
         """),
@@ -269,6 +274,7 @@ def list_regions(db: Session = Depends(get_db)):
         text(
             "SELECT DISTINCT geographic_region FROM cases "
             "WHERE geographic_region IS NOT NULL "
+            "AND COALESCE(entered_in_error, false) = false "
             "ORDER BY geographic_region"
         )
     ).scalars().all()
@@ -278,8 +284,19 @@ def list_regions(db: Session = Depends(get_db)):
 @router.get("/summary")
 def cases_summary(db: Session = Depends(get_db)):
     """KPI summary used by the GUI banner."""
-    total = db.execute(text("SELECT COUNT(*) FROM cases")).scalar() or 0
-    clustered = db.execute(text("SELECT COUNT(DISTINCT sample_id) FROM case_clusters")).scalar() or 0
+    total = db.execute(
+        text("SELECT COUNT(*) FROM cases WHERE COALESCE(entered_in_error, false) = false")
+    ).scalar() or 0
+    clustered = db.execute(
+        text(
+            """
+            SELECT COUNT(DISTINCT cc.sample_id)
+            FROM case_clusters cc
+            JOIN cases c ON c.pseudonymised_case_id = cc.sample_id
+            WHERE COALESCE(c.entered_in_error, false) = false
+            """
+        )
+    ).scalar() or 0
     open_clusters = (
         db.execute(text("SELECT COUNT(*) FROM clusters WHERE investigation_status = 'open'")).scalar()
         or 0
@@ -352,6 +369,7 @@ def data_readiness(db: Session = Depends(get_db)):
             {sequence_join}
             {qc_join}
             {interpretation_join}
+            WHERE COALESCE(c.entered_in_error, false) = false
             """
         )
     ).mappings().first() or {}

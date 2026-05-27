@@ -421,6 +421,75 @@ input[type="file"] {
 	justify-self: start;
 }
 
+.data-management-controls {
+	display: grid;
+	grid-template-columns: minmax(260px, 1fr) auto auto;
+	gap: 0.75rem;
+	align-items: end;
+	margin: 0.75rem 0;
+	padding: 1rem;
+	background: linear-gradient(180deg, #f7fbff, #eef6fb);
+	border: 1px solid #d2e4f5;
+	border-radius: 11px;
+}
+
+.data-management-controls label,
+.data-management-form label {
+	display: flex;
+	flex-direction: column;
+	gap: 0.32rem;
+	font-size: 0.86rem;
+	color: #34506a;
+	font-weight: 600;
+}
+
+.data-management-controls input[type="text"],
+.data-management-form input,
+.data-management-form textarea {
+	width: 100%;
+	min-width: 0;
+	padding: 0.5rem 0.58rem;
+	border: 1px solid #c3d2e3;
+	border-radius: 8px;
+	background: #ffffff;
+	font-family: inherit;
+	font-size: 0.9rem;
+}
+
+.data-management-controls .inline-checkbox {
+	align-self: center;
+	flex-direction: row;
+	margin: 0;
+}
+
+.data-management-controls button {
+	margin: 0;
+	width: auto;
+}
+
+.data-management-form {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 0.75rem;
+	margin-top: 0.75rem;
+}
+
+.data-management-form .dm-wide {
+	grid-column: 1 / -1;
+}
+
+.data-management-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.55rem;
+	margin-top: 0.75rem;
+}
+
+.data-management-actions button {
+	width: auto;
+	margin: 0;
+}
+
 .status-list {
 	display: grid;
 	grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1078,7 +1147,9 @@ footer {
 	}
 
 	.seed-controls,
-	.search-controls {
+	.search-controls,
+	.data-management-controls,
+	.data-management-form {
 		grid-template-columns: 1fr;
 	}
 
@@ -1099,6 +1170,11 @@ footer {
 	}
 
 	.search-controls button {
+		width: 100%;
+	}
+
+	.data-management-controls button,
+	.data-management-actions button {
 		width: 100%;
 	}
 

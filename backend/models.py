@@ -20,6 +20,11 @@ class Case(Base):
     culture_status = Column(String, nullable=True)
     culture_positivity_duration_days = Column(Integer, nullable=True)
     infectiousness_notes = Column(String, nullable=True)
+    entered_in_error = Column(Boolean, nullable=False, default=False)
+    entered_in_error_at = Column(TIMESTAMP, nullable=True)
+    entered_in_error_by = Column(String, nullable=True)
+    entered_in_error_reason = Column(String, nullable=True)
+    updated_at = Column(TIMESTAMP, nullable=True)
 
 
 class TbInterpretation(Base):

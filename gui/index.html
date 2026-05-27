@@ -198,6 +198,23 @@
     <pre id="caseHistory" class="log-box"></pre>
   </section>
 
+  <section class="card">
+    <h2>Step 4B - Data Management</h2>
+    <p class="hint">Review case records, correct core metadata, and mark records as entered in error without physically deleting linked audit evidence.</p>
+    <div class="data-management-controls">
+      <label>Find case
+        <input id="dmSearch" type="text" placeholder="Case UUID, lab sample, status, or region" />
+      </label>
+      <label class="inline-checkbox" for="dmIncludeDeleted">
+        <input id="dmIncludeDeleted" type="checkbox" />
+        Include entered-in-error cases
+      </label>
+      <button onclick="loadDataManagementCases()">Search records</button>
+    </div>
+    <div id="dataManagementList" class="analytics-summary"></div>
+    <div id="dataManagementEditor" class="analytics-view"></div>
+  </section>
+
   <section class="phase-divider" aria-label="Investigate phase">
     <span>Investigate</span>
     <p>Turn analysis outputs into review priorities, case evidence, investigation actions, and visual checks.</p>

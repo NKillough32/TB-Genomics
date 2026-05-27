@@ -35,7 +35,7 @@ def advanced_search(
         FROM cases c
         LEFT JOIN tb_interpretation ti ON c.pseudonymised_case_id = ti.sample_id
         LEFT JOIN case_clusters cc ON c.pseudonymised_case_id = cc.sample_id
-        WHERE 1=1
+        WHERE COALESCE(c.entered_in_error, false) = false
     """
 
     params = {}
@@ -101,6 +101,7 @@ def get_case_history(case_id: str, db: Session = Depends(get_db)):
             """
             SELECT pseudonymised_case_id, geographic_region FROM cases
             WHERE CAST(pseudonymised_case_id AS TEXT) LIKE :case_id_pattern
+              AND COALESCE(entered_in_error, false) = false
             LIMIT 1
             """
         ),
@@ -128,8 +129,8 @@ def get_case_history(case_id: str, db: Session = Depends(get_db)):
             FROM cases c
             LEFT JOIN tb_interpretation ti ON c.pseudonymised_case_id = ti.sample_id
             LEFT JOIN case_clusters cc ON c.pseudonymised_case_id = cc.sample_id
-            WHERE c.pseudonymised_case_id = :case_id
-               OR c.geographic_region = :region
+            WHERE (c.pseudonymised_case_id = :case_id OR c.geographic_region = :region)
+              AND COALESCE(c.entered_in_error, false) = false
             ORDER BY c.specimen_date
             """
         ),

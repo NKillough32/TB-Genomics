@@ -813,6 +813,162 @@ function generateCaseReport(caseIdOverride){
 	if(!caseId){alert('Please enter a Case ID first.');return;}
 	window.open(`${API}/cases/case-report/${encodeURIComponent(caseId)}`,'_blank');
 }
+
+async function loadDataManagementCases(){
+	const list=document.getElementById('dataManagementList');
+	const editor=document.getElementById('dataManagementEditor');
+	if(!list) return;
+	list.textContent='Loading managed cases...';
+	if(editor) editor.innerHTML='';
+	try{
+		const query=document.getElementById('dmSearch')?.value.trim()||'';
+		const include=document.getElementById('dmIncludeDeleted')?.checked||false;
+		const params=new URLSearchParams({limit:'100',include_entered_in_error:String(include)});
+		if(query) params.set('query',query);
+		const data=await apiJson(`${API}/data-management/cases?${params.toString()}`);
+		const rows=data.cases||[];
+		let html=`<div class="kpi-strip">Returned records: ${escapeHtml(rows.length)} | Entered-in-error visible: ${include?'yes':'no'}</div>`;
+		html+='<table class="data-table"><thead><tr><th>Case</th><th>Lab sample</th><th>Date</th><th>Status</th><th>Region</th><th>Lineage</th><th>QC</th><th>State</th><th></th></tr></thead><tbody>';
+		for(const row of rows){
+			const caseId=String(row.case_id||'');
+			html+=`<tr>
+				<td><code>${escapeHtml(caseId.slice(0,8))}</code></td>
+				<td>${escapeHtml(row.local_lab_sample_id||'')}</td>
+				<td>${escapeHtml(row.specimen_date||'')}</td>
+				<td>${escapeHtml(row.case_status||'')}</td>
+				<td>${escapeHtml(row.geographic_region||'')}</td>
+				<td>${escapeHtml(row.lineage||'')}</td>
+				<td>${escapeHtml(row.qc_status||'')}</td>
+				<td>${row.entered_in_error?renderBadge('entered in error','status-fail'):renderBadge('active','status-pass')}</td>
+				<td><button type="button" class="mini-btn" onclick="openDataManagementCase('${escapeAttr(caseId)}')">Edit</button></td>
+			</tr>`;
+		}
+		html+=rows.length?'</tbody></table>':'<tr><td colspan="9">No matching records.</td></tr></tbody></table>';
+		list.innerHTML=html;
+	}catch(e){
+		list.textContent='Failed to load managed cases: '+e;
+	}
+}
+
+function _dmDate(value){
+	return value ? String(value).slice(0,10) : '';
+}
+
+async function openDataManagementCase(caseId){
+	const editor=document.getElementById('dataManagementEditor');
+	if(!editor) return;
+	editor.textContent='Loading case editor...';
+	try{
+		const data=await apiJson(`${API}/data-management/cases/${encodeURIComponent(caseId)}`);
+		const c=data.case||{};
+		const counts=data.linked_counts||{};
+		const countRows=Object.entries(counts).map(([key,value])=>`<tr><td>${escapeHtml(key.replace(/_/g,' '))}</td><td>${escapeHtml(value)}</td></tr>`).join('');
+		const caseState=c.entered_in_error?renderBadge('entered in error','status-fail'):renderBadge('active','status-pass');
+		editor.innerHTML=`<div class="result-panel data-management-editor">
+			<h4>Case ${escapeHtml(c.case_short||String(c.case_id||'').slice(0,8))} ${caseState}</h4>
+			<input id="dmCaseId" type="hidden" value="${escapeAttr(c.case_id||'')}" />
+			<div class="data-management-form">
+				<label>Local lab sample ID<input id="dmLocalLabSampleId" type="text" value="${escapeAttr(c.local_lab_sample_id||'')}" /></label>
+				<label>Specimen date<input id="dmSpecimenDate" type="date" value="${escapeAttr(_dmDate(c.specimen_date))}" /></label>
+				<label>Geographic region<input id="dmGeographicRegion" type="text" value="${escapeAttr(c.geographic_region||'')}" /></label>
+				<label>Case status<input id="dmCaseStatus" type="text" value="${escapeAttr(c.case_status||'')}" /></label>
+				<label>Symptom onset<input id="dmSymptomOnsetDate" type="date" value="${escapeAttr(_dmDate(c.symptom_onset_date))}" /></label>
+				<label>Treatment start<input id="dmTreatmentStartDate" type="date" value="${escapeAttr(_dmDate(c.treatment_start_date))}" /></label>
+				<label>Smear status<input id="dmSmearStatus" type="text" value="${escapeAttr(c.smear_status||'')}" /></label>
+				<label>Cavitation status<input id="dmCavitationStatus" type="text" value="${escapeAttr(c.cavitation_status||'')}" /></label>
+				<label>Culture status<input id="dmCultureStatus" type="text" value="${escapeAttr(c.culture_status||'')}" /></label>
+				<label>Culture positivity duration days<input id="dmCultureDuration" type="number" min="0" value="${escapeAttr(c.culture_positivity_duration_days??'')}" /></label>
+				<label class="dm-wide">Infectiousness notes<textarea id="dmInfectiousnessNotes" rows="3">${escapeHtml(c.infectiousness_notes||'')}</textarea></label>
+				<label class="dm-wide">Change reason<textarea id="dmReason" rows="2" placeholder="Required for audit"></textarea></label>
+			</div>
+			<div class="data-management-actions">
+				<button class="btn-primary" onclick="saveDataManagementCase()">Save changes</button>
+				${c.entered_in_error
+					? '<button onclick="restoreDataManagementCase()">Restore case</button>'
+					: '<button class="btn-danger" onclick="markDataManagementCaseEnteredInError()">Mark entered in error</button>'}
+			</div>
+			<div id="dmEditorStatus" class="cic-msg"></div>
+			<h4>Linked data retained for audit</h4>
+			<table class="data-table"><tbody>${countRows}</tbody></table>
+		</div>`;
+	}catch(e){
+		editor.textContent='Failed to load case editor: '+e;
+	}
+}
+
+function _dmValue(id){
+	const el=document.getElementById(id);
+	return el ? el.value.trim() : '';
+}
+
+function _dmNullable(id){
+	const value=_dmValue(id);
+	return value || null;
+}
+
+function _dmPayload(){
+	const duration=_dmValue('dmCultureDuration');
+	return {
+		reason:_dmValue('dmReason'),
+		local_lab_sample_id:_dmNullable('dmLocalLabSampleId'),
+		specimen_date:_dmNullable('dmSpecimenDate'),
+		geographic_region:_dmNullable('dmGeographicRegion'),
+		case_status:_dmNullable('dmCaseStatus'),
+		symptom_onset_date:_dmNullable('dmSymptomOnsetDate'),
+		treatment_start_date:_dmNullable('dmTreatmentStartDate'),
+		smear_status:_dmNullable('dmSmearStatus'),
+		cavitation_status:_dmNullable('dmCavitationStatus'),
+		culture_status:_dmNullable('dmCultureStatus'),
+		culture_positivity_duration_days:duration?Number(duration):null,
+		infectiousness_notes:_dmNullable('dmInfectiousnessNotes'),
+	};
+}
+
+async function saveDataManagementCase(){
+	const status=document.getElementById('dmEditorStatus');
+	const caseId=_dmValue('dmCaseId');
+	const payload=_dmPayload();
+	if(!payload.reason){ if(status) status.textContent='Change reason is required.'; return; }
+	try{
+		await apiJson(`${API}/data-management/cases/${encodeURIComponent(caseId)}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+		if(status) status.textContent='Case changes saved.';
+		await openDataManagementCase(caseId);
+		await loadDataManagementCases();
+	}catch(e){
+		if(status) status.textContent='Failed to save case: '+e;
+	}
+}
+
+async function markDataManagementCaseEnteredInError(){
+	const status=document.getElementById('dmEditorStatus');
+	const caseId=_dmValue('dmCaseId');
+	const reason=_dmValue('dmReason');
+	if(!reason){ if(status) status.textContent='Reason is required before marking entered in error.'; return; }
+	if(!confirm('Mark this case as entered in error? Linked data will be retained for audit but excluded from standard case lists.')) return;
+	try{
+		await apiJson(`${API}/data-management/cases/${encodeURIComponent(caseId)}`,{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({reason})});
+		if(status) status.textContent='Case marked entered in error.';
+		await openDataManagementCase(caseId);
+		await loadDataManagementCases();
+	}catch(e){
+		if(status) status.textContent='Failed to mark entered in error: '+e;
+	}
+}
+
+async function restoreDataManagementCase(){
+	const status=document.getElementById('dmEditorStatus');
+	const caseId=_dmValue('dmCaseId');
+	const reason=_dmValue('dmReason');
+	if(!reason){ if(status) status.textContent='Reason is required before restoring.'; return; }
+	try{
+		await apiJson(`${API}/data-management/cases/${encodeURIComponent(caseId)}/restore`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reason})});
+		if(status) status.textContent='Case restored.';
+		await openDataManagementCase(caseId);
+		await loadDataManagementCases();
+	}catch(e){
+		if(status) status.textContent='Failed to restore case: '+e;
+	}
+}
 // -- Cluster Investigation Centre ---------------------------------------------
 let _cicCurrentCluster = null;
 let _cicCurrentMembers = [];

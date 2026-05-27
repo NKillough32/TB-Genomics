@@ -7,7 +7,12 @@ CREATE TABLE cases (
   specimen_date DATE,
   geographic_region TEXT,
   case_status TEXT,
-  created_at TIMESTAMP DEFAULT NOW()
+  created_at TIMESTAMP DEFAULT NOW(),
+  entered_in_error BOOLEAN NOT NULL DEFAULT FALSE,
+  entered_in_error_at TIMESTAMP,
+  entered_in_error_by TEXT,
+  entered_in_error_reason TEXT,
+  updated_at TIMESTAMP
 );
 
 CREATE TABLE tb_interpretation (

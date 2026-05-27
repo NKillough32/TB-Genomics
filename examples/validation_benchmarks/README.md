@@ -12,6 +12,12 @@ They are synthetic or reviewer-curated reference scenarios used to:
 - compare reviewer agreement
 - benchmark future scoring-profile versions
 
+Plain-language status:
+
+- These files help test whether the review-support logic behaves consistently.
+- They do not prove that transmission happened.
+- They are useful for spotting drift after code, threshold, or weighting changes.
+
 ## Suggested workflow
 
 1. Load or simulate the benchmark cases.
@@ -39,3 +45,4 @@ GET /analytics/case-pair-calibration/sweep
 - These scenarios are heuristic calibration aids only.
 - They do not replace formal epidemiological validation.
 - SNP thresholds are context dependent and should not be treated as proof of transmission.
+- Keep reviewer-agreement results with local governance notes before changing operational thresholds.

@@ -31,6 +31,15 @@ In plain terms, it helps answer:
 - **Ingest pipeline**: three-step workflow (prepare -> validate -> load) for transforming NI programme exports into the platform database.
 - **Governance docs**: explain setup and secure integration (for example Azure VM ingestion).
 
+## Current state of the repo
+
+- The application is a FastAPI backend plus a static browser GUI.
+- The current Python target is 3.11 only (`>=3.11,<3.12`).
+- PostgreSQL is the operational database.
+- The full analysis pipeline is run as background jobs and can be cancelled from the API or GUI.
+- Case records, epidemiology reference records, and pair-review records can be marked entered in error and restored instead of being silently removed.
+- Authentication is token based when enabled. It supports viewer, analyst, operator, and admin roles, but it is not a full NHS identity-management system.
+
 ## What users get from it
 
 - Case and cluster summaries
@@ -42,6 +51,8 @@ In plain terms, it helps answer:
 - Suggested next review actions written in plain language for public health teams
 - Lineage and drug resistance results from TBProfiler and Mykrobe with concordance checking
 - A generated outbreak investigation HTML report (short and full versions)
+- Cluster dossier exports in JSON or HTML
+- A final actionable surveillance HTML report for routine review
 - Job status and logs for pipeline runs
 - Data provenance and reproducibility fields (reference genome, pipeline version, resistance catalogue, random seed)
 
@@ -113,7 +124,7 @@ This means you can automate data flow from sequencing infrastructure into report
 - Drug resistance results from TBProfiler and Mykrobe are genomic predictions only - all must be confirmed by phenotypic DST before clinical use.
 - The current summary layer is not a validated transmission model.
 - Sequence support is based on precomputed sequence-cluster assignments, not a full validated SNP alignment pipeline.
-- Epidemiological support still uses timing and geography as a proxy, so contact and exposure fields would improve it.
+- Epidemiological support can use structured location/contact evidence where recorded, but it still falls back to weaker timing and geography signals when those fields are missing.
 - Cluster-risk scores need calibration before real-world use.
 - Token-based RBAC is available on API routes, including summary outputs and
   sign-off actions when authentication is enabled. This remains token/env-var

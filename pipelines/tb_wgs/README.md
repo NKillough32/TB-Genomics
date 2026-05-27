@@ -1,6 +1,6 @@
 # TB WGS Pipeline
 
-This directory defines the auditable path from raw reads to the standard artefacts consumed by the reporting application. The production-facing workflow is `main.nf`; the Snakemake fixture remains as a fast deterministic CI harness.
+This directory defines the auditable path from raw reads to the standard artefacts consumed by the reporting application. The production-facing workflow is `main.nf`; the Snakemake fixture and Python reference runner remain fast deterministic validation harnesses for CI and local checks.
 
 Required outputs:
 
@@ -14,9 +14,16 @@ Required outputs:
 - `resistance_calls.csv`
 - `pipeline_manifest.json`
 
-The validation fixture uses a deterministic in-repository reference implementation so CI can run quickly without large external TB databases. The Nextflow modules use production tool commands for fastp, BWA, Samtools, Bcftools, TBProfiler, and snp-dists; deployments still need validated references, mask files, TBProfiler databases, container pinning, and environment-specific runtime testing before clinical use.
+The validation fixture uses a deterministic in-repository reference implementation so CI can run quickly without large external TB databases. The Nextflow modules use production tool commands for fastp, BWA, Samtools, Bcftools, TBProfiler, and snp-dists; deployments still need validated references, mask files, TBProfiler databases, container pinning, version-locked images, and environment-specific runtime testing before operational use.
 
 The Nextflow skeleton is structured around per-sample channel boundaries for read QC, mapping, QC summarisation, variant calling, and TBProfiler profiling. Cohort-level steps begin once sample-level outputs are gathered for masking, SNP distance calculation, cluster assignment, and manifest generation.
+
+Plain-language status:
+
+- This folder defines the expected WGS output contract for the wider platform.
+- It is not yet a fully validated clinical WGS pipeline by itself.
+- The CI fixture is deliberately small and deterministic so output drift is caught quickly.
+- Production deployments should keep the same output file names and schemas so the backend ingest, reporting, and validation code can consume results consistently.
 
 Run the production-facing Nextflow workflow skeleton:
 

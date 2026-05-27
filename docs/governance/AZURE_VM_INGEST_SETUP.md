@@ -4,7 +4,7 @@ This guide shows how to connect sequencing outputs generated on an Azure VM to t
 
 ## 1. Prerequisites
 
-- Azure VM has Python 3.10+ and outbound network access.
+- Azure VM has Python 3.11 and outbound network access.
 - API host is reachable from the VM.
 - API endpoint available: POST /ingest/file.
 - requests package installed on VM.

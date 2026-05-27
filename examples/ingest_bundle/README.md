@@ -103,4 +103,6 @@ Use `--reset --confirm-reset` with `load_ingest_bundle.py` to truncate all table
 - The newer synthesis and investigation views depend on this data being linked well, because missing links lead to weaker review support.
 - In the GUI, case-specific epidemiology evidence is recorded in Step 6, the Cluster Investigation Centre.
 - Step 11 is only a reusable reference library for exposure types, contacts, and locations; it does not assign those records to cases.
+- Before loading real programme data, check that demo/synthetic data has been removed and that `/cases/data-safety` reports `operational_safe = true`.
+- If an uploaded ZIP contains `cases.csv`, the backend uses the same validation/load path described above, so the CSV shapes in this example remain the source of truth for bundle structure.
 

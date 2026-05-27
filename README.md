@@ -16,15 +16,20 @@ Current capabilities include:
 - Button-driven GUI workflow grouped into Prepare, Analyse, Investigate, and Report/Govern phases
 - Web interface for operational use
 - PostgreSQL data model for surveillance and WGS reporting
+- Token-based RBAC for viewer, analyst, operator, and admin API roles when authentication is enabled
+- Data management screens and APIs for correcting case records, marking records entered in error, and restoring them with audit history
 - Outbreaker2 integration for analyst-led outbreak analysis
 - A synthesis layer that sits between analytics and investigation and turns raw outputs into review-ready summaries
 - Cluster Investigation Centre for assigning reviewers, recording epidemiology evidence, logging actions, and signing off investigations
 - Optional epidemiology reference library for reusable exposure, contact, and location records
+- Case-pair review, triage queue, calibration, and threshold sweep endpoints for comparing heuristic model output with reviewer classifications
 - TBProfiler + Mykrobe integration (WSL / Docker fallback) for lineage and drug resistance calling
 - Parallel dual-tool DR concordance checking with discordance flagged in audit_log
 - Automated alerts and actions system for surveillance rule-based event generation
 - Normalized drug resistance calls with per-drug/per-mutation evidence tracking
 - FASTQ discovery and validation for direct raw-read analysis
+- Cluster dossier JSON/HTML export, actionable surveillance HTML report, and short/full outbreak investigation HTML reports
+- Cancellable background job and full-pipeline runner with per-step status and logs
 - Reproducible TB WGS pipeline contract under `pipelines/tb_wgs/`
 - NI data ingest pipeline: prepare_ni_data.py, validate_ingest_files.py, load_ingest_bundle.py
 - Governance/setup documentation for secure deployment and integration
@@ -47,9 +52,20 @@ For governance and how the platform should be used safely in public health setti
 For ingest examples and data shape guidance, see:
 - examples/ingest_bundle/README.md
 
+Current repo standing
+---------------------
+
+- Application version: `0.6.0` in `pyproject.toml`.
+- Runtime target: Python `>=3.11,<3.12`.
+- Main backend entry point: `backend.app:app`.
+- Local GUI entry point: static files in `gui/`, normally served on port 8081.
+- Database: PostgreSQL using the schema in `db/schema.sql` plus Alembic support under `migrations/`.
+- Main automated test entry point: `pytest` from the repository root.
+- Root `requirements.txt` delegates to `backend/requirements.txt`; development-only tools are in `requirements-dev.txt`.
+
 External dependencies (not bundled):
 - PostgreSQL
-- Python >= 3.10
+- Python >= 3.11 and < 3.12
 - R >= 4.1 with outbreaker2
 
 Repository hygiene note:
@@ -342,8 +358,8 @@ python scripts/generate_alerts.py
 ```
 
 Alert types include:
-- `probable_cluster` (high severity): SNP distance ≤ configurable probable threshold (default 5 SNPs)
-- `possible_cluster` (medium severity): SNP distance ≤ configurable possible threshold (default 12 SNPs)
+- `probable_cluster` (high severity): SNP distance <= configurable probable threshold (default 5 SNPs)
+- `possible_cluster` (medium severity): SNP distance <= configurable possible threshold (default 12 SNPs)
 - `dr_resistance_alert` (varies): drug resistance patterns with genomic evidence
 - `cluster_growth` (varies): clusters exceeding `TB_CLUSTER_ALERT_MIN_CASES` with rapid membership changes
 
@@ -366,7 +382,7 @@ Environment variable configuration:
 The alerts script runs automatically as part of the pipeline and can also be invoked standalone via API:
 
 ```
-POST /jobs/run?job_name=generate_alerts
+POST /jobs/run/generate_alerts
 ```
 
 
@@ -426,6 +442,12 @@ These endpoints provide the new review layer between analytics and investigation
 - GET /analytics/transmission-synthesis
 - GET /analytics/transmission-synthesis/{cluster_id}
 - GET /analytics/cluster-risk-summary
+- GET /analytics/case-pair-evidence
+- GET /analytics/pair-triage-queue
+- POST /analytics/case-pair-review
+- GET /analytics/case-pair-reviews
+- GET /analytics/cluster-dossier/{cluster_id}
+- GET /analytics/cluster-dossier/{cluster_id}/export
 
 In plain language, these endpoints answer:
 

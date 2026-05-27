@@ -101,18 +101,25 @@ def test_tb_wgs_nextflow_contract_files_exist():
         assert Path(path).exists()
 
 
-def test_tb_wgs_nextflow_placeholders_match_validation_contract():
+def test_tb_wgs_nextflow_modules_match_validation_contract():
     main_nf = Path("pipelines/tb_wgs/main.nf").read_text(encoding="utf-8")
     cluster_nf = Path("pipelines/tb_wgs/modules/cluster_assignments.nf").read_text(encoding="utf-8")
     samtools_nf = Path("pipelines/tb_wgs/modules/samtools_qc.nf").read_text(encoding="utf-8")
     manifest_nf = Path("pipelines/tb_wgs/modules/pipeline_manifest.nf").read_text(encoding="utf-8")
     fastp_nf = Path("pipelines/tb_wgs/modules/fastp.nf").read_text(encoding="utf-8")
+    bcftools_nf = Path("pipelines/tb_wgs/modules/bcftools_call.nf").read_text(encoding="utf-8")
+    snp_dists_nf = Path("pipelines/tb_wgs/modules/snp_dists.nf").read_text(encoding="utf-8")
+    tbprofiler_nf = Path("pipelines/tb_wgs/modules/tbprofiler.nf").read_text(encoding="utf-8")
 
     assert "CLUSTER_ASSIGNMENTS(SNP_DISTS.out.snp_matrix, params.cluster_threshold)" in main_nf
     assert "val cluster_threshold" in cluster_nf
-    assert "sample_id,read_count,total_bases,mean_depth" in samtools_nf
+    for column in ["sample_id", "read_count", "total_bases", "mean_depth"]:
+        assert f'"{column}"' in samtools_nf
     assert 'path("${sample_id}_R*.fastq")' in fastp_nf
     assert "write_text(\"\")" not in fastp_nf
+    assert "bcftools mpileup" in bcftools_nf
+    assert "snp-dists" in snp_dists_nf
+    assert "tb-profiler profile" in tbprofiler_nf
     for field in [
         "pipeline_name",
         "generated_at",

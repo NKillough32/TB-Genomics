@@ -1,6 +1,6 @@
 process BWA_MEM {
   tag "${sample_id}"
-  container "quay.io/biocontainers/bwa:0.7.18--he4a0461_1"
+  container "pegi3s/bwa_samtools:latest"
 
   input:
   tuple val(sample_id), path(reads)
@@ -11,11 +11,9 @@ process BWA_MEM {
 
   script:
   """
-  # Production command placeholder:
-  # Use one or two FASTQs from ${reads}; do not fabricate an empty R2 for single-end data.
-  # bwa mem ${reference} <R1> [R2] | samtools sort -o ${sample_id}.mapped.bam
-  # samtools index ${sample_id}.mapped.bam
-  touch ${sample_id}.mapped.bam
-  touch ${sample_id}.mapped.bam.bai
+  bwa index "${reference}"
+  bwa mem -t ${task.cpus} -R '@RG\\tID:${sample_id}\\tSM:${sample_id}\\tPL:ILLUMINA' "${reference}" ${reads} \
+    | samtools sort -@ ${task.cpus} -o "${sample_id}.mapped.bam" -
+  samtools index "${sample_id}.mapped.bam"
   """
 }

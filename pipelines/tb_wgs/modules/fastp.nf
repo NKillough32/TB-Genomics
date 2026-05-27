@@ -12,13 +12,22 @@ process FASTP {
   script:
   """
   mkdir -p fastp_qc
-  python - <<'PY'
-  import pathlib, shutil
-  sid = "${sample_id}"
-  shutil.copyfile("${read1}", f"{sid}_R1.fastq")
-  if "${read2}":
-      shutil.copyfile("${read2}", f"{sid}_R2.fastq")
-  pathlib.Path("fastp_qc", f"{sid}.fastp.json").write_text('{"status":"placeholder"}\\n')
-  PY
+  if [[ -n "${read2}" && -f "${read2}" ]]; then
+    fastp \
+      --in1 "${read1}" \
+      --in2 "${read2}" \
+      --out1 "${sample_id}_R1.fastq" \
+      --out2 "${sample_id}_R2.fastq" \
+      --json "fastp_qc/${sample_id}.fastp.json" \
+      --html "fastp_qc/${sample_id}.fastp.html" \
+      --thread ${task.cpus}
+  else
+    fastp \
+      --in1 "${read1}" \
+      --out1 "${sample_id}_R1.fastq" \
+      --json "fastp_qc/${sample_id}.fastp.json" \
+      --html "fastp_qc/${sample_id}.fastp.html" \
+      --thread ${task.cpus}
+  fi
   """
 }

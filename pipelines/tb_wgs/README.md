@@ -14,7 +14,7 @@ Required outputs:
 - `resistance_calls.csv`
 - `pipeline_manifest.json`
 
-The validation fixture uses a deterministic in-repository reference implementation so CI can run quickly without large external TB databases. Production deployments should replace placeholder module commands with validated fastp/BWA/Samtools/Bcftools/TB-Profiler/snp-dists commands while preserving the same output contract.
+The validation fixture uses a deterministic in-repository reference implementation so CI can run quickly without large external TB databases. The Nextflow modules use production tool commands for fastp, BWA, Samtools, Bcftools, TBProfiler, and snp-dists; deployments still need validated references, mask files, TBProfiler databases, container pinning, and environment-specific runtime testing before clinical use.
 
 The Nextflow skeleton is structured around per-sample channel boundaries for read QC, mapping, QC summarisation, variant calling, and TBProfiler profiling. Cohort-level steps begin once sample-level outputs are gathered for masking, SNP distance calculation, cluster assignment, and manifest generation.
 

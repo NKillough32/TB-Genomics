@@ -10,8 +10,6 @@ process SNP_DISTS {
 
   script:
   """
-  # Production command placeholder:
-  # snp-dists ${masked_alignment} > snp_distance_matrix.tsv
-  echo "sample_id" > snp_distance_matrix.tsv
+  snp-dists "${masked_alignment}" > snp_distance_matrix.tsv
   """
 }

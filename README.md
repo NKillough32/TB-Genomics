@@ -273,7 +273,7 @@ Containerised WGS pipeline contract:
 - The validation fixture in `validation/tb_wgs/` covers FASTQ -> QC -> mapping -> variant calling -> masking -> masked FASTA -> SNP distance matrix -> lineage -> resistance calls -> manifest.
 - The root validation harness in `validation/run_validation.py` compares expected SNP distances, lineage, drug resistance, QC pass/fail, and cluster assignment.
 - CI runs the fixture and compares observed outputs with expected artefacts so output drift is caught before merge.
-- The current fixture runner is dependency-free for CI speed; production deployments should replace Nextflow placeholder commands with locked, validated container commands while preserving the same output files.
+- The fixture runner is dependency-free for CI speed; production deployments should run the Nextflow toolchain with locked, validated containers and preserve the same output files.
 
 Environment variables for tool execution:
 - `TBPROFILER_WSL_FALLBACK=1` (default on): enables WSL execution path.

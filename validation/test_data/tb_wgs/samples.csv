@@ -1,0 +1,4 @@
+sample_id,fastq_1,fastq_2
+SAMPLE_A,validation/tb_wgs/fastq/SAMPLE_A_R1.fastq,
+SAMPLE_B,validation/tb_wgs/fastq/SAMPLE_B_R1.fastq,
+SAMPLE_C,validation/tb_wgs/fastq/SAMPLE_C_R1.fastq,

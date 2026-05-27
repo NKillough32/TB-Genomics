@@ -1,5 +1,0 @@
-##fileformat=VCFv4.2
-#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	SAMPLE
-mini_tb_reference	17	.	A	T	.	PASS	.	SAMPLE_B
-mini_tb_reference	17	.	A	T	.	PASS	.	SAMPLE_C
-mini_tb_reference	28	.	T	A	.	PASS	.	SAMPLE_C

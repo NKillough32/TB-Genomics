@@ -3,6 +3,7 @@ from pathlib import Path
 
 from scripts.tb_wgs_reference_pipeline import run_pipeline
 from scripts.validate_tb_wgs_outputs import REQUIRED_OUTPUTS, validate_contract, validate_outputs
+from validation.run_validation import run_validation
 
 
 class Args:
@@ -13,6 +14,7 @@ class Args:
     min_bases = 20
     max_ambiguous_percent = 5.0
     min_mean_depth = 1.0
+    cluster_threshold = 12
 
     def __init__(self, outdir: Path):
         self.outdir = str(outdir)
@@ -34,10 +36,13 @@ def test_tb_wgs_pipeline_manifest_records_required_outputs(tmp_path):
 
     manifest = json.loads((observed / "pipeline_manifest.json").read_text(encoding="utf-8"))
     assert manifest["workflow_engine"] == "snakemake"
+    assert manifest["reference"] == "H37Rv NC_000962.3"
+    assert manifest["mask_file_sha256"]
+    assert manifest["tb_profiler_version"] == "fixture"
     assert manifest["sample_count"] == 3
     for output_name in REQUIRED_OUTPUTS:
         if output_name != "pipeline_manifest.json":
-            assert output_name in manifest["outputs"]
+            assert output_name in manifest["output_hashes"]
 
 
 def test_tb_wgs_contract_validation_rejects_non_symmetric_matrix(tmp_path):
@@ -73,3 +78,33 @@ def test_tb_wgs_snakemake_contract_files_exist():
     assert Path("pipelines/tb_wgs/config/default.yml").exists()
     assert Path("pipelines/tb_wgs/profiles/singularity/config.yaml").exists()
     assert Path("validation/tb_wgs/schemas/pipeline_manifest.schema.json").exists()
+
+
+def test_tb_wgs_nextflow_contract_files_exist():
+    required = [
+        "pipelines/tb_wgs/main.nf",
+        "pipelines/tb_wgs/nextflow.config",
+        "pipelines/tb_wgs/modules/fastp.nf",
+        "pipelines/tb_wgs/modules/bwa_mem.nf",
+        "pipelines/tb_wgs/modules/samtools_qc.nf",
+        "pipelines/tb_wgs/modules/bcftools_call.nf",
+        "pipelines/tb_wgs/modules/mask_regions.nf",
+        "pipelines/tb_wgs/modules/snp_dists.nf",
+        "pipelines/tb_wgs/modules/tbprofiler.nf",
+        "pipelines/tb_wgs/modules/pipeline_manifest.nf",
+    ]
+    for path in required:
+        assert Path(path).exists()
+
+
+def test_root_validation_harness_compares_reportable_outputs(tmp_path):
+    report = run_validation(
+        Path("validation/test_data/tb_wgs"),
+        Path("validation/expected_outputs/tb_wgs"),
+        tmp_path / "observed",
+    )
+
+    assert report["status"] == "pass"
+    assert report["qc_pass"] == 3
+    assert report["resistance_calls"] == 1
+    assert report["clustered_samples"] == 3

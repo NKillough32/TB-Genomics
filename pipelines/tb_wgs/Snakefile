@@ -5,6 +5,7 @@ OUTDIR = config.get("outdir", "results/tb_wgs")
 rule all:
     input:
         f"{OUTDIR}/sample_qc_metrics.csv",
+        f"{OUTDIR}/variants.vcf.gz",
         f"{OUTDIR}/masked_alignment.fasta",
         f"{OUTDIR}/snp_distance_matrix.tsv",
         f"{OUTDIR}/lineage_calls.csv",
@@ -20,18 +21,20 @@ rule fastq_to_standard_artifacts:
     output:
         qc=f"{OUTDIR}/sample_qc_metrics.csv",
         mapping=f"{OUTDIR}/mapping_summary.csv",
-        variants=f"{OUTDIR}/variants.vcf",
+        variants=f"{OUTDIR}/variants.vcf.gz",
         masked=f"{OUTDIR}/masked_alignment.fasta",
         distances=f"{OUTDIR}/snp_distance_matrix.tsv",
         lineage=f"{OUTDIR}/lineage_calls.csv",
         resistance=f"{OUTDIR}/resistance_calls.csv",
         manifest=f"{OUTDIR}/pipeline_manifest.json",
+        clusters=f"{OUTDIR}/cluster_assignments.csv",
     params:
         outdir=OUTDIR,
         min_reads=config["qc"].get("min_reads", 1),
         min_bases=config["qc"].get("min_bases", 20),
         max_ambiguous_percent=config["qc"].get("max_ambiguous_percent", 5.0),
         min_mean_depth=config["qc"].get("min_mean_depth", 1.0),
+        cluster_threshold=config["clustering"].get("cluster_threshold", 12),
     container:
         config["containers"].get("python", "docker://python:3.11-slim")
     shell:
@@ -44,5 +47,6 @@ rule fastq_to_standard_artifacts:
           --min-reads {params.min_reads} \
           --min-bases {params.min_bases} \
           --max-ambiguous-percent {params.max_ambiguous_percent} \
-          --min-mean-depth {params.min_mean_depth}
+          --min-mean-depth {params.min_mean_depth} \
+          --cluster-threshold {params.cluster_threshold}
         """

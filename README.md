@@ -268,10 +268,12 @@ FASTQ discovery and validation:
 - FASTQ-based runs are logged in `exports/lineage_dr_validation.json` under `fastq_inputs` with per-sample diagnostics.
 
 Containerised WGS pipeline contract:
-- The Snakemake workflow in `pipelines/tb_wgs/Snakefile` defines the raw-read output contract.
+- The Nextflow workflow skeleton in `pipelines/tb_wgs/main.nf` defines the production raw-read module boundaries: fastp, BWA-MEM, Samtools QC, Bcftools calling, masking, snp-dists, TBProfiler, and manifest generation.
+- The Snakemake workflow in `pipelines/tb_wgs/Snakefile` runs the deterministic validation fixture used in CI.
 - The validation fixture in `validation/tb_wgs/` covers FASTQ -> QC -> mapping -> variant calling -> masking -> masked FASTA -> SNP distance matrix -> lineage -> resistance calls -> manifest.
+- The root validation harness in `validation/run_validation.py` compares expected SNP distances, lineage, drug resistance, QC pass/fail, and cluster assignment.
 - CI runs the fixture and compares observed outputs with expected artefacts so output drift is caught before merge.
-- The current fixture runner is dependency-free for CI speed; production deployments should replace rule internals with locked BWA/Samtools/Bcftools/TB-Profiler container commands while preserving the same output files.
+- The current fixture runner is dependency-free for CI speed; production deployments should replace Nextflow placeholder commands with locked, validated container commands while preserving the same output files.
 
 Environment variables for tool execution:
 - `TBPROFILER_WSL_FALLBACK=1` (default on): enables WSL execution path.

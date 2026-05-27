@@ -1,0 +1,37 @@
+name: WGS validation
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  validate-wgs-pipeline:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+
+      - name: Run WGS validation harness
+        run: |
+          python validation/run_validation.py \
+            --test-data validation/test_data/tb_wgs \
+            --expected validation/expected_outputs/tb_wgs \
+            --observed validation/observed_outputs/tb_wgs
+
+      - name: Run WGS regression tests
+        run: python -m pytest tests/test_tb_wgs_pipeline.py

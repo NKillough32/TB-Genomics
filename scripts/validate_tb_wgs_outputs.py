@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import argparse
 import csv
+import gzip
 import json
 from pathlib import Path
 
 
 REQUIRED_OUTPUTS = (
     "sample_qc_metrics.csv",
+    "variants.vcf.gz",
     "masked_alignment.fasta",
     "snp_distance_matrix.tsv",
     "lineage_calls.csv",
@@ -26,9 +28,11 @@ def _normalise_manifest(text: str) -> dict:
     # fixture comparison ignores them so the manifest remains reproducible across
     # checkout paths and line-ending modes.
     manifest.pop("generated_at", None)
-    manifest.pop("inputs", None)
-    manifest.pop("outputs", None)
+    manifest.pop("input_hashes", None)
+    manifest.pop("output_hashes", None)
     manifest["reference"] = Path(str(manifest["reference"]).replace("\\", "/")).name
+    if manifest.get("reference_path"):
+        manifest["reference_path"] = Path(str(manifest["reference_path"]).replace("\\", "/")).name
     manifest["sample_sheet"] = Path(str(manifest["sample_sheet"]).replace("\\", "/")).name
     if manifest.get("mask_bed"):
         manifest["mask_bed"] = Path(str(manifest["mask_bed"]).replace("\\", "/")).name
@@ -36,6 +40,9 @@ def _normalise_manifest(text: str) -> dict:
 
 
 def _normalise(path: Path) -> str:
+    if path.suffix == ".gz":
+        text = gzip.open(path, "rt", encoding="utf-8").read().replace("\r\n", "\n")
+        return text
     text = path.read_text(encoding="utf-8").replace("\r\n", "\n")
     if path.name == "pipeline_manifest.json":
         return json.dumps(_normalise_manifest(text), indent=2, sort_keys=True) + "\n"
@@ -132,7 +139,7 @@ def _validate_manifest(path: Path, schema: dict, failures: list[str]) -> None:
     missing_steps = [step for step in schema.get("required_steps", []) if step not in steps]
     if missing_steps:
         failures.append(f"pipeline_manifest.json missing required steps: {missing_steps}")
-    outputs = manifest.get("outputs", {})
+    outputs = manifest.get("output_hashes", {})
     missing_outputs = [name for name in schema.get("required_outputs", []) if name not in outputs]
     if missing_outputs:
         failures.append(f"pipeline_manifest.json missing required output hashes: {missing_outputs}")
@@ -186,13 +193,6 @@ def validate_outputs(observed: Path, expected: Path) -> list[str]:
         if _normalise(observed_path) != _normalise(expected_path):
             failures.append(f"output differs from expected fixture: {filename}")
     manifest_path = observed / "pipeline_manifest.json"
-    if manifest_path.exists():
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        missing_manifest_outputs = [
-            name for name in REQUIRED_OUTPUTS if name != "pipeline_manifest.json" and name not in manifest.get("outputs", {})
-        ]
-        if missing_manifest_outputs:
-            failures.append(f"manifest missing output hashes: {missing_manifest_outputs}")
     return failures
 
 

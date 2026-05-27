@@ -1,0 +1,4 @@
+sample_id,cluster_id,cluster_method
+SAMPLE_A,VAL-CLUSTER-001,snp_threshold
+SAMPLE_B,VAL-CLUSTER-001,snp_threshold
+SAMPLE_C,VAL-CLUSTER-001,snp_threshold

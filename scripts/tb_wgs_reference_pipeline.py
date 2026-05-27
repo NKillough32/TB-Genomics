@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import gzip
 import hashlib
 import json
 from collections import Counter
@@ -164,6 +165,43 @@ def _resistance_calls(sample_id: str, consensus: str) -> list[dict[str, str]]:
     return calls
 
 
+def _cluster_assignments(masked_sequences: dict[str, str], threshold: int) -> list[dict[str, str]]:
+    sample_ids = list(masked_sequences.keys())
+    parent = {sample_id: sample_id for sample_id in sample_ids}
+
+    def find(sample_id: str) -> str:
+        if parent[sample_id] != sample_id:
+            parent[sample_id] = find(parent[sample_id])
+        return parent[sample_id]
+
+    def union(left: str, right: str) -> None:
+        left_root = find(left)
+        right_root = find(right)
+        if left_root != right_root:
+            parent[right_root] = left_root
+
+    for left_idx, left in enumerate(sample_ids):
+        for right in sample_ids[left_idx + 1 :]:
+            if _distance(masked_sequences[left], masked_sequences[right]) <= threshold:
+                union(left, right)
+
+    members_by_root: dict[str, list[str]] = {}
+    for sample_id in sample_ids:
+        members_by_root.setdefault(find(sample_id), []).append(sample_id)
+
+    rows = []
+    cluster_idx = 1
+    for members in members_by_root.values():
+        if len(members) < 2:
+            rows.append({"sample_id": members[0], "cluster_id": "", "cluster_method": "snp_threshold"})
+            continue
+        cluster_id = f"VAL-CLUSTER-{cluster_idx:03d}"
+        cluster_idx += 1
+        for sample_id in sorted(members):
+            rows.append({"sample_id": sample_id, "cluster_id": cluster_id, "cluster_method": "snp_threshold"})
+    return sorted(rows, key=lambda row: row["sample_id"])
+
+
 def run_pipeline(args: argparse.Namespace) -> dict:
     sample_sheet = Path(args.sample_sheet)
     reference_path = Path(args.reference)
@@ -267,7 +305,7 @@ def run_pipeline(args: argparse.Namespace) -> dict:
 
     _write_csv(outdir / "sample_qc_metrics.csv", qc_rows)
     _write_csv(outdir / "mapping_summary.csv", mapping_rows)
-    _write_vcf(outdir / "variants.vcf", variant_rows)
+    _write_vcf_gz(outdir / "variants.vcf.gz", variant_rows)
     _write_fasta(outdir / "masked_alignment.fasta", masked_sequences)
     _write_distance_matrix(outdir / "snp_distance_matrix.tsv", masked_sequences)
     _write_csv(outdir / "lineage_calls.csv", lineage_rows)
@@ -276,25 +314,36 @@ def run_pipeline(args: argparse.Namespace) -> dict:
         resistance_rows,
         fieldnames=["sample_id", "drug", "gene", "mutation", "prediction", "confidence", "source_tool"],
     )
+    _write_csv(
+        outdir / "cluster_assignments.csv",
+        _cluster_assignments(masked_sequences, args.cluster_threshold),
+        fieldnames=["sample_id", "cluster_id", "cluster_method"],
+    )
 
     output_files = [
         outdir / "sample_qc_metrics.csv",
         outdir / "mapping_summary.csv",
-        outdir / "variants.vcf",
+        outdir / "variants.vcf.gz",
         outdir / "masked_alignment.fasta",
         outdir / "snp_distance_matrix.tsv",
         outdir / "lineage_calls.csv",
         outdir / "resistance_calls.csv",
+        outdir / "cluster_assignments.csv",
     ]
     manifest = {
         "pipeline_name": "tb_wgs_reference_validation",
         "pipeline_version": "0.1.0",
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "workflow_engine": "snakemake",
-        "reference": str(reference_path),
+        "reference": "H37Rv NC_000962.3",
+        "reference_path": str(reference_path),
         "mask_bed": str(mask_bed) if mask_bed else None,
+        "mask_file_sha256": _sha256(mask_bed) if mask_bed else None,
         "sample_sheet": str(sample_sheet),
         "sample_count": len(samples),
+        "tb_profiler_version": "fixture",
+        "tb_profiler_db_version": "fixture",
+        "snp_dists_version": "fixture",
         "steps": [
             "FASTQ",
             "QC",
@@ -312,9 +361,10 @@ def run_pipeline(args: argparse.Namespace) -> dict:
             "min_bases": args.min_bases,
             "max_ambiguous_percent": args.max_ambiguous_percent,
             "min_mean_depth": args.min_mean_depth,
+            "cluster_threshold": args.cluster_threshold,
         },
-        "inputs": {str(path): _sha256(path) for path in input_files},
-        "outputs": {path.name: _sha256(path) for path in output_files},
+        "input_hashes": {str(path): _sha256(path) for path in input_files},
+        "output_hashes": {path.name: _sha256(path) for path in output_files},
     }
     manifest_path = outdir / "pipeline_manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
@@ -331,14 +381,15 @@ def _write_csv(path: Path, rows: list[dict], fieldnames: list[str] | None = None
             writer.writerow(row)
 
 
-def _write_vcf(path: Path, rows: list[dict]) -> None:
-    with path.open("w", encoding="utf-8") as handle:
-        handle.write("##fileformat=VCFv4.2\n")
-        handle.write("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tSAMPLE\n")
+def _write_vcf_gz(path: Path, rows: list[dict]) -> None:
+    with gzip.GzipFile(filename=str(path), mode="wb", mtime=0) as raw_handle:
+        handle = raw_handle
+        lines = ["##fileformat=VCFv4.2\n", "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tSAMPLE\n"]
         for row in rows:
-            handle.write(
+            lines.append(
                 f"{row['chrom']}\t{row['pos']}\t.\t{row['ref']}\t{row['alt']}\t.\tPASS\t.\t{row['sample_id']}\n"
             )
+        handle.write("".join(lines).encode("utf-8"))
 
 
 def _write_fasta(path: Path, sequences: dict[str, str]) -> None:
@@ -366,6 +417,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min-bases", type=int, default=20)
     parser.add_argument("--max-ambiguous-percent", type=float, default=5.0)
     parser.add_argument("--min-mean-depth", type=float, default=1.0)
+    parser.add_argument("--cluster-threshold", type=int, default=12)
     return parser.parse_args()
 
 

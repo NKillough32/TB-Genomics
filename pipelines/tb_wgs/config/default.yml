@@ -10,6 +10,7 @@ qc:
 
 clustering:
   mask_bed: validation/tb_wgs/reference/mask.bed
+  cluster_threshold: 12
 
 containers:
   python: docker://python:3.11-slim

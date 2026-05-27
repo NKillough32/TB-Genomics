@@ -5,13 +5,18 @@
     "generated_at",
     "workflow_engine",
     "reference",
+    "reference_path",
     "mask_bed",
+    "mask_file_sha256",
     "sample_sheet",
     "sample_count",
+    "tb_profiler_version",
+    "tb_profiler_db_version",
+    "snp_dists_version",
     "steps",
     "parameters",
-    "inputs",
-    "outputs"
+    "input_hashes",
+    "output_hashes"
   ],
   "required_steps": [
     "FASTQ",
@@ -27,6 +32,7 @@
   ],
   "required_outputs": [
     "sample_qc_metrics.csv",
+    "variants.vcf.gz",
     "masked_alignment.fasta",
     "snp_distance_matrix.tsv",
     "lineage_calls.csv",

@@ -1,0 +1,45 @@
+{
+  "pipeline_name": "tb_wgs_reference_validation",
+  "pipeline_version": "0.1.0",
+  "generated_at": "2026-05-27T09:15:15.594901+00:00",
+  "workflow_engine": "snakemake",
+  "reference": "validation\\tb_wgs\\reference\\ref.fasta",
+  "mask_bed": "validation\\tb_wgs\\reference\\mask.bed",
+  "sample_sheet": "validation\\tb_wgs\\samples.csv",
+  "sample_count": 3,
+  "steps": [
+    "FASTQ",
+    "QC",
+    "mapping",
+    "variant_calling",
+    "masking",
+    "masked_FASTA",
+    "SNP_distance_matrix",
+    "lineage",
+    "resistance_calls",
+    "pipeline_manifest"
+  ],
+  "parameters": {
+    "min_reads": 1,
+    "min_bases": 20,
+    "max_ambiguous_percent": 5.0,
+    "min_mean_depth": 1.0
+  },
+  "inputs": {
+    "validation\\tb_wgs\\samples.csv": "e9263d6e7c5692f2a1be3a588bff28be9146ae5fe2f167752ad807d8d4b5269e",
+    "validation\\tb_wgs\\reference\\ref.fasta": "0357bd0acc0a841a7ec5332aa000bfa4cf0b38bf17a4028891e525833037daf6",
+    "validation\\tb_wgs\\reference\\mask.bed": "e64f221b44ec24e5008f6855278eb091318851aacebac2717bd272f5fdcb107d",
+    "validation\\tb_wgs\\fastq\\SAMPLE_A_R1.fastq": "d6439caf9237db5291f1079358730ac416a8cd0105c8b5ecae1080dae562e21c",
+    "validation\\tb_wgs\\fastq\\SAMPLE_B_R1.fastq": "572b8b2e41fdbf45d5cc790f017775cba0fd515e5e4623ef903712c0320493b7",
+    "validation\\tb_wgs\\fastq\\SAMPLE_C_R1.fastq": "dd5eacc4487acb28bdf8c6b7aeadb613bac741ef492eb020ab3b9ad305c23b98"
+  },
+  "outputs": {
+    "sample_qc_metrics.csv": "ecf1202e317f1b3ebdedb2e53534977e0b840434ae2b33b500c33c2bb966b261",
+    "mapping_summary.csv": "2a431aa3d90a27569a018303f0d8e27d2a5030ffca85c61c4e41aad73d2c550a",
+    "variants.vcf": "a597a18453c27be3836a64f1cdc7bf09b2a9f7534f79f6a85e56cff8330f0d46",
+    "masked_alignment.fasta": "5e29d383ca807baed50da35e3522a0d3eee1f0c678b42f4b62ae8bf619ffde95",
+    "snp_distance_matrix.tsv": "bb48bd05d88841630cf0832c1f15bc5da345a5af68f0bdef900a644983a29775",
+    "lineage_calls.csv": "b6676dec1c6962c033976c14f1a16dad22f9a05b688d8593b6cb9c521c306d45",
+    "resistance_calls.csv": "82c951724859ea7bc920ab47fb9f861564de75aa52a4858e16bc7389e77a42dc"
+  }
+}

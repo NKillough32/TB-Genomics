@@ -29,6 +29,18 @@ jobs:
       - name: Run tests
         run: python -m pytest
 
+      - name: Validate TB WGS pipeline fixture
+        run: |
+          python -m pip install snakemake==8.30.0
+          snakemake \
+            --snakefile pipelines/tb_wgs/Snakefile \
+            --config outdir=validation/tb_wgs/observed \
+            --cores 1 \
+            --printshellcmds
+          python scripts/validate_tb_wgs_outputs.py \
+            --observed validation/tb_wgs/observed \
+            --expected validation/tb_wgs/expected
+
       - name: Check Alembic migrations
         run: |
           python - <<'PY'
@@ -41,6 +53,8 @@ jobs:
               "0004_case_clinical_fields.py",
               "0005_entered_in_error_columns.py",
               "0006_add_performance_indexes.py",
+              "0007_resistance_alerts_actions.py",
+              "0008_case_data_mgmt.py",
           ]
           missing = [name for name in required if not (versions / name).exists()]
           if missing:
@@ -62,6 +76,8 @@ jobs:
               ("0004_case_clinical_fields.py", "0003_case_pair_reviews"),
               ("0005_entered_in_error_columns.py", "0004_case_clinical_fields"),
               ("0006_add_performance_indexes.py", "0005_entered_in_error_columns"),
+              ("0007_resistance_alerts_actions.py", "0006_add_performance_indexes"),
+              ("0008_case_data_mgmt.py", "0007_resistance_alerts_actions"),
           ]
           for migration_file, prev_migration in migrations:
               text = (versions / migration_file).read_text()

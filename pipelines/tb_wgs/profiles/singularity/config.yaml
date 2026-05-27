@@ -1,0 +1,4 @@
+cores: 1
+use-singularity: true
+singularity-args: "--cleanenv"
+printshellcmds: true

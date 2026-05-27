@@ -25,6 +25,7 @@ Current capabilities include:
 - Automated alerts and actions system for surveillance rule-based event generation
 - Normalized drug resistance calls with per-drug/per-mutation evidence tracking
 - FASTQ discovery and validation for direct raw-read analysis
+- Reproducible TB WGS pipeline contract under `pipelines/tb_wgs/`
 - NI data ingest pipeline: prepare_ni_data.py, validate_ingest_files.py, load_ingest_bundle.py
 - Governance/setup documentation for secure deployment and integration
 
@@ -265,6 +266,12 @@ FASTQ discovery and validation:
 - FASTQ metadata is extracted and validated against consensus sequences to ensure consistency.
 - Supports WSL and Docker fallback environments for TBProfiler and Mykrobe execution on raw reads.
 - FASTQ-based runs are logged in `exports/lineage_dr_validation.json` under `fastq_inputs` with per-sample diagnostics.
+
+Containerised WGS pipeline contract:
+- The Snakemake workflow in `pipelines/tb_wgs/Snakefile` defines the raw-read output contract.
+- The validation fixture in `validation/tb_wgs/` covers FASTQ -> QC -> mapping -> variant calling -> masking -> masked FASTA -> SNP distance matrix -> lineage -> resistance calls -> manifest.
+- CI runs the fixture and compares observed outputs with expected artefacts so output drift is caught before merge.
+- The current fixture runner is dependency-free for CI speed; production deployments should replace rule internals with locked BWA/Samtools/Bcftools/TB-Profiler container commands while preserving the same output files.
 
 Environment variables for tool execution:
 - `TBPROFILER_WSL_FALLBACK=1` (default on): enables WSL execution path.

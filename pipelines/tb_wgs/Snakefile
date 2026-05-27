@@ -1,0 +1,48 @@
+configfile: "pipelines/tb_wgs/config/default.yml"
+
+OUTDIR = config.get("outdir", "results/tb_wgs")
+
+rule all:
+    input:
+        f"{OUTDIR}/sample_qc_metrics.csv",
+        f"{OUTDIR}/masked_alignment.fasta",
+        f"{OUTDIR}/snp_distance_matrix.tsv",
+        f"{OUTDIR}/lineage_calls.csv",
+        f"{OUTDIR}/resistance_calls.csv",
+        f"{OUTDIR}/pipeline_manifest.json",
+
+
+rule fastq_to_standard_artifacts:
+    input:
+        sample_sheet=config["sample_sheet"],
+        reference=config["reference"],
+        mask_bed=config["clustering"].get("mask_bed", ""),
+    output:
+        qc=f"{OUTDIR}/sample_qc_metrics.csv",
+        mapping=f"{OUTDIR}/mapping_summary.csv",
+        variants=f"{OUTDIR}/variants.vcf",
+        masked=f"{OUTDIR}/masked_alignment.fasta",
+        distances=f"{OUTDIR}/snp_distance_matrix.tsv",
+        lineage=f"{OUTDIR}/lineage_calls.csv",
+        resistance=f"{OUTDIR}/resistance_calls.csv",
+        manifest=f"{OUTDIR}/pipeline_manifest.json",
+    params:
+        outdir=OUTDIR,
+        min_reads=config["qc"].get("min_reads", 1),
+        min_bases=config["qc"].get("min_bases", 20),
+        max_ambiguous_percent=config["qc"].get("max_ambiguous_percent", 5.0),
+        min_mean_depth=config["qc"].get("min_mean_depth", 1.0),
+    container:
+        config["containers"].get("python", "docker://python:3.11-slim")
+    shell:
+        """
+        python scripts/tb_wgs_reference_pipeline.py \
+          --sample-sheet {input.sample_sheet} \
+          --reference {input.reference} \
+          --mask-bed {input.mask_bed} \
+          --outdir {params.outdir} \
+          --min-reads {params.min_reads} \
+          --min-bases {params.min_bases} \
+          --max-ambiguous-percent {params.max_ambiguous_percent} \
+          --min-mean-depth {params.min_mean_depth}
+        """

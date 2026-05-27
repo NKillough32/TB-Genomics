@@ -1,0 +1,20 @@
+reference: validation/tb_wgs/reference/ref.fasta
+sample_sheet: validation/tb_wgs/samples.csv
+outdir: results/tb_wgs
+
+qc:
+  min_reads: 1
+  min_bases: 20
+  max_ambiguous_percent: 5.0
+  min_mean_depth: 1.0
+
+clustering:
+  mask_bed: validation/tb_wgs/reference/mask.bed
+
+containers:
+  python: docker://python:3.11-slim
+  fastqc: docker://quay.io/biocontainers/fastqc:0.12.1--hdfd78af_0
+  bwa: docker://quay.io/biocontainers/bwa:0.7.18--he4a0461_1
+  samtools: docker://quay.io/biocontainers/samtools:1.21--h50ea8bc_0
+  bcftools: docker://quay.io/biocontainers/bcftools:1.21--h3a4d415_1
+  tbprofiler: docker://quay.io/biocontainers/tb-profiler:6.6.5--pyhdfd78af_0

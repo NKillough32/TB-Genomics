@@ -1,0 +1,17 @@
+{
+  "required_columns": [
+    "sample_id",
+    "drug",
+    "gene",
+    "mutation",
+    "prediction",
+    "confidence",
+    "source_tool"
+  ],
+  "numeric_columns": [
+    "confidence"
+  ],
+  "enum_columns": {
+    "prediction": ["susceptible", "intermediate", "resistant", "unknown"]
+  }
+}

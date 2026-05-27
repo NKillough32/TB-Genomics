@@ -1,0 +1,8 @@
+{
+  "required_columns": [
+    "sample_id",
+    "lineage",
+    "sublineage",
+    "source_tool"
+  ]
+}

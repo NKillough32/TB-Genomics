@@ -1,0 +1,24 @@
+{
+  "required_columns": [
+    "sample_id",
+    "read_count",
+    "total_bases",
+    "mean_depth",
+    "coverage_breadth",
+    "ambiguous_base_percent",
+    "contamination_flag",
+    "qc_status",
+    "qc_failure_reason"
+  ],
+  "numeric_columns": [
+    "read_count",
+    "total_bases",
+    "mean_depth",
+    "coverage_breadth",
+    "ambiguous_base_percent"
+  ],
+  "enum_columns": {
+    "qc_status": ["pass", "fail"],
+    "contamination_flag": ["true", "false"]
+  }
+}

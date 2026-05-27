@@ -1,0 +1,35 @@
+{
+  "required_fields": [
+    "pipeline_name",
+    "pipeline_version",
+    "generated_at",
+    "workflow_engine",
+    "reference",
+    "mask_bed",
+    "sample_sheet",
+    "sample_count",
+    "steps",
+    "parameters",
+    "inputs",
+    "outputs"
+  ],
+  "required_steps": [
+    "FASTQ",
+    "QC",
+    "mapping",
+    "variant_calling",
+    "masking",
+    "masked_FASTA",
+    "SNP_distance_matrix",
+    "lineage",
+    "resistance_calls",
+    "pipeline_manifest"
+  ],
+  "required_outputs": [
+    "sample_qc_metrics.csv",
+    "masked_alignment.fasta",
+    "snp_distance_matrix.tsv",
+    "lineage_calls.csv",
+    "resistance_calls.csv"
+  ]
+}

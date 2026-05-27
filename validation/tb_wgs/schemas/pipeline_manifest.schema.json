@@ -26,6 +26,7 @@
     "masking",
     "masked_FASTA",
     "SNP_distance_matrix",
+    "cluster_assignment",
     "lineage",
     "resistance_calls",
     "pipeline_manifest"

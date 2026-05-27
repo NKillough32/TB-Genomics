@@ -14,6 +14,6 @@ process MASK_REGIONS {
   """
   # Production command placeholder: apply mask BED and variant consensus to produce masked FASTA.
   echo ">placeholder" > masked_alignment.fasta
-  echo "N" >> masked_alignment.fasta
+  echo "NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN" >> masked_alignment.fasta
   """
 }

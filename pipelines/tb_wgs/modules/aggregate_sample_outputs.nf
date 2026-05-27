@@ -40,6 +40,8 @@ process AGGREGATE_SAMPLE_OUTPUTS {
   merge_csv("*.lineage_calls.csv", "lineage_calls.csv")
   merge_csv("*.resistance_calls.csv", "resistance_calls.csv")
 
+  # Placeholder only: production should use bcftools concat/merge so contig,
+  # INFO, FILTER, FORMAT, and bcftools provenance headers are preserved.
   with gzip.open("variants.vcf.gz", "wt") as out:
       out.write("##fileformat=VCFv4.2\\n#CHROM\\tPOS\\tID\\tREF\\tALT\\tQUAL\\tFILTER\\tINFO\\n")
       for path in sorted(pathlib.Path(".").glob("*.variants.vcf.gz")):

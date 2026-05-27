@@ -45,7 +45,7 @@ workflow TB_WGS {
   AGGREGATE_SAMPLE_OUTPUTS(sample_qc_files, mapping_summary_files, variant_files, lineage_files, resistance_files)
   MASK_REGIONS(AGGREGATE_SAMPLE_OUTPUTS.out.variants, reference, mask_bed)
   SNP_DISTS(MASK_REGIONS.out.masked_alignment)
-  CLUSTER_ASSIGNMENTS(SNP_DISTS.out.snp_matrix)
+  CLUSTER_ASSIGNMENTS(SNP_DISTS.out.snp_matrix, params.cluster_threshold)
   PIPELINE_MANIFEST(
     AGGREGATE_SAMPLE_OUTPUTS.out.sample_qc,
     AGGREGATE_SAMPLE_OUTPUTS.out.mapping_summary,

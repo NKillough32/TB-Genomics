@@ -13,7 +13,7 @@ process SAMTOOLS_QC {
   """
   # Production command placeholder:
   # samtools depth/stats -> sample_qc_metrics.csv
-  echo "sample_id,mean_depth,coverage_breadth,ambiguous_base_percent,contamination_flag,qc_status,qc_failure_reason" > ${sample_id}.sample_qc_metrics.csv
+  echo "sample_id,read_count,total_bases,mean_depth,coverage_breadth,ambiguous_base_percent,contamination_flag,qc_status,qc_failure_reason" > ${sample_id}.sample_qc_metrics.csv
   echo "sample_id,reference,read_count,mapped_reads,mapped_percent" > ${sample_id}.mapping_summary.csv
   """
 }

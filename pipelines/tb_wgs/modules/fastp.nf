@@ -6,7 +6,7 @@ process FASTP {
   tuple val(sample_id), path(read1), path(read2)
 
   output:
-  tuple val(sample_id), path("${sample_id}_R1.fastq"), path("${sample_id}_R2.fastq"), emit: cleaned_reads
+  tuple val(sample_id), path("${sample_id}_R*.fastq"), emit: cleaned_reads
   path "fastp_qc", emit: qc
 
   script:
@@ -18,8 +18,6 @@ process FASTP {
   shutil.copyfile("${read1}", f"{sid}_R1.fastq")
   if "${read2}":
       shutil.copyfile("${read2}", f"{sid}_R2.fastq")
-  else:
-      pathlib.Path(f"{sid}_R2.fastq").write_text("")
   pathlib.Path("fastp_qc", f"{sid}.fastp.json").write_text('{"status":"placeholder"}\\n')
   PY
   """

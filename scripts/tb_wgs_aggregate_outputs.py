@@ -40,7 +40,7 @@ def aggregate_sample_outputs(input_dir: Path, output_dir: Path) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Aggregate per-sample TB WGS placeholder outputs.")
+    parser = argparse.ArgumentParser(description="Aggregate per-sample TB WGS pipeline outputs.")
     parser.add_argument("--input-dir", required=True, type=Path)
     parser.add_argument("--output-dir", required=True, type=Path)
     args = parser.parse_args()

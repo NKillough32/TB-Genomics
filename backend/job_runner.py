@@ -329,7 +329,7 @@ def run_job(job_name):
                     )
                     tree_render_result = subprocess.CompletedProcess([python_exe, "scripts/render_transmission_tree.py"], tree_render_returncode)
                     if tree_render_result.returncode != 0:
-                        _write_log(lf, "Warning: Transmission tree renderer exited with code {tree_render_result.returncode}")
+                        _write_log(lf, f"Warning: Transmission tree renderer exited with code {tree_render_result.returncode}")
                     
                     # Generate supplementary visualizations without overwriting outbreaker network output.
                     _write_log(lf, "Generating supplementary visualizations...")

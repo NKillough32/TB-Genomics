@@ -17,6 +17,17 @@ except ModuleNotFoundError:
     from runtime_paths import EXPORTS
 
 
+def _write_status_graphic(out_path, message: str) -> None:
+    """Write a report-safe status image when no network graph can be drawn."""
+    fig, ax = plt.subplots(figsize=(12, 8))
+    ax.text(0.5, 0.55, "Transmission Network", ha="center", va="center", fontsize=18, fontweight="bold")
+    ax.text(0.5, 0.45, message, ha="center", va="center", fontsize=13, color="#475569")
+    ax.axis("off")
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=130)
+    plt.close(fig)
+
+
 def main() -> int:
     exports_dir = EXPORTS
     exports_dir.mkdir(parents=True, exist_ok=True)
@@ -25,13 +36,8 @@ def main() -> int:
     out_path = exports_dir / "outbreaker_tree.png"
 
     if not network_path.exists():
-        fig, ax = plt.subplots(figsize=(12, 8))
-        ax.text(0.5, 0.5, "Transmission network JSON not found", ha="center", va="center", fontsize=14)
-        ax.axis("off")
-        fig.tight_layout()
-        fig.savefig(out_path, dpi=130)
-        plt.close(fig)
-        print("render_transmission_tree: no network JSON; placeholder generated")
+        _write_status_graphic(out_path, "transmission_network.json was not found in exports")
+        print(f"render_transmission_tree: wrote no-data status graphic to {out_path}")
         return 0
 
     with network_path.open("r", encoding="utf-8") as f:
@@ -67,12 +73,9 @@ def main() -> int:
     fig, ax = plt.subplots(figsize=(14, 10))
 
     if graph.number_of_nodes() == 0:
-        ax.text(0.5, 0.5, "No transmission nodes available", ha="center", va="center", fontsize=14)
-        ax.axis("off")
-        fig.tight_layout()
-        fig.savefig(out_path, dpi=130)
         plt.close(fig)
-        print("render_transmission_tree: no nodes; placeholder generated")
+        _write_status_graphic(out_path, "No transmission nodes were available in the network export")
+        print(f"render_transmission_tree: wrote empty-network status graphic to {out_path}")
         return 0
 
     # Prefer graphviz-like layout when possible; fall back to spring layout.

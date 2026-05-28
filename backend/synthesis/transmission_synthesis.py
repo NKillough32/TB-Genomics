@@ -134,6 +134,51 @@ def _resistant_drug_set(value: Any) -> set[str]:
     return set()
 
 
+def _normalise_token(value: Any) -> str:
+    return str(value or "").strip().lower()
+
+
+def _resistance_mutation_set(value: Any) -> set[tuple[str, str, str]]:
+    """Extract comparable drug/gene/mutation keys from flexible mutation JSON."""
+    value = value or []
+    result: set[tuple[str, str, str]] = set()
+
+    def add_call(call: Any, default_drug: Any = None) -> None:
+        if isinstance(call, dict):
+            drug = _normalise_token(call.get("drug") or call.get("Drug") or default_drug)
+            gene = _normalise_token(call.get("gene") or call.get("Gene"))
+            mutation = _normalise_token(
+                call.get("mutation")
+                or call.get("variant")
+                or call.get("change")
+                or call.get("protein_change")
+                or call.get("nucleotide_change")
+                or call.get("name")
+            )
+        else:
+            drug = _normalise_token(default_drug)
+            gene = ""
+            mutation = _normalise_token(call)
+
+        if mutation and mutation not in {"n/a", "na", "none", "null", "unknown"}:
+            result.add((drug, gene, mutation))
+
+    if isinstance(value, dict):
+        for drug, calls in value.items():
+            if isinstance(calls, list):
+                for call in calls:
+                    add_call(call, default_drug=drug)
+            else:
+                add_call(calls, default_drug=drug)
+    elif isinstance(value, list):
+        for call in value:
+            add_call(call)
+    else:
+        add_call(value)
+
+    return result
+
+
 def _major_lineage(lineage_str: str) -> str:
     """Extract major lineage (L1–L9 or Bovis/Caprae) from TBProfiler sublineage string.
     
@@ -148,15 +193,32 @@ def _major_lineage(lineage_str: str) -> str:
     return val.split(".")[0]  # Split on first dot to isolate major lineage
 
 
-def _resistance_profile_concordance(source_profile: Any, target_profile: Any) -> str:
+def _resistance_profile_concordance(
+    source_profile: Any,
+    target_profile: Any,
+    source_mutations: Any = None,
+    target_mutations: Any = None,
+) -> str:
     """Compare resistance profiles between two cases.
 
-    LIMITATION: Compares the set of resistant drugs only, not mutation-level identity.
-    Two cases with rifampicin resistance but different rpoB mutations (e.g. S450L vs H445Y)
-    are marked concordant, which may indicate convergent evolution rather than true transmission.
-    For mutation-level specificity, would need to compare predicted_drug_resistance at the
-    individual_resistance_mutations level; this is not yet implemented.
+    Prefer mutation-level identity when both cases have per-mutation evidence.
+    Fall back to resistant-drug sets when mutation evidence is unavailable.
     """
+    src_mut = _resistance_mutation_set(source_mutations)
+    tgt_mut = _resistance_mutation_set(target_mutations)
+    if src_mut and tgt_mut:
+        if src_mut == tgt_mut:
+            return "concordant"
+        src_mut_drugs = {drug for drug, _gene, _mutation in src_mut if drug}
+        tgt_mut_drugs = {drug for drug, _gene, _mutation in tgt_mut if drug}
+        if src_mut.intersection(tgt_mut):
+            return "partial_overlap"
+        if src_mut_drugs and tgt_mut_drugs and src_mut_drugs.intersection(tgt_mut_drugs):
+            return "discordant"
+        return "discordant"
+    if src_mut or tgt_mut:
+        return "one_sided"
+
     src = _resistant_drug_set(source_profile)
     tgt = _resistant_drug_set(target_profile)
     if not src and not tgt:
@@ -178,6 +240,7 @@ def _case_rows(db: Session, cluster_id: str | None = None):
                COALESCE(cc.cluster_id::text, '') AS cluster_id,
                COALESCE(ti.lineage, '') AS lineage,
                ti.predicted_drug_resistance,
+               ti.resistance_mutations,
                cs.sequence,
              sqm.mean_depth,
              sqm.coverage_breadth,
@@ -261,6 +324,7 @@ def build_transmission_synthesis(
             "cluster_id": str(row["cluster_id"] or ""),
             "lineage": str(row["lineage"] or ""),
             "predicted_drug_resistance": row["predicted_drug_resistance"],
+            "resistance_mutations": row.get("resistance_mutations"),
             "sequence": str(row["sequence"] or ""),
             "mean_depth": float(row["mean_depth"]) if row.get("mean_depth") is not None else None,
             "coverage_breadth": float(row["coverage_breadth"]) if row.get("coverage_breadth") is not None else None,
@@ -389,6 +453,8 @@ def build_transmission_synthesis(
         resistance_concordance = _resistance_profile_concordance(
             src.get("predicted_drug_resistance"),
             tgt.get("predicted_drug_resistance"),
+            src.get("resistance_mutations"),
+            tgt.get("resistance_mutations"),
         )
 
         # Structured epi evidence from database records (replaces proxy-only approach)

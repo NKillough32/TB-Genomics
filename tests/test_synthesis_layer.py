@@ -2,6 +2,7 @@ from backend.synthesis.scoring import cluster_priority_score
 from backend.synthesis.transmission_synthesis import (
     _bool_temporal_support,
     _epi_support_level,
+    _resistance_profile_concordance,
     _sequence_proxy_distance,
     build_transmission_synthesis,
 )
@@ -76,6 +77,30 @@ def test_bool_temporal_support_enforces_direction_with_tolerance():
     target = dt(2026, 1, 10)
     assert _bool_temporal_support(source, target, window_days=45, tolerance_days=5) is False
     assert _bool_temporal_support(source, target, window_days=45, tolerance_days=15) is True
+
+
+def test_resistance_concordance_uses_mutation_identity_when_available():
+    left_profile = {"rifampicin": "resistant"}
+    right_profile = {"rifampicin": "resistant"}
+
+    assert (
+        _resistance_profile_concordance(
+            left_profile,
+            right_profile,
+            [{"drug": "rifampicin", "gene": "rpoB", "mutation": "S450L"}],
+            [{"drug": "rifampicin", "gene": "rpoB", "mutation": "H445Y"}],
+        )
+        == "discordant"
+    )
+    assert (
+        _resistance_profile_concordance(
+            left_profile,
+            right_profile,
+            [{"drug": "rifampicin", "gene": "rpoB", "mutation": "S450L"}],
+            [{"drug": "rifampicin", "gene": "rpoB", "mutation": "S450L"}],
+        )
+        == "concordant"
+    )
 
 
 def test_transmission_synthesis_reports_validation_and_calibration(monkeypatch):

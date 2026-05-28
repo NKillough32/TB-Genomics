@@ -1,0 +1,4 @@
+sample_id,lineage,sublineage,source_tool
+SAMPLE_A,L4-fixture,L4-fixture,fixture-lineage-caller
+SAMPLE_B,L4.1-fixture,L4.1-fixture,fixture-lineage-caller
+SAMPLE_C,L4.1-fixture,L4.1-fixture,fixture-lineage-caller

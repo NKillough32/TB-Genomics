@@ -1,0 +1,146 @@
+{
+  "run_id": "20260527T111813Z",
+  "generated_at": "2026-05-27T11:18:19.411393+00:00",
+  "status": "blocked",
+  "decision": "Formal NI pilot validation is blocked until failed checks are remediated and the report is signed.",
+  "dataset": {
+    "path": "C:\\Users\\Nicho\\Desktop\\TB-Genomics-main\\examples\\ingest_bundle",
+    "required_files": {
+      "cases.csv": {
+        "present": true,
+        "bytes": 3029
+      },
+      "tb_interpretation.csv": {
+        "present": true,
+        "bytes": 13755
+      },
+      "sequencing_runs.csv": {
+        "present": true,
+        "bytes": 210
+      },
+      "sample_qc_metrics.csv": {
+        "present": true,
+        "bytes": 4233
+      },
+      "analysis_provenance.csv": {
+        "present": true,
+        "bytes": 8151
+      },
+      "dna.fasta": {
+        "present": true,
+        "bytes": 43435
+      },
+      "ingest_manifest.json": {
+        "present": true,
+        "bytes": 840
+      }
+    }
+  },
+  "code_freeze": {
+    "branch": "main",
+    "commit": "e66bf6c6130b75a39a0829b36d56a252953b6406",
+    "commit_short": "e66bf6c",
+    "dirty": true,
+    "dirty_files": [
+      "D docs/SCIENTIFIC_CALIBRATION_FIXES.md",
+      "?? scripts/run_ni_pilot_validation.py",
+      "?? validation/ni_pilot/"
+    ],
+    "pyproject": "[project]\nname = \"tb-genomics\"\nversion = \"0.6.0\"\ndescription = \"TB genomic surveillance FastAPI platform with outbreak reporting workflows.\"\nrequires-python = \">=3.11,<3.12\"\n\n[tool.pytest.ini_options]\ntestpaths = [\"tests\"]\npythonpath = [\".\"]\naddopts = \"-q\"\n\n[tool.ruff]\ntarget-version = \"py310\"\nline-length = 100\nextend-exclude = [\n    \"R_libs\",\n    \"exports\",\n    \"logs\",\n    \"uploads\",\n    \"mykrobe\",\n]\n\n[tool.ruff.lint]\nselect = [\"E\", \"F\", \"I\", \"B\", \"UP\"]\nignore = [\n    \"E501\",\n]\n",
+    "backend_requirements": [
+      "fastapi==0.136.1",
+      "python-multipart==0.0.28",
+      "uvicorn==0.46.0",
+      "sqlalchemy==2.0.49",
+      "psycopg2-binary==2.9.12",
+      "biopython==1.87",
+      "reportlab==4.5.0",
+      "numpy==2.4.4",
+      "matplotlib==3.10.9",
+      "scipy==1.17.1",
+      "networkx==3.6.1",
+      "requests==2.33.1",
+      "alembic==1.17.2"
+    ],
+    "dev_requirements": [
+      "pytest==9.0.3",
+      "ruff==0.14.6"
+    ]
+  },
+  "checks": [
+    {
+      "id": "VP-001",
+      "name": "Code freeze",
+      "status": "draft-only",
+      "evidence": "Commit e66bf6c on main."
+    },
+    {
+      "id": "VP-002",
+      "name": "NI ingest bundle validation",
+      "status": "pass",
+      "evidence": "validation\\ni_pilot\\runs\\20260527T111813Z\\vp002_ingest_validation.log",
+      "command_result": {
+        "command": [
+          "C:\\Users\\Nicho\\Desktop\\TB-Genomics-main\\.venv\\Scripts\\python.exe",
+          "scripts/validate_ingest_files.py",
+          "--dir",
+          "C:\\Users\\Nicho\\Desktop\\TB-Genomics-main\\examples\\ingest_bundle"
+        ],
+        "returncode": 0,
+        "started_at": "2026-05-27T11:18:14.055809+00:00",
+        "finished_at": "2026-05-27T11:18:14.184321+00:00",
+        "log": "validation\\ni_pilot\\runs\\20260527T111813Z\\vp002_ingest_validation.log",
+        "status": "pass"
+      }
+    },
+    {
+      "id": "VP-002A",
+      "name": "Representative NI dataset declaration",
+      "status": "fail",
+      "evidence": "Dataset has not been declared representative pseudonymised NI pilot data."
+    },
+    {
+      "id": "VP-003",
+      "name": "WGS contract regression",
+      "status": "pass",
+      "evidence": "validation\\ni_pilot\\runs\\20260527T111813Z\\vp003_wgs_regression.log",
+      "command_result": {
+        "command": [
+          "C:\\Users\\Nicho\\Desktop\\TB-Genomics-main\\.venv\\Scripts\\python.exe",
+          "validation/run_validation.py",
+          "--observed",
+          "C:\\Users\\Nicho\\Desktop\\TB-Genomics-main\\validation\\ni_pilot\\runs\\20260527T111813Z\\wgs_observed"
+        ],
+        "returncode": 0,
+        "started_at": "2026-05-27T11:18:14.184321+00:00",
+        "finished_at": "2026-05-27T11:18:14.347352+00:00",
+        "log": "validation\\ni_pilot\\runs\\20260527T111813Z\\vp003_wgs_regression.log",
+        "status": "pass"
+      }
+    },
+    {
+      "id": "VP-004",
+      "name": "Automated test suite",
+      "status": "pass",
+      "evidence": "validation\\ni_pilot\\runs\\20260527T111813Z\\vp004_pytest.log",
+      "command_result": {
+        "command": [
+          "C:\\Users\\Nicho\\Desktop\\TB-Genomics-main\\.venv\\Scripts\\python.exe",
+          "-m",
+          "pytest"
+        ],
+        "returncode": 0,
+        "started_at": "2026-05-27T11:18:14.349345+00:00",
+        "finished_at": "2026-05-27T11:18:19.411393+00:00",
+        "log": "validation\\ni_pilot\\runs\\20260527T111813Z\\vp004_pytest.log",
+        "status": "pass"
+      }
+    },
+    {
+      "id": "VP-005",
+      "name": "Operational safety flags",
+      "status": "pass",
+      "evidence": "{\"TB_ALLOW_NON_OPERATIONAL_ACTIONS\": null, \"TB_AUTH_REQUIRED\": null, \"TB_AUTH_TOKENS_configured\": false, \"TB_ENABLE_SYNTHETIC_SEEDING\": null}"
+    }
+  ]
+}

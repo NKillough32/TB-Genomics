@@ -1,0 +1,10 @@
+{
+  "status": "pass",
+  "failure_count": 0,
+  "failures": [],
+  "qc_pass": 3,
+  "qc_fail": 0,
+  "lineage_calls": 3,
+  "resistance_calls": 1,
+  "clustered_samples": 3
+}

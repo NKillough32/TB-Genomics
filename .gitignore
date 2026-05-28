@@ -10,7 +10,6 @@ uploads/
 mykrobe/
 R_libs/
 ni_exports/
-validation/ni_pilot/
 
 *.log
 *.sqlite

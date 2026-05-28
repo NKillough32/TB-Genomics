@@ -184,9 +184,13 @@ def surveillance_kpis(weeks: int = 12, db: Session = Depends(get_db)) -> dict:
         "sequenced_cases": sequenced_cases,
         "sequenced_pct": _to_optional_pct(sequenced_cases, eligible_cases),
         "qc_reported_cases": qc_reported_cases,
+        "qc_complete_cases": qc_reported_cases,
+        "qc_complete_pct": _to_optional_pct(qc_reported_cases, sequenced_cases),
         "qc_pass_cases": qc_pass_cases,
         "qc_fail_cases": _to_int(kpi_rows["qc_fail_cases"]),
         "qc_pass_pct": _to_optional_pct(qc_pass_cases, qc_reported_cases),
+        "usable_genome_cases": qc_pass_cases,
+        "cluster_eligible_cases": qc_pass_cases,
         "contamination_flag_cases": _to_int(kpi_rows["contamination_flag_cases"]),
         "median_days_specimen_to_qc": median_days,
         "lineage_distribution": [
@@ -301,11 +305,58 @@ def cases_summary(db: Session = Depends(get_db)):
         db.execute(text("SELECT COUNT(*) FROM clusters WHERE investigation_status = 'open'")).scalar()
         or 0
     )
+    has_sequences = _table_exists(db, "consensus_sequences")
+    has_qc = _table_exists(db, "sample_qc_metrics")
+    sequence_join = (
+        "LEFT JOIN consensus_sequences cs ON cs.sample_id = c.pseudonymised_case_id"
+        if has_sequences
+        else ""
+    )
+    qc_join = (
+        "LEFT JOIN sample_qc_metrics sqm ON sqm.sample_id = c.pseudonymised_case_id"
+        if has_qc
+        else ""
+    )
+    sequenced_expr = "COUNT(DISTINCT cs.sample_id)::int" if has_sequences else "0::int"
+    qc_complete_expr = "COUNT(DISTINCT sqm.sample_id)::int" if has_qc else "0::int"
+    qc_pass_expr = (
+        "COUNT(DISTINCT sqm.sample_id) FILTER (WHERE LOWER(COALESCE(sqm.qc_status, '')) IN ('pass', 'passed') AND NOT COALESCE(sqm.contamination_flag, false))::int"
+        if has_qc
+        else "0::int"
+    )
+    readiness_row = db.execute(
+        text(
+            f"""
+            SELECT
+                {sequenced_expr} AS sequenced_cases,
+                {qc_complete_expr} AS qc_complete_cases,
+                {qc_pass_expr} AS qc_pass_cases
+            FROM cases c
+            {sequence_join}
+            {qc_join}
+            WHERE COALESCE(c.entered_in_error, false) = false
+            """
+        )
+    ).mappings().first() or {}
+    qc_pass_cases = _to_int(readiness_row.get("qc_pass_cases"))
     return {
+        "dataset_cases": total,
         "total_cases": total,
+        "operational_clustered_cases": clustered,
         "clustered_cases": clustered,
+        "singleton_unclustered_cases": max(0, total - clustered),
         "unclustered_cases": max(0, total - clustered),
+        "sequenced_cases": _to_int(readiness_row.get("sequenced_cases")),
+        "qc_complete_cases": _to_int(readiness_row.get("qc_complete_cases")),
+        "qc_pass_cases": qc_pass_cases,
+        "cluster_eligible_cases": qc_pass_cases,
         "open_clusters": open_clusters,
+        "definitions": {
+            "dataset_cases": "Loaded non-error case records.",
+            "operational_clustered_cases": "Cases assigned to a supported genomic cluster.",
+            "singleton_unclustered_cases": "Cases with no supported genomic cluster assignment.",
+            "cluster_eligible_cases": "Sequenced cases with QC pass and no contamination flag.",
+        },
     }
 
 
@@ -377,6 +428,24 @@ def data_readiness(db: Session = Depends(get_db)):
     total_cases = _to_int(row.get("total_cases"))
     sequenced_cases = _to_int(row.get("sequenced_cases"))
     qc_complete_cases = _to_int(row.get("qc_complete_cases"))
+    qc_pass_cases = db.execute(
+        text(
+            """
+            SELECT CASE
+                WHEN to_regclass('public.sample_qc_metrics') IS NULL THEN 0
+                ELSE (
+                    SELECT COUNT(DISTINCT sqm.sample_id)::int
+                    FROM sample_qc_metrics sqm
+                    JOIN cases c ON c.pseudonymised_case_id = sqm.sample_id
+                    WHERE LOWER(COALESCE(sqm.qc_status, '')) IN ('pass', 'passed')
+                      AND NOT COALESCE(sqm.contamination_flag, false)
+                      AND COALESCE(c.entered_in_error, false) = false
+                )
+            END
+            """
+        )
+    ).scalar() or 0
+    qc_pass_cases = _to_int(qc_pass_cases)
     lineage_called_cases = _to_int(row.get("lineage_called_cases"))
     resistance_called_cases = _to_int(row.get("resistance_called_cases"))
     missing_geography = _to_int(row.get("missing_geography"))
@@ -396,6 +465,13 @@ def data_readiness(db: Session = Depends(get_db)):
             "complete": qc_complete_cases,
             "missing": max(0, total_cases - qc_complete_cases),
             "percent": _to_optional_pct(qc_complete_cases, total_cases),
+        },
+        {
+            "key": "qc_pass",
+            "label": "QC pass",
+            "complete": qc_pass_cases,
+            "missing": max(0, qc_complete_cases - qc_pass_cases),
+            "percent": _to_optional_pct(qc_pass_cases, qc_complete_cases),
         },
         {
             "key": "geography",
@@ -438,6 +514,18 @@ def data_readiness(db: Session = Depends(get_db)):
             "qc_complete_cases": qc_complete_cases,
             "percent": _to_optional_pct(qc_complete_cases, total_cases),
         },
+        "qc_pass": {
+            "qc_pass_cases": qc_pass_cases,
+            "percent": _to_optional_pct(qc_pass_cases, qc_complete_cases),
+        },
+        "cluster_eligible_cases": qc_pass_cases,
+        "definitions": {
+            "dataset_cases": "Loaded non-error case records.",
+            "sequenced": "Consensus sequence available.",
+            "qc_complete": "QC metrics present.",
+            "qc_pass": "QC metrics pass operational thresholds and contamination flag is not set.",
+            "cluster_eligible": "Sequenced/QC-pass cases eligible for operational clustering.",
+        },
         "missing_geography": missing_geography,
         "missing_dates": missing_dates,
         "missing_lineage_calls": max(0, total_cases - lineage_called_cases),
@@ -457,14 +545,17 @@ def data_safety(db: Session = Depends(get_db)):
 def outbreaker_status():
     summary_path = _export_path("outbreaker_summary.json")
     provenance = None
+    posterior_reliable = False
     summary_updated_at = None
     if os.path.exists(summary_path):
         try:
             with open(summary_path, encoding="utf-8") as f:
                 summary = json.load(f)
                 provenance = (summary or {}).get("data_provenance")
+                posterior_reliable = bool((summary or {}).get("posterior_reliable"))
         except Exception:
             provenance = None
+            posterior_reliable = False
         try:
             summary_updated_at = datetime.fromtimestamp(
                 os.path.getmtime(summary_path),
@@ -480,14 +571,19 @@ def outbreaker_status():
     }
     availability = {key: os.path.exists(path) for key, path in artifact_map.items()}
     missing = [key for key, exists in availability.items() if not exists]
-    ready = all(availability.values())
+    artifact_ready = all(availability.values())
+    operational_ready = artifact_ready and provenance == "real" and posterior_reliable
 
     return {
         **availability,
-        "ready": ready,
+        "ready": artifact_ready,
+        "artifact_ready": artifact_ready,
+        "operational_ready": operational_ready,
+        "status": "operational_ready" if operational_ready else ("artifact_ready_exploratory" if artifact_ready else "missing_artifacts"),
         "missing_artifacts": missing,
         "provenance": provenance,
         "is_mock": provenance == "mock",
+        "posterior_reliable": posterior_reliable,
         "summary_updated_at": summary_updated_at,
     }
 

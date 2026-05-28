@@ -50,7 +50,7 @@ def get_data_safety_status(db: Session) -> Dict[str, Any]:
     )
 
     operational_safe = (synthetic_case_count == 0) and (synthetic_seed_events == 0)
-    mode = "operational" if operational_safe else "non_operational"
+    mode = "operational" if operational_safe else "demo"
 
     message = (
         "Dataset cleared for operational use."
@@ -60,6 +60,8 @@ def get_data_safety_status(db: Session) -> Dict[str, Any]:
 
     return {
         "mode": mode,
+        "mode_label": "Operational" if operational_safe else "Demo",
+        "allowed_modes": ["demo", "validation", "operational"],
         "operational_safe": operational_safe,
         "total_cases": total_cases,
         "synthetic_case_count": synthetic_case_count,

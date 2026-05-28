@@ -350,6 +350,24 @@ def build_transmission_synthesis(
         }
 
     net = _export_json(str(EXPORTS_DIR / "transmission_network.json"))
+    outbreaker_summary = _export_json(str(EXPORTS_DIR / "outbreaker_summary.json"))
+    outbreaker_reliable = bool(outbreaker_summary.get("posterior_reliable"))
+    if "posterior_reliable" not in outbreaker_summary:
+        posterior_samples = outbreaker_summary.get("posterior_samples", outbreaker_summary.get("n_samples"))
+        ess_value = outbreaker_summary.get("mcmc_effective_sample_size")
+        alpha_ess_min = outbreaker_summary.get("alpha_mcmc_effective_sample_size_min")
+
+        def _enough(value: Any, threshold: float) -> bool:
+            try:
+                return float(value) >= threshold
+            except Exception:
+                return False
+
+        outbreaker_reliable = (
+            _enough(posterior_samples, 1000)
+            and _enough(ess_value, 200)
+            and _enough(alpha_ess_min, 100)
+        )
     edges = net.get("edges") or []
 
     # Issue #11: Compute transmission generation depth via BFS from index/import cases.
@@ -394,8 +412,14 @@ def build_transmission_synthesis(
     epi_records = load_epi_records_for_cases(db, case_ids=list(case_index.keys()))
 
     cluster_members: dict[str, set[str]] = {}
+    cluster_types: dict[str, str] = {}
     for case in case_index.values():
-        ckey = case["cluster_id"] or "unclustered"
+        if case["cluster_id"]:
+            ckey = case["cluster_id"]
+            cluster_types[ckey] = "operational_cluster"
+        else:
+            ckey = f"singleton:{case['case_id']}"
+            cluster_types[ckey] = "singleton_unclustered"
         cluster_members.setdefault(ckey, set()).add(case["case_id"])
 
     pairs: list[dict[str, Any]] = []
@@ -417,7 +441,7 @@ def build_transmission_synthesis(
         tgt = case_index[target]
 
         # Keep synthesis cluster-centric: pair belongs to source cluster unless mismatched.
-        pair_cluster = src["cluster_id"] or tgt["cluster_id"] or "unclustered"
+        pair_cluster = src["cluster_id"] or tgt["cluster_id"] or "exploratory_network"
         if src["cluster_id"] and tgt["cluster_id"] and src["cluster_id"] != tgt["cluster_id"]:
             pair_cluster = "cross_cluster"
 
@@ -486,7 +510,7 @@ def build_transmission_synthesis(
 
         p_flags = pair_flags(
             snp_distance=snp,
-            posterior_probability=posterior,
+            posterior_probability=posterior if outbreaker_reliable else 0.0,
             geographic_support=geographic_support,
             edge_confidence=edge_conf,
             source_has_sequence=source_has_seq,
@@ -520,9 +544,10 @@ def build_transmission_synthesis(
         if source_low_depth or target_low_depth or source_low_cov or target_low_cov:
             p_flags.append(FLAG_LOW_SEQUENCE_COVERAGE_FOR_PAIR)
 
+        effective_posterior = posterior if outbreaker_reliable else None
         category = confidence_category(
             snp_distance=snp,
-            posterior_probability=posterior,
+            posterior_probability=effective_posterior,
             epi_support_level=epi_support,
             low_snp_threshold=cfg.low_snp_threshold,
             high_snp_contradiction_threshold=cfg.high_snp_contradiction_threshold,
@@ -539,7 +564,7 @@ def build_transmission_synthesis(
         interpretation = interpretation_text(category, p_flags)
         priority = pair_priority_score(
             category=category,
-            posterior_probability=posterior,
+            posterior_probability=posterior if outbreaker_reliable else 0.0,
             snp_distance=snp,
             pair_flags=p_flags,
             epi_support_level=epi_support,
@@ -553,6 +578,7 @@ def build_transmission_synthesis(
                 "target": target,
                 "snp_distance": snp,
                 "posterior_probability": round(posterior, 4),
+                "outbreaker_reliability": "passes_thresholds" if outbreaker_reliable else "exploratory_convergence_insufficient",
                 "temporal_support": temporal_support,
                 "temporal_delta_days": temporal_delta_days,
                 "geographic_support": geographic_support,
@@ -586,6 +612,9 @@ def build_transmission_synthesis(
             continue
 
         member_rows = [case_index[m] for m in members if m in case_index]
+        cluster_type = cluster_types.get(cluster_key, "exploratory_grouping")
+        is_operational_cluster = cluster_type == "operational_cluster"
+        is_singleton = cluster_type == "singleton_unclustered"
         specimen_dates = [m["specimen_date"] for m in member_rows if m["specimen_date"]]
         regions = {m["region"] for m in member_rows if m["region"]}
         lineage_distribution: dict[str, int] = {}
@@ -629,25 +658,33 @@ def build_transmission_synthesis(
             and (today - timedelta(days=180)) <= m["specimen_date"] < (today - timedelta(days=90))
         )
 
-        c_flags = cluster_flags(
-            cluster_regions=regions,
-            specimen_dates=specimen_dates,
-            resistance_case_count=resistance_count,
-            missing_sequence_or_qc_case_count=missing_sequence_or_qc,
-            recent_case_count=recent_case_count,
-            wide_date_spread_days=cfg.wide_date_spread_days,
-            rapid_growth_case_threshold=cfg.rapid_growth_case_threshold,
+        c_flags = (
+            cluster_flags(
+                cluster_regions=regions,
+                specimen_dates=specimen_dates,
+                resistance_case_count=resistance_count,
+                missing_sequence_or_qc_case_count=missing_sequence_or_qc,
+                recent_case_count=recent_case_count,
+                wide_date_spread_days=cfg.wide_date_spread_days,
+                rapid_growth_case_threshold=cfg.rapid_growth_case_threshold,
+            )
+            if is_operational_cluster
+            else []
         )
 
         c_pair_count = cluster_pair_counts.get(cluster_key, 0)
         c_strong_or_contradictory = cluster_strong_or_contradictory.get(cluster_key, 0)
 
-        c_priority = cluster_priority_score(
-            member_count=len(member_rows),
-            pair_count=c_pair_count,
-            strong_or_contradictory_pairs=c_strong_or_contradictory,
-            cluster_flags=c_flags,
-            evidence_scale=sequence_precision,
+        c_priority = (
+            cluster_priority_score(
+                member_count=len(member_rows),
+                pair_count=c_pair_count,
+                strong_or_contradictory_pairs=c_strong_or_contradictory,
+                cluster_flags=c_flags,
+                evidence_scale=sequence_precision,
+            )
+            if is_operational_cluster
+            else 0
         )
 
         cluster_pairs = [p for p in pairs if p["cluster_id"] == cluster_key]
@@ -663,13 +700,21 @@ def build_transmission_synthesis(
         gen_distribution: dict[str, int] = {}
         for d in cluster_depths.values():
             gen_distribution[str(d)] = gen_distribution.get(str(d), 0) + 1
-        max_generation = max(cluster_depths.values(), default=None)
-        sustained_transmission = max_generation is not None and max_generation >= 3
+        max_generation = max(cluster_depths.values(), default=None) if outbreaker_reliable and is_operational_cluster else None
+        sustained_transmission = bool(max_generation is not None and max_generation >= 3)
 
         by_cluster.append(
             {
                 "cluster_id": cluster_key,
-                "cluster_short": cluster_key[:8],
+                "cluster_short": member_rows[0]["short_case_id"] if is_singleton and member_rows else cluster_key[:8],
+                "cluster_type": cluster_type,
+                "operational_interpretation": (
+                    "SNP/QC-supported operational cluster"
+                    if is_operational_cluster
+                    else "Singleton/unclustered case; no supported genomic cluster assignment"
+                    if is_singleton
+                    else "Exploratory grouping; not an operational genomic cluster"
+                ),
                 "summary": {
                     "member_count": len(member_rows),
                     "pair_count": c_pair_count,
@@ -691,6 +736,7 @@ def build_transmission_synthesis(
                         "max_generation": max_generation,
                         "generation_distribution": gen_distribution,
                         "sustained_transmission_flag": sustained_transmission,
+                        "status": "available" if outbreaker_reliable and is_operational_cluster else "suppressed_exploratory_or_unreliable",
                     },
                     "priority_score": c_priority,
                     "priority_band": score_band(c_priority),
@@ -705,7 +751,7 @@ def build_transmission_synthesis(
                     "insufficient_evidence": sum(1 for p in cluster_pairs if p["confidence_code"] == "insufficient_evidence"),
                 },
                 "flags": c_flags,
-                "recommended_investigation_actions": c_actions,
+                "recommended_investigation_actions": c_actions if is_operational_cluster else ["No operational cluster action; review only if new SNP/QC-supported evidence emerges."],
                 "explanation": (
                     "Synthesis integrates SNP distance, Outbreaker posterior, and structured epidemiological evidence "
                     "(shared contacts, locations, and exposures from database records) into investigation-ready "
@@ -724,16 +770,26 @@ def build_transmission_synthesis(
         lineage_key = str(case.get("lineage") or "unknown").strip() or "unknown"
         global_lineage_distribution[lineage_key] = global_lineage_distribution.get(lineage_key, 0) + 1
 
+    operational_cluster_count = sum(1 for c in by_cluster if c.get("cluster_type") == "operational_cluster")
+    singleton_count = sum(1 for c in by_cluster if c.get("cluster_type") == "singleton_unclustered")
+    exploratory_group_count = sum(1 for c in by_cluster if c.get("cluster_type") == "exploratory_grouping")
+
     return {
         "generated_at": datetime.utcnow().isoformat() + "Z",
         "format_version": SYNTHESIS_FORMAT_VERSION,
         "cluster_id": cluster_id,
         "summary": {
-            "cluster_count": len(by_cluster),
+            "cluster_count": operational_cluster_count,
+            "operational_cluster_count": operational_cluster_count,
+            "singleton_unclustered_count": singleton_count,
+            "exploratory_group_count": exploratory_group_count,
+            "operational_review_pair_count": sum(1 for p in pairs if p.get("cluster_id") not in {"exploratory_network", "cross_cluster"}),
+            "inferred_transmission_pair_count": len(pairs),
             "pair_count": len(pairs),
             "high_priority_pairs": sum(1 for p in pairs if p["priority_score"] >= 70),
             "contradictory_pairs": sum(1 for p in pairs if p["confidence_code"] == "contradictory"),
             "lineage_distribution": dict(sorted(global_lineage_distribution.items())),
+            "outbreaker_reliability": "passes_thresholds" if outbreaker_reliable else "exploratory_convergence_insufficient",
         },
         "clusters": by_cluster,
         "pairs": pairs,
@@ -750,11 +806,15 @@ def build_cluster_risk_summary(db: Session, *, config: SynthesisConfig | None = 
     payload = build_transmission_synthesis(db, cluster_id=None, config=config)
     items = []
     for cluster in payload.get("clusters", []):
+        if cluster.get("cluster_type") == "singleton_unclustered":
+            continue
         summary = cluster.get("summary", {})
         items.append(
             {
                 "cluster_id": cluster.get("cluster_id"),
                 "cluster_short": cluster.get("cluster_short"),
+                "cluster_type": cluster.get("cluster_type", "operational_cluster"),
+                "operational_interpretation": cluster.get("operational_interpretation"),
                 "member_count": summary.get("member_count", 0),
                 "pair_count": summary.get("pair_count", 0),
                 "priority_score": summary.get("priority_score", 0),

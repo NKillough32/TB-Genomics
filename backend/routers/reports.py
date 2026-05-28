@@ -566,6 +566,8 @@ def build_actionable_surveillance_report(
         if str(c.get("priority_band", "")).lower() in {"high", "critical"}
         or int(c.get("priority_score") or 0) >= 70
     ]
+    if not safety.get("operational_safe"):
+        urgent_clusters = []
     report_status = "ready"
     if not safety.get("operational_safe"):
         report_status = "blocked_non_operational"
@@ -574,7 +576,7 @@ def build_actionable_surveillance_report(
 
     immediate_actions = []
     if not safety.get("operational_safe"):
-        immediate_actions.append("Do not use for operational public-health action until demo/synthetic signals are removed.")
+        immediate_actions.append("Demo mode: treat prioritisation signals as demonstration-only; do not escalate operationally.")
     if readiness.get("status") != "ready":
         immediate_actions.append("Review missing data fields before interpreting priority scores.")
     if urgent_clusters:
@@ -596,10 +598,12 @@ def build_actionable_surveillance_report(
         "executive_summary": {
             "total_cases": safety.get("total_cases", 0),
             "operational_mode": safety.get("mode"),
+            "operational_mode_label": safety.get("mode_label"),
             "operational_safe": bool(safety.get("operational_safe")),
             "readiness_status": readiness.get("status"),
             "cluster_count": risk_summary.get("summary", {}).get("cluster_count", 0),
-            "high_priority_pairs": risk_summary.get("summary", {}).get("high_priority_pairs", 0),
+            "operational_review_pairs": risk_summary.get("summary", {}).get("operational_review_pair_count", 0),
+            "high_priority_pairs": 0 if not safety.get("operational_safe") else risk_summary.get("summary", {}).get("high_priority_pairs", 0),
             "contradictory_pairs": risk_summary.get("summary", {}).get("contradictory_pairs", 0),
             "urgent_cluster_count": len(urgent_clusters),
             "open_alert_count": sum(1 for alert in alerts if alert.get("status") in {"open", "acknowledged"}),

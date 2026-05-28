@@ -323,20 +323,25 @@ def confidence_gates(db: Session) -> list[dict[str, Any]]:
     dr_concordance = lineage.get("dr_concordance") if isinstance(lineage.get("dr_concordance"), dict) else {}
     compared = int(dr_concordance.get("samples_compared") or 0) if dr_concordance else 0
     discordant = int(dr_concordance.get("discordant_sample_count") or 0) if dr_concordance else 0
+    rv_summary = resistance.get("summary") if isinstance(resistance.get("summary"), dict) else {}
+    suppressed = int(rv_summary.get("suppressed_calls") or 0) if rv_summary else 0
+    dr_indeterminate = suppressed > 0
     gates.append(
         _gate(
             "dr_concordance",
             "DR concordance",
-            "pass" if compared > 0 and discordant == 0 else ("warn" if compared == 0 else "review"),
-            "No cross-engine DR discordance detected." if compared > 0 and discordant == 0
-            else ("No samples were compared for DR concordance." if compared == 0 else f"{discordant} discordant DR sample(s) need review."),
-            interpretation_blocking=compared == 0 or discordant > 0,
-            details={"samples_compared": compared, "discordant_sample_count": discordant},
+            "review" if dr_indeterminate else ("pass" if compared > 0 and discordant == 0 else ("warn" if compared == 0 else "review")),
+            "Cross-engine concordance indeterminate due to suppressed resistance mappings."
+            if dr_indeterminate
+            else (
+                "No cross-engine DR discordance detected." if compared > 0 and discordant == 0
+                else ("No samples were compared for DR concordance." if compared == 0 else f"{discordant} discordant DR sample(s) need review.")
+            ),
+            interpretation_blocking=dr_indeterminate or compared == 0 or discordant > 0,
+            details={"samples_compared": compared, "discordant_sample_count": discordant, "suppressed_calls": suppressed},
         )
     )
 
-    rv_summary = resistance.get("summary") if isinstance(resistance.get("summary"), dict) else {}
-    suppressed = int(rv_summary.get("suppressed_calls") or 0) if rv_summary else 0
     validated = int(rv_summary.get("validated_calls") or 0) if rv_summary else 0
     rv_catalogue = str(resistance.get("catalogue_version") or "").lower()
     if suppressed == 0 and rv_summary:

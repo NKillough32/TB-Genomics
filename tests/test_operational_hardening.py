@@ -154,7 +154,7 @@ def test_non_operational_dataset_blocks_sensitive_actions(monkeypatch):
         data_safety,
         "get_data_safety_status",
         lambda _db: {
-            "mode": "non_operational",
+            "mode": "demo",
             "operational_safe": False,
             "total_cases": 10,
             "synthetic_case_count": 10,
@@ -174,7 +174,7 @@ def test_non_operational_dataset_blocks_sensitive_actions(monkeypatch):
 def test_non_operational_dataset_override_is_explicit(monkeypatch):
     monkeypatch.setenv("TB_ALLOW_NON_OPERATIONAL_ACTIONS", "1")
     status = {
-        "mode": "non_operational",
+        "mode": "demo",
         "operational_safe": False,
         "total_cases": 10,
         "synthetic_case_count": 10,

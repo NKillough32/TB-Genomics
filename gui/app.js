@@ -98,8 +98,8 @@ async function loadKPIBanner(){
 		if(summaryResp.ok){
 			const s = await summaryResp.json();
 			document.querySelector('#kpiTotalCases .kpi-num').textContent = s.total_cases ?? '-';
-			document.querySelector('#kpiClustered .kpi-num').textContent = s.clustered_cases ?? '-';
-			document.querySelector('#kpiUnclustered .kpi-num').textContent = s.unclustered_cases ?? '-';
+			document.querySelector('#kpiClustered .kpi-num').textContent = s.operational_clustered_cases ?? s.clustered_cases ?? '-';
+			document.querySelector('#kpiUnclustered .kpi-num').textContent = s.singleton_unclustered_cases ?? s.unclustered_cases ?? '-';
 			document.querySelector('#kpiOpenClusters .kpi-num').textContent = s.open_clusters ?? '-';
 			document.getElementById('kpiBannerTimestamp').textContent = 'refreshed ' + new Date().toLocaleTimeString();
 		}
@@ -543,7 +543,7 @@ async function loadOutbreakerResults(){
 		
 		// Summary stats
 		html+='<h4>Case Summary</h4>';
-		html+=`<p>Total: ${escapeHtml(summary.total_cases)} | Clustered: ${escapeHtml(summary.clustered_cases)} | Unclustered: ${escapeHtml(summary.unclustered_cases)}</p>`;
+		html+=`<p>Dataset cases: ${escapeHtml(summary.dataset_cases??summary.total_cases)} | Operational clustered: ${escapeHtml(summary.operational_clustered_cases??summary.clustered_cases)} | Singleton/unclustered: ${escapeHtml(summary.singleton_unclustered_cases??summary.unclustered_cases)}</p>`;
 		
 		// Outbreaker analysis
 		html+='<h4>Outbreak Analysis</h4>';
@@ -1890,7 +1890,7 @@ async function loadTransmissionSynthesisOverview(){
 			summary.innerHTML=`<div class="kpi-strip">
 				Clusters: ${escapeHtml(s.cluster_count||0)} |
 				Pairs: ${escapeHtml(s.pair_count||0)} |
-				High priority pairs: ${escapeHtml(s.high_priority_pairs||0)} |
+				Operational review pairs: ${escapeHtml(s.operational_review_pair_count??s.high_priority_pairs??0)} |
 				Contradictory pairs: ${escapeHtml(s.contradictory_pairs||0)}
 			</div>${warning}`;
 		}
@@ -2513,11 +2513,12 @@ async function loadOutbreakerStatus(){
 		const checkedAtLocal=new Date().toLocaleString();
 		const checkedAtIso=new Date().toISOString();
 		const missing=(Array.isArray(d.missing_artifacts)?d.missing_artifacts:[]).map(v=>String(v));
-		const ready=('ready' in d)?Boolean(d.ready):(Boolean(d.cases_export)&&Boolean(d.dna_export)&&Boolean(d.results_rds));
-		const readinessLabel=ready?'READY':'NOT READY';
+		const ready=('artifact_ready' in d)?Boolean(d.artifact_ready):(('ready' in d)?Boolean(d.ready):(Boolean(d.cases_export)&&Boolean(d.dna_export)&&Boolean(d.results_rds)));
+		const operationalReady=Boolean(d.operational_ready);
+		const readinessLabel=operationalReady?'OPERATIONAL READY':(ready?'ARTIFACTS READY - EXPLORATORY':'NOT READY');
 		const summaryUpdated=d.summary_updated_at?`Summary updated: ${escapeHtml(String(d.summary_updated_at))}`:'Summary updated: unknown';
 		const missingLabel=missing.length?`Missing: ${escapeHtml(missing.join(', '))}`:'Missing: none';
-		box.innerHTML=`<div class="kpi-strip"><strong>Outbreaker readiness: ${escapeHtml(readinessLabel)}</strong> | Cases export: ${d.cases_export?'available':'missing'} | DNA export: ${d.dna_export?'available':'missing'} | Results RDS: ${d.results_rds?'available':'missing'} | Provenance: ${escapeHtml(d.provenance||'unknown')} | Mock: ${escapeHtml(d.is_mock)} | API: ${escapeHtml(apiBase)} | Last checked: ${escapeHtml(checkedAtLocal)} | Request #: ${escapeHtml(refreshId)}</div><p class="hint">${missingLabel} | ${summaryUpdated}</p><p class="hint">Refresh confirmation: request #${escapeHtml(refreshId)} completed at ${escapeHtml(checkedAtIso)}</p>`;
+		box.innerHTML=`<div class="kpi-strip"><strong>Outbreaker readiness: ${escapeHtml(readinessLabel)}</strong> | Cases export: ${d.cases_export?'available':'missing'} | DNA export: ${d.dna_export?'available':'missing'} | Results RDS: ${d.results_rds?'available':'missing'} | Provenance: ${escapeHtml(d.provenance||'unknown')} | Posterior reliable: ${escapeHtml(d.posterior_reliable)} | Mock: ${escapeHtml(d.is_mock)} | API: ${escapeHtml(apiBase)} | Last checked: ${escapeHtml(checkedAtLocal)} | Request #: ${escapeHtml(refreshId)}</div><p class="hint">${missingLabel} | ${summaryUpdated}</p><p class="hint">Refresh confirmation: request #${escapeHtml(refreshId)} completed at ${escapeHtml(checkedAtIso)}</p>`;
 	}catch(e){
 		box.textContent=`Failed to load outbreaker status (request #${refreshId}): ${e}`;
 	}finally{

@@ -103,6 +103,67 @@ def test_resistance_concordance_uses_mutation_identity_when_available():
     )
 
 
+def test_unclustered_cases_are_singletons_not_operational_clusters(monkeypatch):
+    from backend.synthesis import transmission_synthesis as mod
+
+    monkeypatch.setattr(
+        mod,
+        "_case_rows",
+        lambda db, cluster_id=None: [
+            {
+                "case_id": "case-a",
+                "specimen_date": __import__("datetime").date(2026, 1, 1),
+                "region": "A",
+                "cluster_id": "",
+                "lineage": "L1",
+                "predicted_drug_resistance": {},
+                "resistance_mutations": [],
+                "sequence": "ACGT",
+                "mean_depth": 40.0,
+                "coverage_breadth": 0.98,
+                "qc_status": "pass",
+                "contamination_flag": False,
+            },
+            {
+                "case_id": "case-b",
+                "specimen_date": __import__("datetime").date(2026, 1, 2),
+                "region": "A",
+                "cluster_id": "",
+                "lineage": "L1",
+                "predicted_drug_resistance": {},
+                "resistance_mutations": [],
+                "sequence": "ACGT",
+                "mean_depth": 40.0,
+                "coverage_breadth": 0.98,
+                "qc_status": "pass",
+                "contamination_flag": False,
+            },
+        ],
+    )
+    monkeypatch.setattr(mod, "_load_sequence_proxy", lambda: ({}, 25, 1.0))
+    monkeypatch.setattr(
+        mod,
+        "_export_json",
+        lambda path: {
+            "posterior_reliable": False,
+            "edges": [{"source": "case-a", "target": "case-b", "probability": 0.95}],
+        },
+    )
+    monkeypatch.setattr(
+        mod,
+        "load_epi_records_for_cases",
+        lambda db, case_ids: {"contact_links": {}, "location_events": {}},
+    )
+
+    payload = build_transmission_synthesis(db=object(), cluster_id=None)
+
+    assert payload["summary"]["cluster_count"] == 0
+    assert payload["summary"]["singleton_unclustered_count"] == 2
+    assert {cluster["cluster_type"] for cluster in payload["clusters"]} == {"singleton_unclustered"}
+    assert payload["pairs"][0]["cluster_id"] == "exploratory_network"
+    assert payload["pairs"][0]["outbreaker_reliability"] == "exploratory_convergence_insufficient"
+
+
 def test_transmission_synthesis_reports_validation_and_calibration(monkeypatch):
     from backend.synthesis import transmission_synthesis as mod
 

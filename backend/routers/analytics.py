@@ -16,6 +16,11 @@ from backend.auth import AuthenticatedUser, require_roles
 from backend.routers.dependencies import get_db
 from backend.runtime_paths import EXPORTS_DIR
 from backend.snp_validation import validated_snp_distance
+from backend.synthesis.scoring_profiles import (
+    DEFAULT_SCORING_PROFILE,
+    ScoringProfileError,
+    load_scoring_profile,
+)
 from backend.synthesis.transmission_synthesis import (
     SynthesisConfig,
     build_cluster_risk_summary,
@@ -42,32 +47,11 @@ ReviewClassification = Annotated[
 ]
 
 
-SCORING_PROFILES = {
-    "default_v1": {
-        "version": "default_v1",
-        "score_weights": {
-            "strong epi support": 3,
-            "moderate epi support": 2,
-            "weak epi support": 1,
-            "contradictory": -3,
-            "unknown": 0,
-        },
-        "confidence_thresholds": {
-            "strong": 5,
-            "moderate": 3,
-            "weak": 1,
-        },
-        "missing_data_penalty_max": 2,
-    }
-}
-
-
 def _resolve_scoring_profile(name: str | None) -> dict:
-    key = str(name or "default_v1").strip().lower()
-    profile = SCORING_PROFILES.get(key)
-    if not profile:
-        raise HTTPException(status_code=422, detail=f"Unknown scoring_profile '{name}'")
-    return profile
+    try:
+        return load_scoring_profile(name or DEFAULT_SCORING_PROFILE)
+    except ScoringProfileError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 def _contradiction_details(contradictions: list[str]) -> list[dict]:
@@ -1142,7 +1126,7 @@ def _build_case_pair_evidence_payload(
     max_pairs: int,
     scoring_profile: dict | None = None,
 ) -> dict:
-    profile = scoring_profile or SCORING_PROFILES["default_v1"]
+    profile = scoring_profile or _resolve_scoring_profile(DEFAULT_SCORING_PROFILE)
     score_weights = profile.get("score_weights") or {}
     confidence_thresholds = profile.get("confidence_thresholds") or {}
     missing_data_penalty_max = int(profile.get("missing_data_penalty_max") or 0)

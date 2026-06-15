@@ -1,0 +1,16 @@
+{
+  "version": "default_v1",
+  "score_weights": {
+    "strong epi support": 3,
+    "moderate epi support": 2,
+    "weak epi support": 1,
+    "contradictory": -3,
+    "unknown": 0
+  },
+  "confidence_thresholds": {
+    "strong": 5,
+    "moderate": 3,
+    "weak": 1
+  },
+  "missing_data_penalty_max": 2
+}

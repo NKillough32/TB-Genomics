@@ -255,6 +255,19 @@
     <div id="synthesisPrimaryView" class="analytics-view"></div>
   </section>
 
+  <section class="card" id="clusterIntelligenceCard">
+    <h2>Step 5A - Cluster Intelligence Dashboard</h2>
+    <p class="hint">Ranked investigation queue combining SNP distance, lineage consistency, temporal overlap, Trust spread, infectiousness indicators, and resistance profiles.</p>
+    <div class="synthesis-inline-actions">
+      <button id="loadClusterIntelligenceBtn" class="btn-primary" onclick="loadClusterIntelligenceDashboard()">Load intelligence queue</button>
+      <label>Temporal overlap window (days)
+        <input id="clusterIntelTemporalWindow" type="number" min="1" max="365" value="90" />
+      </label>
+    </div>
+    <div id="clusterIntelligenceSummary" class="analytics-summary"></div>
+    <div id="clusterIntelligenceView" class="analytics-view"></div>
+  </section>
+
   <!-- -- Step 6: Cluster Investigation Centre ------------------------------- -->
   <section class="card" id="cicCard">
     <h2>Step 6 - Cluster Investigation Centre</h2>

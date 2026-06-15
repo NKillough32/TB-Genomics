@@ -968,6 +968,60 @@ async function restoreDataManagementCase(){
 		if(status) status.textContent='Failed to restore case: '+e;
 	}
 }
+
+// -- Step 5A: Cluster Intelligence Dashboard ---------------------------------
+function _clusterIntelWindow(){
+	const value=Number(document.getElementById('clusterIntelTemporalWindow')?.value||90);
+	return Number.isFinite(value)?Math.max(1,Math.min(365,value)):90;
+}
+
+function _renderClusterIntelComponents(c){
+	const comp=c.components||{};
+	const trust=comp.trust||{};
+	const lineage=comp.lineage||{};
+	const temporal=comp.temporal_overlap||{};
+	const resistance=comp.resistance_profile||{};
+	const infectious=comp.infectiousness||{};
+	return `SNP ${escapeHtml(comp.snp_distance?.value ?? 'n/a')} | lineage ${escapeHtml(lineage.dominant||'unknown')} (${escapeHtml(lineage.distinct_count||0)}) | ${escapeHtml(trust.distinct_count||0)} Trust(s) | temporal ${temporal.overlap_likely?'overlap likely':'not confirmed'} | high infectiousness ${escapeHtml(infectious.high_indicator_case_count||0)} | resistance ${escapeHtml(resistance.resistant_case_count||0)}`;
+}
+
+async function loadClusterIntelligenceDashboard(){
+	const summary=document.getElementById('clusterIntelligenceSummary');
+	const view=document.getElementById('clusterIntelligenceView');
+	const btn=document.getElementById('loadClusterIntelligenceBtn');
+	const original=btn?.textContent||'Load intelligence queue';
+	if(btn){ btn.disabled=true; btn.textContent='Loading queue...'; }
+	if(summary) summary.textContent='Loading cluster intelligence queue...';
+	if(view) view.textContent='';
+	try{
+		const windowDays=_clusterIntelWindow();
+		const d=await apiJson(`${API}/cluster-investigations/intelligence-queue?limit=25&temporal_window_days=${encodeURIComponent(windowDays)}`);
+		const queue=d.queue||[];
+		const urgent=queue.filter(item=>Number(item.intelligence_score||0)>=70).length;
+		if(summary){
+			summary.innerHTML=`<div class="kpi-strip">Ranked clusters: ${escapeHtml(queue.length)} | Urgent intelligence score >=70: ${escapeHtml(urgent)} | Validation: ${escapeHtml(d.validation_status||'unknown')}</div>${d.warning?`<p class="hint">${escapeHtml(d.warning)}</p>`:''}<p class="hint">${escapeHtml(d.scoring_note||'')}</p>`;
+		}
+		if(!queue.length){
+			if(view) view.innerHTML='<p class="hint">No clusters available. Run analysis first.</p>';
+			return;
+		}
+		let html='<table class="data-table cluster-intelligence-table"><thead><tr><th>Rank</th><th>Cluster</th><th>Intelligence</th><th>Cases</th><th>Risk</th><th>Evidence synthesis</th><th>Investigation focus</th><th></th></tr></thead><tbody>';
+		for(const item of queue){
+			html+=`<tr><td>${escapeHtml(item.rank)}</td><td><code>${escapeHtml(item.cluster_short||String(item.cluster_id||'').slice(0,8))}</code></td><td><strong>${escapeHtml(item.intelligence_score)}</strong></td><td>${escapeHtml(item.case_count)}</td><td>${escapeHtml(item.risk_band||'low')} (${escapeHtml(item.risk_score??0)})</td><td>${escapeHtml(_renderClusterIntelComponents(item))}</td><td>${escapeHtml(item.focus||'review cluster')}</td><td><button class="mini-btn cluster-intel-open" data-cluster-id="${escapeAttr(item.cluster_id)}">Investigate</button></td></tr>`;
+		}
+		html+='</tbody></table>';
+		if(view){
+			view.innerHTML=html;
+			view.querySelectorAll('.cluster-intel-open').forEach(btn=>btn.addEventListener('click',()=>openCicPanel(btn.dataset.clusterId)));
+		}
+	}catch(e){
+		if(summary) summary.textContent='Failed to load cluster intelligence queue: '+e;
+		if(view) view.textContent='';
+	}finally{
+		if(btn){ btn.disabled=false; btn.textContent=original; }
+	}
+}
+
 // -- Cluster Investigation Centre ---------------------------------------------
 let _cicCurrentCluster = null;
 let _cicCurrentMembers = [];

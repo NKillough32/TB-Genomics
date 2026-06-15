@@ -1855,3 +1855,12 @@ footer {
 		width: 100%;
 	}
 }
+
+/* -- Step 5A: Cluster Intelligence Dashboard -------------------------------- */
+.cluster-intelligence-table td:nth-child(6) {
+  min-width: 22rem;
+}
+
+#clusterIntelligenceCard .synthesis-inline-actions label {
+  max-width: 18rem;
+}

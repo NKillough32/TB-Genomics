@@ -11,6 +11,7 @@ import argparse
 import fnmatch
 import hashlib
 import json
+import logging
 import os
 import sys
 import time
@@ -18,6 +19,8 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Tuple
 
 import requests
+
+logger = logging.getLogger(__name__)
 
 
 def env_bool(name: str, default: bool) -> bool:
@@ -49,8 +52,7 @@ def load_state(path: Path) -> Dict[str, Dict[str, str]]:
         if isinstance(data, dict):
             return data
     except Exception:
-        pass
-    return {}
+        logger.warning("Failed to load state from %s", path, exc_info=True)
 
 
 def save_state(path: Path, state: Dict[str, Dict[str, str]]) -> None:

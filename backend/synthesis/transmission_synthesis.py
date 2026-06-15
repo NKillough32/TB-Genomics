@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import csv
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -34,6 +34,22 @@ from backend.synthesis.scoring import (
 SYNTHESIS_FORMAT_VERSION = 1
 
 
+def _read_env_float(name: str, default: float) -> float:
+    raw = os.getenv(name, str(default))
+    try:
+        return float(raw)
+    except ValueError:
+        raise ValueError(f"Invalid environment variable {name}='{raw}'; expected a float (e.g. '{default}')")
+
+
+def _read_env_int(name: str, default: int) -> int:
+    raw = os.getenv(name, str(default))
+    try:
+        return int(raw)
+    except ValueError:
+        raise ValueError(f"Invalid environment variable {name}='{raw}'; expected an integer (e.g. '{default}')")
+
+
 @dataclass(frozen=True)
 class SynthesisConfig:
     low_snp_threshold: int = 12
@@ -48,8 +64,8 @@ class SynthesisConfig:
     # Issue #12: Seasonality baseline for KPI context. Set via environment variables:
     # TB_INCIDENCE_BASELINE_PER_100K (default 5.0, UK TB rates)
     # SYSTEM_POPULATION (default 1,900,000 for Northern Ireland)
-    incidence_baseline_per_100k: float = float(os.getenv("TB_INCIDENCE_BASELINE_PER_100K", "5.0"))
-    system_population: int = int(os.getenv("SYSTEM_POPULATION", "1900000"))
+    incidence_baseline_per_100k: float = field(default_factory=lambda: _read_env_float("TB_INCIDENCE_BASELINE_PER_100K", 5.0))
+    system_population: int = field(default_factory=lambda: _read_env_int("SYSTEM_POPULATION", 1900000))
 
 
 def _export_json(path: str) -> dict[str, Any]:
@@ -261,10 +277,12 @@ def _case_rows(db: Session, cluster_id: str | None = None):
 
 
 def _normalise_cluster_id(cluster_id: str) -> str:
+    import uuid as _uuid
     val = (cluster_id or "").strip()
-    if len(val) != 36 or val.count("-") != 4:
-        raise ValueError("cluster_id must be a UUID")
-    return val
+    try:
+        return str(_uuid.UUID(val))
+    except ValueError:
+        raise ValueError(f"cluster_id must be a valid UUID, got: {val!r}")
 
 
 def _bool_temporal_support(

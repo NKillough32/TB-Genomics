@@ -526,7 +526,6 @@ async function loadCases(){
 	}catch(e){box.textContent='Error loading cases: '+e.message;}
 }
 
-function escapeHtml(text){const div=document.createElement('div');div.textContent=text;return div.innerHTML;} 
 async function loadOutbreakerResults(){
 	const box=document.getElementById('outbreakerResults');
 	box.textContent='Loading analysis...';
@@ -1010,11 +1009,14 @@ async function loadClusterInvestigations(){
 				<td>${escapeHtml(statusLabel)}${signed ? ' [OK]' : ''}</td>
 				<td>${escapeHtml(inv.assigned_to || '-')}</td>
 				<td>${escapeHtml(inv.action_count)}</td>
-				<td><button class="mini-btn" onclick="openCicPanel('${escapeHtml(inv.cluster_id)}')">Investigate</button></td>
+				<td><button class="mini-btn cic-investigate-btn" data-cluster-id="${escapeAttr(inv.cluster_id)}">Investigate</button></td>
 			</tr>`;
 		}
 		html += '</tbody></table>';
 		listEl.innerHTML = html;
+		listEl.querySelectorAll('.cic-investigate-btn').forEach(btn => {
+			btn.addEventListener('click', () => openCicPanel(btn.dataset.clusterId));
+		});
 	}catch(e){
 		listEl.textContent = 'Error: ' + e;
 	}

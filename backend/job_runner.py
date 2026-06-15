@@ -6,7 +6,7 @@ import shutil
 import glob
 import traceback
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import text
 from backend.database import SessionLocal
 from backend.runtime_paths import ensure_runtime_dirs, log_path
@@ -62,7 +62,7 @@ def set_job_state(job_id: str, **fields):
         current = JOBS.get(job_id)
         if current is None:
             return
-        fields.setdefault("updated_at", datetime.utcnow().isoformat() + "Z")
+        fields.setdefault("updated_at", datetime.now(timezone.utc).isoformat().replace("+00:00","Z"))
         current.update(fields)
 
 
@@ -72,9 +72,36 @@ def get_job_snapshot(job_id: str) -> dict | None:
         return dict(current) if isinstance(current, dict) else None
 
 
+def purge_old_jobs(max_age_seconds: int = 3600) -> int:
+    """Remove completed/failed/cancelled jobs older than max_age_seconds. Returns number removed."""
+    cutoff = datetime.now(timezone.utc)
+    removed = 0
+    with JOBS_LOCK:
+        terminal_states = {"completed", "failed", "cancelled"}
+        to_delete = []
+        for job_id, job in JOBS.items():
+            if not isinstance(job, dict):
+                continue
+            if job.get("status") not in terminal_states:
+                continue
+            finished_at = job.get("finished_at") or job.get("updated_at")
+            if finished_at:
+                try:
+                    from datetime import datetime as _dt
+                    age = (cutoff - _dt.fromisoformat(finished_at.replace("Z", "+00:00"))).total_seconds()
+                    if age > max_age_seconds:
+                        to_delete.append(job_id)
+                except Exception:
+                    pass
+        for job_id in to_delete:
+            del JOBS[job_id]
+            removed += 1
+    return removed
+
+
 def _create_job(job_id: str, payload: dict):
     with JOBS_LOCK:
-        now = datetime.utcnow().isoformat() + "Z"
+        now = datetime.now(timezone.utc).isoformat().replace("+00:00","Z")
         payload.setdefault("created_at", now)
         payload.setdefault("updated_at", now)
         payload.setdefault("cancel_requested", False)
@@ -121,7 +148,7 @@ def cancel_job(job_id: str) -> dict:
             return {"status": current.get("status"), "message": "Job is no longer running"}
         current["cancel_requested"] = True
         current["status"] = "cancelling"
-        current["updated_at"] = datetime.utcnow().isoformat() + "Z"
+        current["updated_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00","Z")
         active_child_id = current.get("active_child_id")
 
     terminated = _terminate_process(job_id)
@@ -154,7 +181,7 @@ def _write_log(lf, message: str):
 
 
 def _run_process(job_id: str, args: list[str], *, stdout, stderr, cwd: str, timeout: int | None = None, env: dict | None = None) -> int:
-    started = datetime.utcnow()
+    started = datetime.now(timezone.utc)
     process = subprocess.Popen(args, stdout=stdout, stderr=stderr, cwd=cwd, env=env)
     with JOBS_LOCK:
         JOB_PROCESSES[job_id] = process
@@ -166,7 +193,7 @@ def _run_process(job_id: str, args: list[str], *, stdout, stderr, cwd: str, time
             returncode = process.poll()
             if returncode is not None:
                 return returncode
-            if timeout is not None and (datetime.utcnow() - started).total_seconds() > timeout:
+            if timeout is not None and (datetime.now(timezone.utc) - started).total_seconds() > timeout:
                 _terminate_process(job_id)
                 raise subprocess.TimeoutExpired(args, timeout)
             threading.Event().wait(0.5)
@@ -213,7 +240,7 @@ def run_job(job_name):
     logger.debug(f"Job queued: {job_name} ({job_id})")
 
     def task():
-        set_job_state(job_id, status="running", progress=10, started_at=datetime.utcnow().isoformat() + "Z")
+        set_job_state(job_id, status="running", progress=10, started_at=datetime.now(timezone.utc).isoformat().replace("+00:00","Z"))
         logger.debug(f"Job running: {job_name} ({job_id})")
         
         # Log job start
@@ -365,13 +392,13 @@ def run_job(job_name):
                 _write_log(lf, "=" * 70)
                 _write_log(lf, f"JOB COMPLETED SUCCESSFULLY")
                 _write_log(lf, "=" * 70)
-                set_job_state(job_id, progress=100, status="completed", finished_at=datetime.utcnow().isoformat() + "Z")
+                set_job_state(job_id, progress=100, status="completed", finished_at=datetime.now(timezone.utc).isoformat().replace("+00:00","Z"))
                 logger.info(f"Job completed: {job_name} ({job_id})")
                 
                 # Log job completion
                 _log_to_audit("job_completed", "system", {"job_id": job_id, "job_name": job_name})
             except JobCancelled as e:
-                set_job_state(job_id, status="cancelled", finished_at=datetime.utcnow().isoformat() + "Z")
+                set_job_state(job_id, status="cancelled", finished_at=datetime.now(timezone.utc).isoformat().replace("+00:00","Z"))
                 _write_log(lf, "=" * 70)
                 _write_log(lf, "JOB CANCELLED")
                 _write_log(lf, "=" * 70)
@@ -379,7 +406,7 @@ def run_job(job_name):
                 logger.info(f"Job cancelled: {job_name} ({job_id})")
                 _log_to_audit("job_cancelled", "system", {"job_id": job_id, "job_name": job_name})
             except Exception as e:
-                set_job_state(job_id, status="failed", finished_at=datetime.utcnow().isoformat() + "Z")
+                set_job_state(job_id, status="failed", finished_at=datetime.now(timezone.utc).isoformat().replace("+00:00","Z"))
                 _write_log(lf, "=" * 70)
                 _write_log(lf, "JOB FAILED")
                 _write_log(lf, "=" * 70)
@@ -513,7 +540,7 @@ def run_pipeline():
 
         with open(log, "w", encoding="utf-8") as lf:
             try:
-                set_job_state(pipeline_id, started_at=datetime.utcnow().isoformat() + "Z")
+                set_job_state(pipeline_id, started_at=datetime.now(timezone.utc).isoformat().replace("+00:00","Z"))
                 _write_log(lf, "=" * 70)
                 _write_log(lf, "PIPELINE START")
                 _write_log(lf, f"Pipeline ID: {pipeline_id}")
@@ -575,7 +602,7 @@ def run_pipeline():
                     if child_status == "cancelled":
                         raise JobCancelled("Pipeline cancelled by user")
                     if child_status == "failed":
-                        set_job_state(pipeline_id, status="failed", active_child_id=None, finished_at=datetime.utcnow().isoformat() + "Z")
+                        set_job_state(pipeline_id, status="failed", active_child_id=None, finished_at=datetime.now(timezone.utc).isoformat().replace("+00:00","Z"))
                         _write_log(lf, f"ERROR: Step {step} failed - aborting pipeline")
                         _log_to_audit("pipeline_failed", "system", {"pipeline_id": pipeline_id, "failed_step": step})
                         return
@@ -591,11 +618,11 @@ def run_pipeline():
                     active_child_id=None,
                     child_progress=None,
                     child_status=None,
-                    finished_at=datetime.utcnow().isoformat() + "Z",
+                    finished_at=datetime.now(timezone.utc).isoformat().replace("+00:00","Z"),
                 )
                 _log_to_audit("pipeline_completed", "system", {"pipeline_id": pipeline_id})
             except JobCancelled as e:
-                set_job_state(pipeline_id, status="cancelled", active_child_id=None, finished_at=datetime.utcnow().isoformat() + "Z")
+                set_job_state(pipeline_id, status="cancelled", active_child_id=None, finished_at=datetime.now(timezone.utc).isoformat().replace("+00:00","Z"))
                 _write_log(lf, "\n" + "=" * 70)
                 _write_log(lf, "PIPELINE CANCELLED")
                 _write_log(lf, "=" * 70)

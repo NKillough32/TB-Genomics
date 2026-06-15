@@ -1,7 +1,7 @@
 nextflow.enable.dsl = 2
 
 include { FASTP } from './modules/fastp'
-include { BWA_MEM } from './modules/bwa_mem'
+include { BWA_INDEX; BWA_MEM } from './modules/bwa_mem'
 include { SAMTOOLS_QC } from './modules/samtools_qc'
 include { BCFTOOLS_CALL } from './modules/bcftools_call'
 include { AGGREGATE_SAMPLE_OUTPUTS } from './modules/aggregate_sample_outputs'
@@ -26,14 +26,15 @@ workflow TB_WGS {
   samples = Channel
     .fromPath(params.sample_sheet)
     .splitCsv(header: true)
-    .map { row -> tuple(row.sample_id, file(row.fastq_1), row.fastq_2 ? file(row.fastq_2) : []) }
+    .map { row -> tuple(row.sample_id, file(row.fastq_1), (row.fastq_2 && row.fastq_2.trim()) ? file(row.fastq_2) : []) }
   reference = Channel.fromPath(params.reference)
   mask_bed = Channel.fromPath(params.mask_bed)
 
   FASTP(samples)
-  BWA_MEM(FASTP.out.cleaned_reads, reference)
+  BWA_INDEX(reference)
+  BWA_MEM(FASTP.out.cleaned_reads, BWA_INDEX.out.indexed_reference)
   SAMTOOLS_QC(BWA_MEM.out.mapped)
-  BCFTOOLS_CALL(BWA_MEM.out.mapped, reference)
+  BCFTOOLS_CALL(BWA_MEM.out.mapped, BWA_INDEX.out.indexed_reference.map { ref, idx -> ref })
   TBPROFILER(FASTP.out.cleaned_reads)
 
   sample_qc_files = SAMTOOLS_QC.out.sample_qc.map { sample_id, qc -> qc }.collect()

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import sys
 
@@ -14,6 +15,8 @@ from sqlalchemy import text
 from backend.database import SessionLocal
 from backend.runtime_paths import EXPORTS_DIR
 from backend.snp_validation import validated_snp_distance
+
+logger = logging.getLogger(__name__)
 
 
 def _insert_alert(db, *, alert_type: str, severity: str, sample_id: str | None, cluster_id: str | None, title: str, description: str, evidence: dict) -> bool:
@@ -208,7 +211,7 @@ def generate_alerts() -> dict:
             EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
             (EXPORTS_DIR / "alert_generation_summary.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
         except Exception:
-            pass
+            logger.warning("Failed to write alert_generation_summary.json to %s", EXPORTS_DIR, exc_info=True)
         return result
     finally:
         db.close()

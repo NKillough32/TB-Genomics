@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Annotated
 from uuid import UUID
 
@@ -68,7 +68,7 @@ def _write_audit(db: Session, action: str, user_id: str, details: dict) -> None:
             action=action,
             user_id=user_id,
             details=jsonable_encoder(details),
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc).replace(tzinfo=None),
         )
     )
 
@@ -214,7 +214,7 @@ def update_managed_case(
     updates.pop("reason", None)
     for field, value in updates.items():
         setattr(case, field, _clean_optional(value))
-    case.updated_at = datetime.utcnow()
+    case.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
     after = _case_snapshot(case)
     changed = {
         field: {"from": before.get(field), "to": after.get(field)}
@@ -249,10 +249,10 @@ def mark_case_entered_in_error(
     if bool(case.entered_in_error):
         return {"status": "already_entered_in_error", "case": _case_snapshot(case)}
     case.entered_in_error = True
-    case.entered_in_error_at = datetime.utcnow()
+    case.entered_in_error_at = datetime.now(timezone.utc).replace(tzinfo=None)
     case.entered_in_error_by = user.subject
     case.entered_in_error_reason = payload.reason
-    case.updated_at = datetime.utcnow()
+    case.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
     _write_audit(
         db,
         "case_entered_in_error",
@@ -279,7 +279,7 @@ def restore_managed_case(
     case.entered_in_error_at = None
     case.entered_in_error_by = None
     case.entered_in_error_reason = None
-    case.updated_at = datetime.utcnow()
+    case.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
     _write_audit(
         db,
         "case_restored",

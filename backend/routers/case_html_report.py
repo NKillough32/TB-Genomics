@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import html as html_lib
 from datetime import datetime
@@ -11,6 +12,7 @@ from sqlalchemy.orm import Session
 from backend.routers.cases import _export_path, get_db
 
 router = APIRouter(prefix="/cases", tags=["cases"])
+logger = logging.getLogger(__name__)
 
 
 # -- Case-specific comprehensive HTML report ----------------------------------
@@ -211,7 +213,7 @@ def case_report_html(case_id: str, db: Session = Depends(get_db)):  # noqa: C901
                     with open(os.path.join(tbp_dir, fname), "r", encoding="utf-8") as _f:
                         tbp_data = json.load(_f)
                 except Exception:
-                    pass
+                    logger.warning("Failed to load TBProfiler JSON %s", fname, exc_info=True)
                 break
 
     # -- Helper functions ------------------------------------------------------

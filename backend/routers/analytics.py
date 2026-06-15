@@ -1,4 +1,5 @@
-﻿import json
+import json
+import logging
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 from itertools import combinations
@@ -22,6 +23,7 @@ from backend.synthesis.transmission_synthesis import (
 )
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
+logger = logging.getLogger(__name__)
 
 REVIEW_CLASSIFICATIONS = (
     "confirmed transmission",
@@ -206,7 +208,7 @@ def _parse_molecular_clock(text_value: str) -> dict:
             try:
                 result["r_squared_value"] = float(raw)
             except ValueError:
-                pass
+                logger.warning("Failed to parse r_squared value %r in plink summary", raw, exc_info=True)
     return result
 
 

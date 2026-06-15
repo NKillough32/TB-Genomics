@@ -3,6 +3,7 @@ from __future__ import annotations
 import glob
 import importlib.util
 import json
+import logging
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
@@ -15,6 +16,8 @@ from backend.runtime_paths import EXPORTS_DIR, PROJECT_ROOT, UPLOADS_DIR
 
 EXPORTS = EXPORTS_DIR
 UPLOADS = UPLOADS_DIR
+
+logger = logging.getLogger(__name__)
 
 
 def _iso_now() -> str:
@@ -304,7 +307,7 @@ def confidence_gates(db: Session) -> list[dict[str, Any]]:
                 )
             )
         except Exception:
-            pass
+            logger.warning("Failed to build sequence_cluster_assignment gate", exc_info=True)
 
     deps = dependency_health()
     lineage_deps_ok = any(dep["key"] in {"tbprofiler", "mykrobe"} and dep["status"] == "available" for dep in deps)
@@ -474,7 +477,7 @@ def confidence_gates(db: Session) -> list[dict[str, Any]]:
                     )
                 )
             except (TypeError, ValueError):
-                pass
+                logger.warning("Failed to parse MCMC ESS for mcmc_alpha_ess gate", exc_info=True)
     else:
         gates.append(
             _gate(
@@ -503,7 +506,7 @@ def confidence_gates(db: Session) -> list[dict[str, Any]]:
                 )
             )
         except Exception:
-            pass
+            logger.warning("Failed to parse precision for sequence_outbreaker_agreement gate", exc_info=True)
 
     report_artifact = _artifact_status("outbreaker_investigation_report_full.html")
     gates.append(

@@ -196,6 +196,123 @@ def _format_resistance_profile(value) -> str:
     return "none"
 
 
+
+def _lineage_summary(values: list[str | None]) -> dict:
+    counts: dict[str, int] = {}
+    for value in values:
+        lineage = str(value or "unknown").strip() or "unknown"
+        counts[lineage] = counts.get(lineage, 0) + 1
+    dominant = max(counts.items(), key=lambda item: item[1])[0] if counts else "unknown"
+    return {"dominant": dominant, "distinct_count": len(counts), "counts": counts}
+
+
+def _infectiousness_score(member: dict) -> int:
+    score = 0
+    if str(member.get("smear_status") or "unknown").lower() == "positive":
+        score += 1
+    if str(member.get("cavitation_status") or "unknown").lower() == "present":
+        score += 1
+    if str(member.get("culture_status") or "unknown").lower() == "positive":
+        score += 1
+    try:
+        if member.get("culture_positivity_duration_days") and int(member["culture_positivity_duration_days"]) > 90:
+            score += 1
+    except (TypeError, ValueError):
+        pass
+    return min(score, 3)
+
+
+def _investigation_focus(score: float, components: dict) -> str:
+    if components.get("resistance_profile", {}).get("resistant_case_count", 0):
+        return "drug-resistance and linked-contact review"
+    if components.get("temporal_overlap", {}).get("overlap_likely") and components.get("snp_distance", {}).get("value") is not None:
+        return "recent genomic cluster with plausible temporal overlap"
+    if components.get("trust", {}).get("distinct_count", 0) > 1:
+        return "cross-Trust coordination and exposure mapping"
+    if score >= 65:
+        return "urgent cluster investigation"
+    return "routine cluster review"
+
+
+def _compute_cluster_intelligence(db: Session, *, limit: int = 25, temporal_window_days: int = 90) -> list[dict]:
+    rows = db.execute(text("""
+        SELECT cl.cluster_id::text AS cluster_id, cl.snp_distance, cl.investigation_status, cl.alert_flag,
+               c.pseudonymised_case_id::text AS case_id, c.specimen_date,
+               COALESCE(c.geographic_region, 'Unknown') AS trust, c.case_status,
+               c.smear_status, c.cavitation_status, c.culture_status, c.culture_positivity_duration_days,
+               ti.lineage, ti.predicted_drug_resistance
+        FROM clusters cl
+        JOIN case_clusters cc ON cc.cluster_id = cl.cluster_id
+        JOIN cases c ON c.pseudonymised_case_id = cc.sample_id
+        LEFT JOIN tb_interpretation ti ON ti.sample_id = cc.sample_id
+        ORDER BY cl.cluster_id, c.specimen_date NULLS LAST
+    """)).mappings().all()
+
+    grouped: dict[str, list[dict]] = {}
+    cluster_meta: dict[str, dict] = {}
+    for row in rows:
+        cid = row["cluster_id"]
+        grouped.setdefault(cid, []).append(dict(row))
+        cluster_meta[cid] = {"snp_distance": row["snp_distance"], "investigation_status": row["investigation_status"], "alert_flag": bool(row["alert_flag"])}
+
+    queue = []
+    for cid, members in grouped.items():
+        risk = _compute_risk_score(db, cid)
+        meta = cluster_meta[cid]
+        dates = sorted([m["specimen_date"] for m in members if m.get("specimen_date")])
+        span_days = (dates[-1] - dates[0]).days if len(dates) >= 2 else 0
+        overlap_likely = len(dates) >= 2 and span_days <= temporal_window_days
+        trusts = sorted({str(m.get("trust") or "Unknown") for m in members})
+        lineage = _lineage_summary([m.get("lineage") for m in members])
+        resistance_profiles = [_format_resistance_profile(m.get("predicted_drug_resistance")) for m in members]
+        resistant_count = sum(1 for profile in resistance_profiles if profile != "none")
+        infectious_scores = [_infectiousness_score(m) for m in members]
+        infectious_high = sum(1 for value in infectious_scores if value >= 2)
+        snp_value = meta.get("snp_distance")
+
+        intelligence_score = float(risk["score"])
+        if isinstance(snp_value, int):
+            intelligence_score += max(0, 20 - min(snp_value, 20))
+        if lineage["distinct_count"] == 1 and lineage["dominant"] != "unknown":
+            intelligence_score += 8
+        elif lineage["distinct_count"] > 1:
+            intelligence_score -= 8
+        if overlap_likely:
+            intelligence_score += 12
+        if len(trusts) > 1:
+            intelligence_score += min((len(trusts) - 1) * 6, 18)
+        intelligence_score += min(infectious_high * 5, 15)
+        if resistant_count:
+            intelligence_score += 15
+        intelligence_score = round(max(0, min(100, intelligence_score)), 1)
+
+        components = {
+            "snp_distance": {"value": snp_value, "contribution": max(0, 20 - min(int(snp_value or 20), 20)) if snp_value is not None else 0},
+            "lineage": lineage,
+            "temporal_overlap": {"window_days": temporal_window_days, "span_days": span_days, "overlap_likely": overlap_likely},
+            "trust": {"distinct_count": len(trusts), "values": trusts},
+            "infectiousness": {"high_indicator_case_count": infectious_high, "case_scores": infectious_scores},
+            "resistance_profile": {"resistant_case_count": resistant_count, "profiles": sorted(set(resistance_profiles))},
+        }
+        queue.append({
+            "rank": 0,
+            "cluster_id": cid,
+            "cluster_short": cid[:8],
+            "case_count": len(members),
+            "investigation_status": meta.get("investigation_status"),
+            "alert_flag": meta.get("alert_flag"),
+            "risk_score": risk["score"],
+            "risk_band": risk["band"],
+            "intelligence_score": intelligence_score,
+            "focus": _investigation_focus(intelligence_score, components),
+            "components": components,
+        })
+
+    queue.sort(key=lambda item: (-item["intelligence_score"], -item["case_count"], item["cluster_id"]))
+    for idx, item in enumerate(queue[:limit], start=1):
+        item["rank"] = idx
+    return queue[:limit]
+
 # -- Upsert investigation row ----------------------------------------------------
 
 def _upsert_investigation(db: Session, cluster_id: str) -> str:
@@ -308,6 +425,29 @@ def list_investigations(db: Session = Depends(get_db)):
 
     results.sort(key=lambda x: (-x["risk_score"], x["cluster_id"]))
     return {"investigations": results, "total": len(results), **_validation_notice()}
+
+
+
+@router.get("/intelligence-queue")
+def cluster_intelligence_queue(
+    limit: int = 25,
+    temporal_window_days: int = 90,
+    db: Session = Depends(get_db),
+):
+    """Return a ranked operational queue combining genomic, epi, Trust, infectiousness, and resistance signals."""
+    safe_limit = max(1, min(int(limit or 25), 100))
+    safe_window = max(1, min(int(temporal_window_days or 90), 365))
+    try:
+        queue = _compute_cluster_intelligence(db, limit=safe_limit, temporal_window_days=safe_window)
+    except Exception as exc:
+        logger.exception("Cluster intelligence queue failed")
+        raise HTTPException(status_code=500, detail=str(exc))
+    return {
+        "queue": queue,
+        "total": len(queue),
+        "scoring_note": "Heuristic synthesis of SNP distance, lineage consistency, temporal overlap, Trust spread, infectiousness indicators, resistance profile, and existing investigation risk.",
+        **_validation_notice(),
+    }
 
 
 @router.get("/{cluster_id}")

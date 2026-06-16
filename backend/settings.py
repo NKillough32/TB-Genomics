@@ -3,6 +3,13 @@ from dataclasses import dataclass
 
 TRUTHY_VALUES = {"1", "true", "yes", "on"}
 PRODUCTION_VALUES = {"prod", "production"}
+PLACEHOLDER_AUTH_TOKEN_MARKERS = (
+    "change-me",
+    "changeme",
+    "replace-me",
+    "replace-with",
+    "example-token",
+)
 LOCAL_CORS_ORIGINS = (
     "http://localhost:8081",
     "http://127.0.0.1:8081",
@@ -79,6 +86,17 @@ def runtime_safety_findings(settings: Settings | None = None) -> list[dict[str, 
                 "level": "error" if settings.is_production else "warning",
                 "code": "auth_required_without_tokens",
                 "message": "TB_AUTH_REQUIRED is set but TB_AUTH_TOKENS is empty.",
+            }
+        )
+
+    if settings.auth_tokens_configured and any(
+        marker in settings.auth_tokens.lower() for marker in PLACEHOLDER_AUTH_TOKEN_MARKERS
+    ):
+        findings.append(
+            {
+                "level": "error" if settings.is_production else "warning",
+                "code": "placeholder_auth_token",
+                "message": "TB_AUTH_TOKENS contains a placeholder token.",
             }
         )
 

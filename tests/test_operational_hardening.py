@@ -272,6 +272,18 @@ def test_runtime_safety_blocks_unsafe_production_configuration(monkeypatch):
     assert "cors_wildcard" in message
 
 
+def test_runtime_safety_blocks_placeholder_token_in_production(monkeypatch):
+    monkeypatch.setenv("TB_DEPLOYMENT_MODE", "production")
+    monkeypatch.setenv("TB_AUTH_REQUIRED", "1")
+    monkeypatch.setenv("TB_AUTH_TOKENS", "change-me-admin-token=admin")
+    monkeypatch.setenv("TB_CORS_ORIGINS", "https://tb.example.nhs.uk")
+
+    with pytest.raises(RuntimeError) as blocked:
+        enforce_startup_safety(load_settings())
+
+    assert "placeholder_auth_token" in str(blocked.value)
+
+
 def test_runtime_safety_allows_explicit_production_auth_and_origin(monkeypatch):
     monkeypatch.setenv("TB_DEPLOYMENT_MODE", "production")
     monkeypatch.setenv("TB_AUTH_REQUIRED", "1")

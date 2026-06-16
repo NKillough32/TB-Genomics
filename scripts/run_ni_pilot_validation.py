@@ -19,7 +19,7 @@ import re
 import shutil
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -59,11 +59,11 @@ DIRECT_IDENTIFIER_VALUE_PATTERNS = {
 
 
 def _utc_stamp() -> str:
-    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    return datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
 
 
 def _run(command: list[str], cwd: Path, log_path: Path, env: dict[str, str] | None = None) -> dict:
-    started = datetime.now(timezone.utc)
+    started = datetime.now(UTC)
     proc = subprocess.run(
         command,
         cwd=str(cwd),
@@ -72,7 +72,7 @@ def _run(command: list[str], cwd: Path, log_path: Path, env: dict[str, str] | No
         stderr=subprocess.STDOUT,
         env=env,
     )
-    finished = datetime.now(timezone.utc)
+    finished = datetime.now(UTC)
     log_path.write_text(proc.stdout, encoding="utf-8")
     return {
         "command": command,
@@ -118,6 +118,20 @@ def _dataset_hashes(dataset: Path) -> dict:
     hashes = {}
     for path in sorted(item for item in dataset.rglob("*") if item.is_file()):
         rel = path.relative_to(dataset).as_posix()
+        hashes[rel] = {
+            "bytes": path.stat().st_size,
+            "sha256": _sha256_file(path),
+        }
+    return hashes
+
+
+def _run_output_hashes(run_dir: Path) -> dict:
+    hashes = {}
+    manifest_name = "output_manifest_sha256.json"
+    for path in sorted(item for item in run_dir.rglob("*") if item.is_file()):
+        rel = path.relative_to(run_dir).as_posix()
+        if rel == manifest_name:
+            continue
         hashes[rel] = {
             "bytes": path.stat().st_size,
             "sha256": _sha256_file(path),
@@ -456,7 +470,7 @@ def run(args: argparse.Namespace) -> dict:
 
     report = {
         "run_id": run_id,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "status": status,
         "decision": decision,
         "dataset": _dataset_summary(dataset),
@@ -467,6 +481,11 @@ def run(args: argparse.Namespace) -> dict:
 
     (run_dir / "validation_report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     _write_markdown_report(report, run_dir / "validation_report.md")
+    output_manifest = _run_output_hashes(run_dir)
+    (run_dir / "output_manifest_sha256.json").write_text(
+        json.dumps(output_manifest, indent=2) + "\n",
+        encoding="utf-8",
+    )
     if args.copy_latest:
         latest_dir = RUN_ROOT / "latest"
         if latest_dir.exists():

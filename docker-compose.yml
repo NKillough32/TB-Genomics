@@ -22,8 +22,9 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: postgresql://tb:tb@db:5432/tb_surveillance
+      TB_DEPLOYMENT_MODE: local
       TB_AUTH_REQUIRED: "1"
-      TB_AUTH_TOKENS: "change-me-admin-token=admin"
+      TB_AUTH_TOKENS: "${TB_AUTH_TOKENS:?Set TB_AUTH_TOKENS to a non-placeholder token before running docker compose}"
       TB_ENABLE_SYNTHETIC_SEEDING: "0"
     ports:
       - "8000:8000"
@@ -40,4 +41,3 @@ services:
 
 volumes:
   postgres_data:
-

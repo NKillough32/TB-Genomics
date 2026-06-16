@@ -27,6 +27,7 @@ TRUST_ROWS = [
 
 
 def upgrade() -> None:
+    bind = op.get_bind()
     op.execute(text("CREATE INDEX IF NOT EXISTS ix_cases_specimen_date ON cases (specimen_date)"))
     op.execute(text("CREATE INDEX IF NOT EXISTS ix_cases_geographic_region ON cases (geographic_region)"))
     op.execute(text("CREATE INDEX IF NOT EXISTS ix_cases_region_specimen_date ON cases (geographic_region, specimen_date)"))
@@ -39,7 +40,7 @@ def upgrade() -> None:
         )
     """))
     for code, name in TRUST_ROWS:
-        op.execute(
+        bind.execute(
             text("""
                 INSERT INTO hsc_trusts (trust_code, trust_name, active)
                 VALUES (:code, :name, TRUE)

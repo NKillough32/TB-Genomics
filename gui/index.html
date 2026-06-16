@@ -36,22 +36,40 @@
     <div class="workflow-map-item">
       <span class="workflow-map-kicker">Prepare</span>
       <strong>Check status, readiness, and inputs</strong>
-      <p>Steps 1-2</p>
+      <p>System and data setup</p>
     </div>
     <div class="workflow-map-item">
       <span class="workflow-map-kicker">Analyse</span>
       <strong>Run pipeline and inspect outputs</strong>
-      <p>Steps 3-4A</p>
+      <p>Pipeline, outputs, and case views</p>
     </div>
     <div class="workflow-map-item">
       <span class="workflow-map-kicker">Investigate</span>
       <strong>Prioritise clusters and record evidence</strong>
-      <p>Steps 5-7</p>
+      <p>Queue, investigation, and analytics</p>
     </div>
     <div class="workflow-map-item">
       <span class="workflow-map-kicker">Report</span>
       <strong>Sign off, export, and audit</strong>
-      <p>Steps 8-12</p>
+      <p>Final outputs and governance</p>
+    </div>
+  </section>
+  <section class="card safety-notice-card" aria-label="Safety notice">
+    <h2>Safety notice</h2>
+    <p id="safetyNoticeSummary" class="hint">Decision-support interface only. Outputs are advisory and require qualified review.</p>
+    <div class="safety-notice-grid">
+      <div class="safety-notice-item">
+        <strong>Dataset mode</strong>
+        <span id="safetyNoticeDataset">Checking...</span>
+      </div>
+      <div class="safety-notice-item">
+        <strong>Validation scope</strong>
+        <span id="safetyNoticeValidation">Heuristic synthesis; not a validated transmission model.</span>
+      </div>
+      <div class="safety-notice-item">
+        <strong>Operational use</strong>
+        <span>Do not take automated public health action from this interface without governance sign-off.</span>
+      </div>
     </div>
   </section>
   <section class="phase-divider" aria-label="Prepare phase">
@@ -59,7 +77,7 @@
     <p>Confirm the system is reachable, data are ready, and inputs are available before running analysis.</p>
   </section>
   <section class="card">
-    <h2>Step 1 - System status</h2>
+    <h2>System status</h2>
     <ul id="status" class="status-list"><li>Checking...</li></ul>
   </section>
   <section class="card">
@@ -70,7 +88,7 @@
     <div id="dataReadinessPanel" class="readiness-panel">Loading data readiness...</div>
   </section>
   <section class="card">
-    <h2>Step 2 - Upload files</h2>
+    <h2>Data inputs</h2>
     <div class="step2-grid">
       <section class="step2-panel">
         <h3>Upload files for processing</h3>
@@ -127,7 +145,7 @@
     <p>Run the genomic workflow, then review raw outputs, exports, and case-level reports.</p>
   </section>
   <section class="card">
-    <h2>Step 3 - Run analysis</h2>
+    <h2>Run analysis</h2>
     <p class="hint">Primary action for routine use. The full pipeline runs lineage/DR validation, sequence clustering, outbreaker2 export and inference, and method comparison in order.</p>
     <div class="pipeline-actions">
       <button id="runPipelineBtn" class="btn-primary" onclick="runFullPipeline()">&#9654; Run full pipeline (all steps)</button>
@@ -156,7 +174,7 @@
     <pre id="jobStatus" class="log-box">Idle</pre>
   </section>
   <section class="card">
-    <h2>Step 4 - Results and exports</h2>
+    <h2>Results and exports</h2>
     <button onclick="loadCases()">View cases</button>
     <button onclick="loadOutbreakerResults()">View outbreaker2 summary</button>
     <button onclick="loadLineageDrValidation()">View lineage/DR validation</button>
@@ -169,7 +187,7 @@
     <pre id="outbreakerResults" class="log-box"></pre>
   </section>
   <section class="card">
-    <h2>Step 4A - Case search and case reports</h2>
+    <h2>Case search and reports</h2>
     <p class="hint">Find individual cases after analysis, inspect case history, and generate case-specific reports.</p>
     <div class="search-controls">
       <label>Region:
@@ -199,7 +217,7 @@
   </section>
 
   <section class="card">
-    <h2>Step 4B - Data Management</h2>
+    <h2>Data management</h2>
     <p class="hint">Review case records, correct core metadata, and mark records as entered in error without physically deleting linked audit evidence.</p>
     <div class="data-management-controls">
       <label>Find case
@@ -221,8 +239,8 @@
   </section>
 
   <section class="card" id="synthesisCard">
-    <h2>Step 5 - Transmission Synthesis</h2>
-    <p class="hint">Review-ready synthesis that combines SNP, posterior, temporal, and region evidence into investigation priorities.</p>
+    <h2>Transmission synthesis</h2>
+    <p class="hint">Pair-level evidence combining SNP, posterior, temporal, and region signals for investigation review.</p>
     <div class="synthesis-controls">
       <div class="synthesis-inline-actions">
         <button id="loadSynthesisBtn" class="btn-primary" onclick="loadTransmissionSynthesisOverview()">Load synthesis overview</button>
@@ -256,7 +274,7 @@
   </section>
 
   <section class="card" id="clusterIntelligenceCard">
-    <h2>Step 5A - Cluster Intelligence Dashboard</h2>
+    <h2>Cluster intelligence queue</h2>
     <p class="hint">Ranked investigation queue combining SNP distance, lineage consistency, temporal overlap, Trust spread, infectiousness indicators, and resistance profiles.</p>
     <div class="synthesis-inline-actions">
       <button id="loadClusterIntelligenceBtn" class="btn-primary" onclick="loadClusterIntelligenceDashboard()">Load intelligence queue</button>
@@ -268,9 +286,9 @@
     <div id="clusterIntelligenceView" class="analytics-view"></div>
   </section>
 
-  <!-- -- Step 6: Cluster Investigation Centre ------------------------------- -->
+  <!-- -- Cluster Investigation Centre --------------------------------------- -->
   <section class="card" id="cicCard">
-    <h2>Step 6 - Cluster Investigation Centre</h2>
+    <h2>Cluster Investigation Centre</h2>
     <p class="hint">
       End-to-end workflow: risk-scored cluster list -> assign reviewer -> record
       epidemiology notes and actions -> formal sign-off -> generate report.
@@ -485,7 +503,7 @@
   </section>
 
   <section class="card" id="analyticsCard">
-    <h2>Step 7 - Phylogenetic and Visual Analytics</h2>
+    <h2>Phylogenetic and visual analytics</h2>
     <p class="hint">Analyst views: SNP matrix, phylogenetic tree, timeline, map, growth curves, dossier export, and genomic vs epidemiological link comparison.</p>
     <div class="analytics-controls">
       <button onclick="loadAnalyticsSnapshot()">Load analytics snapshot</button>
@@ -533,8 +551,8 @@
   </section>
 
   <section class="card">
-    <h2>Step 8 - Final Actionable Report</h2>
-    <p class="hint">Reviewer-facing report combining safety, readiness, KPIs, priority clusters, investigation activity, lineage/DR, and provenance.</p>
+    <h2>Final actionable report</h2>
+    <p class="hint">Reviewer-facing report and sign-off summary across safety, readiness, KPIs, priority clusters, and investigation activity.</p>
     <div class="report-controls">
       <button class="btn-primary" onclick="openActionableReport()">Open final report (HTML)</button>
       <button onclick="loadActionableReportSummary()">Load report summary</button>
@@ -549,8 +567,8 @@
   </section>
 
   <section class="card">
-    <h2>Step 9 - Runtime and Supporting Status</h2>
-    <p class="hint">Operational detail behind the final report: full KPI payload, outbreaker readiness, and current or recent job logs.</p>
+    <h2>Runtime and supporting status</h2>
+    <p class="hint">Operational diagnostics for KPI payloads, outbreaker readiness, and current or recent job logs.</p>
     <div class="utility-actions">
       <button onclick="loadFullKpis()">Load full KPIs</button>
       <button id="loadOutbreakerStatusBtn" onclick="loadOutbreakerStatus()">Load outbreaker status</button>
@@ -562,7 +580,7 @@
   </section>
 
   <section class="card">
-    <h2>Step 10 - Resistance Validation Sign-off</h2>
+    <h2>Resistance validation sign-off</h2>
     <p class="hint">Review and record local sign-off for the lineage and drug-resistance validation pipeline.</p>
     <div class="validation-grid">
       <label>Decision
@@ -588,8 +606,8 @@
   </section>
 
   <section class="card">
-    <h2>Step 11 - Epidemiology Reference Records</h2>
-    <p class="hint">Optional reference library for shared epidemiology entities. Use this when the same exposure type, contact, or location may be reused across investigations. To attach evidence to a case, use Step 6.</p>
+    <h2>Epidemiology reference records</h2>
+    <p class="hint">Optional reference library for shared epidemiology entities. Use this when the same exposure type, contact, or location may be reused across investigations. To attach evidence to a case, use the Cluster Investigation Centre.</p>
     <div class="epi-reference-guide">
       <div>
         <strong>What this does</strong>
@@ -603,9 +621,9 @@
     <div class="epi-reference-assignment">
       <div>
         <strong>How to attach an exposure, contact, or location to a case</strong>
-        <span>Go to Step 6, load clusters, open a cluster, choose the Epi notes tab, select a case, then record a location event or contact link.</span>
+        <span>Open the Cluster Investigation Centre, load clusters, open a cluster, choose the Epi notes tab, select a case, then record a location event or contact link.</span>
       </div>
-      <button type="button" onclick="goToCaseEvidenceWorkflow()">Go to Step 6 case evidence</button>
+      <button type="button" onclick="goToCaseEvidenceWorkflow()">Go to case evidence workflow</button>
     </div>
     <div class="epi-reference-grid">
       <section class="epi-reference-panel">
@@ -666,7 +684,7 @@
   </section>
 
   <section class="card">
-    <h2>Step 12 - Governance and Compliance</h2>
+    <h2>Governance and compliance</h2>
     <p class="hint">Audit trail showing all system actions for accountability.</p>
     <button onclick="loadAuditTrail()">View audit trail</button>
     <pre id="auditTrail" class="log-box"></pre>

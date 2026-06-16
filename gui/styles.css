@@ -988,6 +988,41 @@ footer {
 	overflow-wrap: anywhere;
 }
 
+.safety-notice-card {
+	background: linear-gradient(135deg, #fff8eb 0%, #f7fbff 100%);
+	border-top-color: rgba(180, 83, 9, 0.45);
+}
+
+.safety-notice-grid {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 0.75rem;
+	margin-top: 0.6rem;
+}
+
+.safety-notice-item {
+	background: #ffffff;
+	border: 1px solid #ead8bd;
+	border-radius: 10px;
+	padding: 0.65rem 0.7rem;
+	box-shadow: inset 0 1px 0 rgba(255,255,255,0.7);
+}
+
+.safety-notice-item strong {
+	display: block;
+	font-size: 0.78rem;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	color: #7a4b13;
+	margin-bottom: 0.2rem;
+}
+
+.safety-notice-item span {
+	font-size: 0.86rem;
+	color: #324f68;
+	line-height: 1.35;
+}
+
 /* -- Pipeline button ------------------------------------------------------ */
 .btn-primary {
 	background: linear-gradient(180deg, #1c6a56, #155244);
@@ -1129,6 +1164,10 @@ footer {
 
 	.kpi-banner {
 		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	.safety-notice-grid {
+		grid-template-columns: 1fr;
 	}
 
 	.header-inner {

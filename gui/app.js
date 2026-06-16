@@ -151,6 +151,17 @@ function renderSystemStatusItem(label, headline, tone, note){
 	</li>`;
 }
 
+function setSafetyNotice(datasetText, summaryText){
+	const datasetEl=document.getElementById('safetyNoticeDataset');
+	const summaryEl=document.getElementById('safetyNoticeSummary');
+	if(datasetEl && datasetText) datasetEl.textContent=datasetText;
+	if(summaryEl && summaryText) summaryEl.textContent=summaryText;
+}
+
+function renderSafetyNoticeRef(){
+	return '<p class="hint">See Safety notice for validation and operational-use constraints.</p>';
+}
+
 async function loadWorkflowStatus(){
 	const panel=document.getElementById('workflowStatusPanel');
 	if(!panel) return;
@@ -331,6 +342,17 @@ async function loadDataSafety(){
 		const r = await fetch(`${API}/cases/data-safety`);
 		if(!r.ok) return;
 		const d = await r.json();
+		if(d.operational_safe){
+			setSafetyNotice(
+				'Operational dataset detected.',
+				'Decision-support interface only. Outputs are advisory and require qualified review.'
+			);
+		}else{
+			setSafetyNotice(
+				`Non-operational dataset: ${d.synthetic_case_count||0} synthetic cases, ${d.synthetic_seed_events||0} seed events.`,
+				'Demo/synthetic mode detected. Do not use this interface for real-world public health action.'
+			);
+		}
 		const safetyHtml = d.operational_safe
 			? renderSystemStatusItem('Dataset mode', 'Operational', 'status-pass', `${d.total_cases} cases available for analysis`)
 			: renderSystemStatusItem('Dataset mode', 'Non-operational', 'status-warn', `Synthetic/demo detected: ${d.synthetic_case_count} synthetic cases, ${d.synthetic_seed_events} seed events`);
@@ -340,6 +362,7 @@ async function loadDataSafety(){
 			: renderSystemStatusItem('Backend', 'Running', 'status-pass', 'API responded successfully');
 		statusEl.innerHTML = `${backendHtml}${safetyHtml}`;
 	}catch(_e){
+		setSafetyNotice('Unavailable: could not fetch dataset mode.','Decision-support interface only. Outputs are advisory and require qualified review.');
 		// no-op; keep existing status text
 	}
 }
@@ -999,7 +1022,7 @@ async function loadClusterIntelligenceDashboard(){
 		const queue=d.queue||[];
 		const urgent=queue.filter(item=>Number(item.intelligence_score||0)>=70).length;
 		if(summary){
-			summary.innerHTML=`<div class="kpi-strip">Ranked clusters: ${escapeHtml(queue.length)} | Urgent intelligence score >=70: ${escapeHtml(urgent)} | Validation: ${escapeHtml(d.validation_status||'unknown')}</div>${d.warning?`<p class="hint">${escapeHtml(d.warning)}</p>`:''}<p class="hint">${escapeHtml(d.scoring_note||'')}</p>`;
+			summary.innerHTML=`<div class="kpi-strip">Ranked clusters: ${escapeHtml(queue.length)} | Urgent intelligence score >=70: ${escapeHtml(urgent)} | Validation: ${escapeHtml(d.validation_status||'unknown')}</div>${renderSafetyNoticeRef()}`;
 		}
 		if(!queue.length){
 			if(view) view.innerHTML='<p class="hint">No clusters available. Run analysis first.</p>';
@@ -1044,7 +1067,7 @@ async function loadClusterInvestigations(){
 		if(!r.ok){ listEl.textContent = 'Failed to load: ' + r.status; return; }
 		const data = await r.json();
 		if(!data.investigations || data.investigations.length === 0){
-			listEl.innerHTML = '<p class="hint">No clusters found. Run analysis first (Step 3).</p>';
+			listEl.innerHTML = '<p class="hint">No clusters found. Run analysis first.</p>';
 			return;
 		}
 		let html = '<table class="data-table cic-cluster-table">';
@@ -1516,9 +1539,7 @@ function cicShowEvidenceCard(pair){
 		</div>`;
 	}
 
-	html+=`<p style="font-size:.75rem;color:#999;margin-top:.75rem">
-		Heuristic evidence synthesis only. Not a validated transmission model. Requires expert review.
-	</p>`;
+	html+=`<p style="font-size:.75rem;color:#999;margin-top:.75rem">See Safety notice for validation and operational-use constraints.</p>`;
 
 	contentEl.innerHTML=html;
 	modal.style.display='flex';
@@ -1941,7 +1962,7 @@ async function loadTransmissionSynthesisOverview(){
 			: `${API}/analytics/transmission-synthesis?min_posterior=${encodeURIComponent(p.posteriorMin)}&low_snp_threshold=${encodeURIComponent(p.snpThreshold)}&high_posterior_threshold=${encodeURIComponent(p.highPosteriorThreshold)}&temporal_window_days=${encodeURIComponent(p.temporalWindowDays)}`;
 		const d=await fetch(url).then(r=>r.json());
 		const s=d.summary||{};
-		const warning=d.warning?`<p class="hint">${escapeHtml(d.warning)}</p>`:'';
+		const warning=renderSafetyNoticeRef();
 		if(summary){
 			summary.innerHTML=`<div class="kpi-strip">
 				Clusters: ${escapeHtml(s.cluster_count||0)} |
@@ -1953,7 +1974,7 @@ async function loadTransmissionSynthesisOverview(){
 		if(view){
 			const clusters=d.clusters||[];
 			let html=`<h4>${cid?'Cluster synthesis':'Transmission synthesis overview'}</h4>`;
-			html+=`<p class="hint">Validation: ${escapeHtml(d.validation_status||'unknown')}  |  Generated ${escapeHtml((d.generated_at||'').replace('T',' ').replace('Z',' UTC'))}</p>`;
+			html+=`<p class="hint">Validation: ${escapeHtml(d.validation_status||'unknown')}  |  Generated ${escapeHtml((d.generated_at||'').replace('T',' ').replace('Z',' UTC'))}</p>${renderSafetyNoticeRef()}`;
 			html+=_renderSynthesisClusterTable(clusters);
 			if(cid && clusters[0]){
 				const cluster=clusters[0];
@@ -1987,7 +2008,7 @@ async function loadClusterRiskSummaryView(){
 			summary.innerHTML=`<div class="kpi-strip">
 				Clusters ranked: ${escapeHtml((d.clusters||[]).length)} |
 				Validation: ${escapeHtml(d.validation_status||'unknown')}
-			</div>${d.warning?`<p class="hint">${escapeHtml(d.warning)}</p>`:''}`;
+			</div>${renderSafetyNoticeRef()}`;
 		}
 		if(view){
 			const clusters=d.clusters||[];

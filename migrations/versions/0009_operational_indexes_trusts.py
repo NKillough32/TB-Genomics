@@ -5,16 +5,15 @@ Revises: 0008_case_data_mgmt
 Create Date: 2026-06-15
 """
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 from alembic import op
 from sqlalchemy import text
 
-
 revision: str = "0009_operational_indexes_trusts"
-down_revision: Union[str, Sequence[str], None] = "0008_case_data_mgmt"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | Sequence[str] | None = "0008_case_data_mgmt"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 TRUST_ROWS = [

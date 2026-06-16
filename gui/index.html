@@ -78,6 +78,17 @@
   </section>
   <section class="card">
     <h2>System status</h2>
+    <div class="api-settings-row">
+      <label for="apiBaseInput">API base
+        <input id="apiBaseInput" type="url" placeholder="http://localhost:8000" />
+      </label>
+      <label for="apiTokenInput">Bearer token
+        <input id="apiTokenInput" type="password" placeholder="Required when backend auth is enabled" autocomplete="off" />
+      </label>
+      <button type="button" class="mini-btn" onclick="saveApiSettings()">Save</button>
+      <button type="button" class="mini-btn" onclick="clearApiToken()">Clear token</button>
+    </div>
+    <p id="apiSettingsStatus" class="field-help">API settings loading...</p>
     <ul id="status" class="status-list"><li>Checking...</li></ul>
   </section>
   <section class="card">

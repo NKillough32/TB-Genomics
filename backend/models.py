@@ -1,8 +1,11 @@
 
-from sqlalchemy import Boolean, Column, Date, ForeignKey, Integer, Numeric, String, TIMESTAMP
-from sqlalchemy.dialects.postgresql import JSONB, UUID
-from backend.database import Base
 import uuid
+
+from sqlalchemy import TIMESTAMP, Boolean, Column, Date, ForeignKey, Integer, Numeric, String
+from sqlalchemy.dialects.postgresql import JSONB, UUID
+
+from backend.database import Base
+
 
 class Case(Base):
     __tablename__ = "cases"
@@ -307,3 +310,11 @@ class Action(Base):
     created_by = Column(String)
     created_at = Column(TIMESTAMP)
     updated_at = Column(TIMESTAMP)
+
+
+class HscTrust(Base):
+    __tablename__ = "hsc_trusts"
+
+    trust_code = Column(String, primary_key=True)
+    trust_name = Column(String, nullable=False)
+    active = Column(Boolean, nullable=False, default=True)

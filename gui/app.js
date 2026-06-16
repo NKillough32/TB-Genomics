@@ -1,7 +1,68 @@
-
-let API='http://localhost:8000';const API_FALLBACK='http://127.0.0.1:8010';let activeJob=null;
+const API_DEFAULT='http://localhost:8000';
+const API_FALLBACK='http://127.0.0.1:8010';
+let API=localStorage.getItem('tb_api_base')||API_DEFAULT;
+let activeJob=null;
 let demoModeActive=sessionStorage.getItem('tb_demo_mode_active')==='1';
 let outbreakerStatusRefreshCount=0;
+const nativeFetch=window.fetch.bind(window);
+
+function currentAuthToken(){
+	return sessionStorage.getItem('tb_api_bearer_token')||'';
+}
+
+function authenticatedOptions(options){
+	const merged={...(options||{})};
+	const headers=new Headers(merged.headers||{});
+	const token=currentAuthToken().trim();
+	if(token && !headers.has('Authorization')){
+		headers.set('Authorization', `Bearer ${token}`);
+	}
+	merged.headers=headers;
+	return merged;
+}
+
+async function apiFetch(url, options){
+	return nativeFetch(url, authenticatedOptions(options));
+}
+
+const fetch=apiFetch;
+
+function refreshApiSettingsPanel(){
+	const baseInput=document.getElementById('apiBaseInput');
+	const tokenInput=document.getElementById('apiTokenInput');
+	const status=document.getElementById('apiSettingsStatus');
+	if(baseInput) baseInput.value=API;
+	if(tokenInput) tokenInput.value=currentAuthToken();
+	if(status){
+		status.textContent=currentAuthToken()
+			? `API: ${API} | Bearer token configured`
+			: `API: ${API} | No bearer token configured`;
+	}
+}
+
+function saveApiSettings(){
+	const baseInput=document.getElementById('apiBaseInput');
+	const tokenInput=document.getElementById('apiTokenInput');
+	const base=(baseInput?.value||API_DEFAULT).trim().replace(/\/+$/,'')||API_DEFAULT;
+	const token=(tokenInput?.value||'').trim();
+	API=base;
+	localStorage.setItem('tb_api_base', API);
+	if(token){
+		sessionStorage.setItem('tb_api_bearer_token', token);
+	}else{
+		sessionStorage.removeItem('tb_api_bearer_token');
+	}
+	refreshApiSettingsPanel();
+	checkBackendStatus();
+}
+
+function clearApiToken(){
+	sessionStorage.removeItem('tb_api_bearer_token');
+	const tokenInput=document.getElementById('apiTokenInput');
+	if(tokenInput) tokenInput.value='';
+	refreshApiSettingsPanel();
+	checkBackendStatus();
+}
 
 function refreshDemoModeStatus(){
 	const status=document.getElementById('demoModeStatus');
@@ -2750,4 +2811,16 @@ async function loadRegions(){
 		// Backend unavailable - leave placeholder only
 	}
 }
-(async()=>{try{await fetch(`${API}/`);document.getElementById('status').innerHTML=renderSystemStatusItem('Backend','Running','status-pass','API responded successfully');}catch{document.getElementById('status').innerHTML=renderSystemStatusItem('Backend','Unavailable','status-fail','Unable to reach the API from this session');}refreshDemoModeStatus();loadRegions();loadKPIBanner();loadWorkflowStatus();loadDataSafety();loadDataReadiness();loadAnalyticsClusters();loadTransmissionSynthesisOverview();loadActionableReportSummary();loadFullKpis();loadOutbreakerStatus();loadResistanceValidationStatus();})();
+
+async function checkBackendStatus(){
+	const status=document.getElementById('status');
+	if(!status) return;
+	try{
+		await fetch(`${API}/`);
+		status.innerHTML=renderSystemStatusItem('Backend','Running','status-pass','API responded successfully');
+	}catch{
+		status.innerHTML=renderSystemStatusItem('Backend','Unavailable','status-fail','Unable to reach the API from this session');
+	}
+}
+
+(async()=>{refreshApiSettingsPanel();await checkBackendStatus();refreshDemoModeStatus();loadRegions();loadKPIBanner();loadWorkflowStatus();loadDataSafety();loadDataReadiness();loadAnalyticsClusters();loadTransmissionSynthesisOverview();loadActionableReportSummary();loadFullKpis();loadOutbreakerStatus();loadResistanceValidationStatus();})();

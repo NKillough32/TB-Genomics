@@ -313,6 +313,27 @@ CREATE INDEX IF NOT EXISTS ix_actions_alert ON actions (alert_id);
 CREATE INDEX IF NOT EXISTS ix_actions_cluster ON actions (cluster_id);
 CREATE INDEX IF NOT EXISTS ix_actions_sample ON actions (sample_id);
 
+-- Northern Ireland operational lookup data.
+CREATE TABLE IF NOT EXISTS hsc_trusts (
+  trust_code TEXT PRIMARY KEY,
+  trust_name TEXT NOT NULL,
+  active BOOLEAN NOT NULL DEFAULT TRUE
+);
+
+INSERT INTO hsc_trusts (trust_code, trust_name, active) VALUES
+  ('BHSCT', 'Belfast Health and Social Care Trust', TRUE),
+  ('NHSCT', 'Northern Health and Social Care Trust', TRUE),
+  ('SEHSCT', 'South Eastern Health and Social Care Trust', TRUE),
+  ('SHSCT', 'Southern Health and Social Care Trust', TRUE),
+  ('WHSCT', 'Western Health and Social Care Trust', TRUE)
+ON CONFLICT (trust_code)
+DO UPDATE SET trust_name = EXCLUDED.trust_name, active = TRUE;
+
+CREATE INDEX IF NOT EXISTS ix_cases_specimen_date ON cases (specimen_date);
+CREATE INDEX IF NOT EXISTS ix_cases_geographic_region ON cases (geographic_region);
+CREATE INDEX IF NOT EXISTS ix_cases_region_specimen_date ON cases (geographic_region, specimen_date);
+CREATE INDEX IF NOT EXISTS ix_tb_interpretation_lineage ON tb_interpretation (lineage);
+
 -- Additional hot-query path indexes for synthesis and reporting
 CREATE INDEX IF NOT EXISTS ix_case_clusters_cluster ON case_clusters (cluster_id);
 CREATE INDEX IF NOT EXISTS ix_audit_log_action ON audit_log (action);

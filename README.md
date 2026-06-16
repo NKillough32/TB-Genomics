@@ -110,6 +110,7 @@ Notes:
 	`postgresql://tb:tb@localhost/tb_surveillance`
 - `Start-Platform-TBTools.bat` enables `TBPROFILER_WSL_FALLBACK=1`, `TBPROFILER_DOCKER_FALLBACK=1`, and `TBPROFILER_WSL_ENV=tbtools` for that session, opens a WSL shell to verify TBProfiler/Mykrobe availability, and refreshes `exports/lineage_dr_validation.json` before opening the browser.
 - Demo launchers set `TB_ENABLE_SYNTHETIC_SEEDING=1` and `TB_ALLOW_NON_OPERATIONAL_ACTIONS=1` for that session only.
+- If backend authentication is enabled, enter the API base URL and bearer token in the GUI System status panel before running workflows.
 
 GUI workflow overview
 ---------------------

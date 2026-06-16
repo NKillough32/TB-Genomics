@@ -6,6 +6,7 @@ from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 
 from backend import data_safety, database
+from backend.app import _cors_origins, app
 from backend.auth import (
     AuthenticatedUser,
     configured_token_identities,
@@ -13,7 +14,6 @@ from backend.auth import (
     get_current_user,
     require_roles,
 )
-from backend.app import _cors_origins, app
 from backend.database import Base
 from backend.models import (
     CaseContactLink,
@@ -336,6 +336,7 @@ def test_orm_metadata_covers_schema_tables_for_alembic_autogenerate():
         "resistance_calls",
         "alerts",
         "actions",
+        "hsc_trusts",
     }
 
     assert expected_tables.issubset(set(Base.metadata.tables))
@@ -402,6 +403,9 @@ def test_alembic_revision_files_are_present_and_linked():
     versions = Path(__file__).resolve().parents[1] / "migrations" / "versions"
     baseline = (versions / "0001_baseline.py").read_text(encoding="utf-8")
     epidemiology = (versions / "0002_epidemiology_tables.py").read_text(encoding="utf-8")
+    operational_indexes = (versions / "0009_operational_indexes_trusts.py").read_text(
+        encoding="utf-8"
+    )
 
     assert 'revision: str = "0001_baseline"' in baseline
     assert 'revision: str = "0002_epidemiology_tables"' in epidemiology
@@ -414,6 +418,26 @@ def test_alembic_revision_files_are_present_and_linked():
         "case_contact_links",
     }:
         assert f"CREATE TABLE IF NOT EXISTS {table_name}" in epidemiology
+    assert "down_revision:" in operational_indexes
+    assert '"0008_case_data_mgmt"' in operational_indexes
+    assert "CREATE TABLE IF NOT EXISTS hsc_trusts" in operational_indexes
+
+
+def test_schema_declares_operational_trust_lookup_and_indexes():
+    schema = (Path(__file__).resolve().parents[1] / "db" / "schema.sql").read_text(
+        encoding="utf-8"
+    )
+
+    assert "CREATE TABLE IF NOT EXISTS hsc_trusts" in schema
+    for trust_code in {"BHSCT", "NHSCT", "SEHSCT", "SHSCT", "WHSCT"}:
+        assert trust_code in schema
+    for index_name in {
+        "ix_cases_specimen_date",
+        "ix_cases_geographic_region",
+        "ix_cases_region_specimen_date",
+        "ix_tb_interpretation_lineage",
+    }:
+        assert index_name in schema
 
 
 class _EpiCreateDb:

@@ -1,5 +1,4 @@
 from contextlib import asynccontextmanager
-import os
 
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,7 +6,6 @@ from sqlalchemy import text
 
 from backend.auth import require_roles
 from backend.database import SessionLocal, init_db
-from backend.runtime_paths import ensure_runtime_dirs
 from backend.routers import (
     analytics,
     case_analysis,
@@ -24,10 +22,13 @@ from backend.routers import (
     reports,
     tool_diagnostics,
 )
+from backend.runtime_paths import ensure_runtime_dirs
+from backend.settings import enforce_startup_safety, load_settings, runtime_safety_findings
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    enforce_startup_safety()
     ensure_runtime_dirs()
     init_db()
     yield
@@ -37,13 +38,7 @@ app = FastAPI(title="NI TB Genomic Surveillance v0.6", lifespan=lifespan)
 
 
 def _cors_origins() -> list[str]:
-    configured = os.getenv("TB_CORS_ORIGINS", "").strip()
-    if configured:
-        return [origin.strip() for origin in configured.split(",") if origin.strip()]
-    return [
-        "http://localhost:8081",
-        "http://127.0.0.1:8081",
-    ]
+    return list(load_settings().cors_origins)
 
 
 app.add_middleware(
@@ -83,3 +78,15 @@ def health():
         return {"status": "healthy", "database": "ok"}
     finally:
         db.close()
+
+
+@app.get("/runtime-safety", dependencies=[Depends(require_roles("admin"))])
+def runtime_safety():
+    settings = load_settings()
+    return {
+        "deployment_mode": settings.deployment_mode,
+        "production": settings.is_production,
+        "auth_enabled": settings.auth_enabled,
+        "cors_origins": list(settings.cors_origins),
+        "findings": runtime_safety_findings(settings),
+    }

@@ -10,17 +10,52 @@ The runner is intentionally conservative:
 from __future__ import annotations
 
 import argparse
+import csv
+import hashlib
 import json
 import os
+import platform
+import re
 import shutil
 import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 RUN_ROOT = PROJECT_ROOT / "validation" / "ni_pilot" / "runs"
+DIRECT_IDENTIFIER_COLUMNS = {
+    "name",
+    "patient_name",
+    "first_name",
+    "forename",
+    "given_name",
+    "last_name",
+    "surname",
+    "family_name",
+    "nhs_number",
+    "hcn",
+    "health_and_care_number",
+    "date_of_birth",
+    "dob",
+    "postcode",
+    "postal_code",
+    "address",
+    "street_address",
+    "phone",
+    "telephone",
+    "mobile",
+    "email",
+    "national_insurance_number",
+}
+DIRECT_IDENTIFIER_VALUE_PATTERNS = {
+    "email": re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE),
+    "uk_postcode": re.compile(
+        r"\b(?:GIR\s?0AA|[A-Z]{1,2}\d[A-Z\d]?\s?\d[A-Z]{2})\b",
+        re.IGNORECASE,
+    ),
+    "nhs_like_number": re.compile(r"\b\d{3}[- ]?\d{3}[- ]?\d{4}\b"),
+}
 
 
 def _utc_stamp() -> str:
@@ -54,8 +89,7 @@ def _git(args: list[str]) -> str:
         ["git", *args],
         cwd=str(PROJECT_ROOT),
         text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
     )
     return proc.stdout.strip() if proc.returncode == 0 else ""
 
@@ -68,6 +102,109 @@ def _read_requirements(path: Path) -> list[str]:
         for line in path.read_text(encoding="utf-8").splitlines()
         if line.strip() and not line.strip().startswith("#")
     ]
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _dataset_hashes(dataset: Path) -> dict:
+    if not dataset.exists():
+        return {}
+    hashes = {}
+    for path in sorted(item for item in dataset.rglob("*") if item.is_file()):
+        rel = path.relative_to(dataset).as_posix()
+        hashes[rel] = {
+            "bytes": path.stat().st_size,
+            "sha256": _sha256_file(path),
+        }
+    return hashes
+
+
+def _environment_capture(python_exe: str, run_dir: Path) -> dict:
+    pip_freeze = _run(
+        [python_exe, "-m", "pip", "freeze"],
+        PROJECT_ROOT,
+        run_dir / "environment_pip_freeze.log",
+    )
+    return {
+        "python_version": sys.version,
+        "python_executable": python_exe,
+        "platform": platform.platform(),
+        "machine": platform.machine(),
+        "processor": platform.processor(),
+        "environment_variables": {
+            "DATABASE_URL_configured": bool(os.getenv("DATABASE_URL")),
+            "TB_DEPLOYMENT_MODE": os.getenv("TB_DEPLOYMENT_MODE"),
+            "TB_ENV": os.getenv("TB_ENV"),
+            "TB_AUTH_REQUIRED": os.getenv("TB_AUTH_REQUIRED"),
+            "TB_AUTH_TOKENS_configured": bool(os.getenv("TB_AUTH_TOKENS")),
+            "TB_CORS_ORIGINS": os.getenv("TB_CORS_ORIGINS"),
+            "TB_ENABLE_SYNTHETIC_SEEDING": os.getenv("TB_ENABLE_SYNTHETIC_SEEDING"),
+            "TB_ALLOW_NON_OPERATIONAL_ACTIONS": os.getenv("TB_ALLOW_NON_OPERATIONAL_ACTIONS"),
+            "TB_ALLOW_MOCK_OUTBREAKER": os.getenv("TB_ALLOW_MOCK_OUTBREAKER"),
+        },
+        "pip_freeze": pip_freeze,
+    }
+
+
+def _csv_files(dataset: Path) -> list[Path]:
+    if not dataset.exists():
+        return []
+    return sorted(dataset.glob("*.csv"))
+
+
+def _normalise_column(name: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", name.strip().lower()).strip("_")
+
+
+def deidentification_findings(dataset: Path) -> list[dict[str, str]]:
+    findings: list[dict[str, str]] = []
+    for path in _csv_files(dataset):
+        with path.open(encoding="utf-8", newline="") as handle:
+            reader = csv.DictReader(handle)
+            fieldnames = list(reader.fieldnames or [])
+            for column in fieldnames:
+                normalised = _normalise_column(column)
+                if normalised in DIRECT_IDENTIFIER_COLUMNS:
+                    findings.append(
+                        {
+                            "level": "FAIL",
+                            "file": path.name,
+                            "check": "direct_identifier_column",
+                            "message": f"Column '{column}' appears to contain direct identifiers.",
+                        }
+                    )
+
+            for row_number, row in enumerate(reader, start=2):
+                for column, value in row.items():
+                    text = (value or "").strip()
+                    if not text:
+                        continue
+                    for name, pattern in DIRECT_IDENTIFIER_VALUE_PATTERNS.items():
+                        if pattern.search(text):
+                            findings.append(
+                                {
+                                    "level": "FAIL",
+                                    "file": path.name,
+                                    "check": f"direct_identifier_value:{name}",
+                                    "message": f"Potential direct identifier in row {row_number}, column '{column}'.",
+                                }
+                            )
+    if not findings:
+        findings.append(
+            {
+                "level": "PASS",
+                "file": "*",
+                "check": "direct_identifier_scan",
+                "message": "No direct identifier columns or obvious direct identifier values were detected.",
+            }
+        )
+    return findings
 
 
 def _dataset_summary(dataset: Path) -> dict:
@@ -87,7 +224,7 @@ def _dataset_summary(dataset: Path) -> dict:
             "present": path.exists(),
             "bytes": path.stat().st_size if path.exists() else None,
         }
-    return {"path": str(dataset), "required_files": files}
+    return {"path": str(dataset), "required_files": files, "sha256": _dataset_hashes(dataset)}
 
 
 def _write_markdown_report(report: dict, path: Path) -> None:
@@ -205,6 +342,20 @@ def run(args: argparse.Namespace) -> dict:
             }
         )
 
+    deid_findings = deidentification_findings(dataset)
+    deid_failed = [finding for finding in deid_findings if finding["level"] == "FAIL"]
+    deid_evidence = run_dir / "vp002b_deidentification.json"
+    deid_evidence.write_text(json.dumps(deid_findings, indent=2) + "\n", encoding="utf-8")
+    checks.append(
+        {
+            "id": "VP-002B",
+            "name": "Automated de-identification screen",
+            "status": "fail" if deid_failed else "pass",
+            "evidence": str(deid_evidence.relative_to(PROJECT_ROOT)),
+            "findings": deid_findings,
+        }
+    )
+
     checks.append(
         {
             "id": "VP-002A",
@@ -264,6 +415,33 @@ def run(args: argparse.Namespace) -> dict:
         }
     )
 
+    dataset_hash_evidence = run_dir / "vp006_dataset_hashes.json"
+    dataset_hash_evidence.write_text(
+        json.dumps(_dataset_hashes(dataset), indent=2) + "\n",
+        encoding="utf-8",
+    )
+    checks.append(
+        {
+            "id": "VP-006",
+            "name": "Input dataset SHA256 evidence",
+            "status": "pass" if dataset.exists() else "fail",
+            "evidence": str(dataset_hash_evidence.relative_to(PROJECT_ROOT)),
+        }
+    )
+
+    environment = _environment_capture(python_exe, run_dir)
+    environment_evidence = run_dir / "vp007_environment.json"
+    environment_evidence.write_text(json.dumps(environment, indent=2) + "\n", encoding="utf-8")
+    checks.append(
+        {
+            "id": "VP-007",
+            "name": "Runtime environment capture",
+            "status": environment["pip_freeze"]["status"],
+            "evidence": str(environment_evidence.relative_to(PROJECT_ROOT)),
+            "command_result": environment["pip_freeze"],
+        }
+    )
+
     failed = [check for check in checks if check["status"] == "fail"]
     draft = [check for check in checks if check["status"] == "draft-only"]
     if failed:
@@ -283,6 +461,7 @@ def run(args: argparse.Namespace) -> dict:
         "decision": decision,
         "dataset": _dataset_summary(dataset),
         "code_freeze": code_freeze,
+        "environment": environment,
         "checks": checks,
     }
 

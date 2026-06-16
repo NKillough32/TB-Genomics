@@ -1,13 +1,14 @@
-from io import BytesIO
 import zipfile
+from io import BytesIO
 from types import SimpleNamespace
 
 import pytest
 from fastapi import UploadFile
 
-from backend.routers import ingest
 import scripts.validate_ingest_files as validate
+from backend.routers import ingest
 from scripts.prepare_ni_data import _apply_mapping, _rewrite_fasta_headers, _stable_uuid
+from scripts.run_ni_pilot_validation import _dataset_hashes, deidentification_findings
 
 
 def _reset_validate_findings():
@@ -154,4 +155,29 @@ def test_ingest_file_rejects_unsafe_zip_paths():
         )
 
     assert getattr(exc.value, "status_code", None) == 400
+
+
+def test_ni_pilot_deidentification_screen_blocks_direct_identifiers(tmp_path):
+    cases = tmp_path / "cases.csv"
+    cases.write_text(
+        "pseudonymised_case_id,patient_name,email\n"
+        "11111111-1111-4111-8111-111111111111,Jane Example,jane@example.org\n",
+        encoding="utf-8",
+    )
+
+    findings = deidentification_findings(tmp_path)
+
+    failed_checks = {finding["check"] for finding in findings if finding["level"] == "FAIL"}
+    assert "direct_identifier_column" in failed_checks
+    assert "direct_identifier_value:email" in failed_checks
+
+
+def test_ni_pilot_dataset_hashes_capture_sha256_and_size(tmp_path):
+    cases = tmp_path / "cases.csv"
+    cases.write_text("pseudonymised_case_id\n11111111-1111-4111-8111-111111111111\n", encoding="utf-8")
+
+    hashes = _dataset_hashes(tmp_path)
+
+    assert hashes["cases.csv"]["bytes"] == cases.stat().st_size
+    assert len(hashes["cases.csv"]["sha256"]) == 64
 

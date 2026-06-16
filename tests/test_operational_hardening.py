@@ -35,6 +35,7 @@ from backend.routers.epidemiology import (
     update_case_location_event,
 )
 from backend.routers.ingest import _require_ingest_api_key
+from backend.settings import enforce_startup_safety, load_settings, runtime_safety_findings
 
 
 def test_ingest_api_key_is_optional_for_local_development(monkeypatch):
@@ -245,6 +246,44 @@ def test_cors_origins_keep_local_defaults(monkeypatch):
     assert _cors_origins() == ["http://localhost:8081", "http://127.0.0.1:8081"]
 
 
+def test_runtime_safety_warns_when_local_auth_is_disabled(monkeypatch):
+    monkeypatch.delenv("TB_AUTH_REQUIRED", raising=False)
+    monkeypatch.delenv("TB_AUTH_TOKENS", raising=False)
+    monkeypatch.setenv("TB_DEPLOYMENT_MODE", "local")
+
+    findings = runtime_safety_findings(load_settings())
+
+    assert {"level": "warning", "code": "auth_disabled", "message": "API authentication is disabled."} in findings
+
+
+def test_runtime_safety_blocks_unsafe_production_configuration(monkeypatch):
+    monkeypatch.setenv("TB_DEPLOYMENT_MODE", "production")
+    monkeypatch.delenv("TB_AUTH_REQUIRED", raising=False)
+    monkeypatch.delenv("TB_AUTH_TOKENS", raising=False)
+    monkeypatch.setenv("TB_ENABLE_SYNTHETIC_SEEDING", "1")
+    monkeypatch.setenv("TB_CORS_ORIGINS", "*")
+
+    with pytest.raises(RuntimeError) as blocked:
+        enforce_startup_safety(load_settings())
+
+    message = str(blocked.value)
+    assert "auth_disabled" in message
+    assert "synthetic_seeding_enabled" in message
+    assert "cors_wildcard" in message
+
+
+def test_runtime_safety_allows_explicit_production_auth_and_origin(monkeypatch):
+    monkeypatch.setenv("TB_DEPLOYMENT_MODE", "production")
+    monkeypatch.setenv("TB_AUTH_REQUIRED", "1")
+    monkeypatch.setenv("TB_AUTH_TOKENS", "admin-token=admin")
+    monkeypatch.setenv("TB_CORS_ORIGINS", "https://tb.example.nhs.uk")
+    monkeypatch.delenv("TB_ENABLE_SYNTHETIC_SEEDING", raising=False)
+    monkeypatch.delenv("TB_ALLOW_NON_OPERATIONAL_ACTIONS", raising=False)
+    monkeypatch.delenv("TB_ALLOW_MOCK_OUTBREAKER", raising=False)
+
+    enforce_startup_safety(load_settings())
+
+
 def test_advanced_fasta_analysis_job_is_registered():
     from backend.job_runner import ALLOWED_JOBS, PIPELINE_STEPS
 
@@ -354,6 +393,7 @@ def test_env_example_documents_deployment_runtime_knobs():
     )
 
     for name in {
+        "TB_DEPLOYMENT_MODE",
         "TB_AUTO_MIGRATE",
         "TB_CORS_ORIGINS",
         "TB_ALLOW_MOCK_OUTBREAKER",

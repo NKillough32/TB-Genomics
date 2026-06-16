@@ -1,14 +1,15 @@
-import os
-from typing import Dict, Any
+from typing import Any
 
 from fastapi import HTTPException
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from backend.settings import load_settings
+
 SYNTHETIC_INTERPRETATION_MARKER = "Synthetic interpretation grounded in public incidence trends%"
 
 
-def get_data_safety_status(db: Session) -> Dict[str, Any]:
+def get_data_safety_status(db: Session) -> dict[str, Any]:
     """Return whether current dataset is safe for operational public-health actions."""
     total_cases = int(db.execute(text("SELECT COUNT(*) FROM cases")).scalar() or 0)
 
@@ -70,13 +71,13 @@ def get_data_safety_status(db: Session) -> Dict[str, Any]:
     }
 
 
-def enforce_operational_dataset(db: Session, action_label: str) -> Dict[str, Any]:
+def enforce_operational_dataset(db: Session, action_label: str) -> dict[str, Any]:
     """Raise HTTP 409 when dataset is not operational-safe unless explicitly overridden."""
     status = get_data_safety_status(db)
     if status["operational_safe"]:
         return status
 
-    if os.getenv("TB_ALLOW_NON_OPERATIONAL_ACTIONS", "0") == "1":
+    if load_settings().allow_non_operational_actions:
         return status
 
     raise HTTPException(

@@ -6,6 +6,7 @@ from typing import Annotated
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from backend.settings import load_settings
 
 ROLE_ORDER = {
     "viewer": 10,
@@ -24,13 +25,9 @@ class AuthenticatedUser:
     auth_disabled: bool = False
 
 
-def _truthy(value: str | None) -> bool:
-    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
-
-
 def auth_enabled() -> bool:
     """Return whether request authentication should be enforced."""
-    return _truthy(os.getenv("TB_AUTH_REQUIRED")) or bool(os.getenv("TB_AUTH_TOKENS", "").strip())
+    return load_settings().auth_enabled
 
 
 def _normalise_roles(raw_roles: str) -> tuple[str, ...]:

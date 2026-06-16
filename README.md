@@ -60,7 +60,7 @@ Current repo standing
 - Main backend entry point: `backend.app:app`.
 - Local GUI entry point: static files in `gui/`, normally served on port 8081.
 - Database: PostgreSQL using the schema in `db/schema.sql` plus Alembic support under `migrations/`.
-- Main automated test entry point: `pytest` from the repository root.
+- Main automated test entry point: `.\.venv\Scripts\python.exe -m pytest` from the repository root.
 - Root `requirements.txt` delegates to `backend/requirements.txt`; development-only tools are in `requirements-dev.txt`.
 
 External dependencies (not bundled):
@@ -90,11 +90,15 @@ Quick start:
 5) Set the database connection string for the current PowerShell session:
 	$env:DATABASE_URL="postgresql://tb:tb@localhost/tb_surveillance"
 6) Start the backend:
-	c:/Users/Nicho/Desktop/TB-Genomics-main/.venv/Scripts/python.exe -m uvicorn backend.app:app --reload
+	.\.venv\Scripts\python.exe -m uvicorn backend.app:app --reload
 7) Start the GUI from a second PowerShell window:
 	cd gui
 	python -m http.server 8081
 8) Open http://localhost:8081
+
+Run tests in a clean Python 3.11 virtual environment:
+	.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+	.\.venv\Scripts\python.exe -m pytest
 
 One-click Windows launchers:
 - Double-click `Start-Backend.bat` to run only the backend.

@@ -1,0 +1,148 @@
+{
+  "cluster_action_rows": [
+    {
+      "case_count": 2,
+      "cluster_id": "cluster-1",
+      "investigation_status": "open",
+      "most_recent_specimen": "2026-06-05",
+      "priority_score": 9,
+      "recency_days": 20,
+      "region_count": 1
+    },
+    {
+      "case_count": 1,
+      "cluster_id": "cluster-2",
+      "investigation_status": "closed",
+      "most_recent_specimen": "2026-06-10",
+      "priority_score": 5,
+      "recency_days": 15,
+      "region_count": 1
+    }
+  ],
+  "cluster_epi_rows": [
+    {
+      "cases": 2,
+      "cluster_id": "cluster-1",
+      "first_specimen": "2026-06-01",
+      "investigation_status": "open",
+      "latest_specimen": "2026-06-05",
+      "lineage_distribution": "L4: 2",
+      "max_snp_proxy": 3,
+      "mdr_cases": 0,
+      "median_snp_proxy": 3.0,
+      "recent_30d": 2,
+      "recent_60d": 2,
+      "recent_90d": 2,
+      "rr_cases": 0,
+      "suspected_index_case": "case-a",
+      "transmission_generations": "Yes (max 2)"
+    },
+    {
+      "cases": 1,
+      "cluster_id": "cluster-2",
+      "first_specimen": "2026-06-10",
+      "investigation_status": "closed",
+      "latest_specimen": "2026-06-10",
+      "lineage_distribution": "L2: 1",
+      "max_snp_proxy": 15,
+      "mdr_cases": 0,
+      "median_snp_proxy": 15.0,
+      "recent_30d": 1,
+      "recent_60d": 1,
+      "recent_90d": 1,
+      "rr_cases": 0,
+      "suspected_index_case": "case-c",
+      "transmission_generations": "No (max 0)"
+    }
+  ],
+  "discordant_pairs": [
+    {
+      "disc_code": "D1",
+      "interpretation": "Temporal support without pairwise SNP support; assess missing intermediates/importation",
+      "out_result": "linked",
+      "pair": "case-a-case-c",
+      "pairwise": 15,
+      "posterior": 0.83,
+      "snp_result": "pairwise>12 or unavailable"
+    }
+  ],
+  "excluded_from_outbreaker": 1,
+  "genomic_pairs": [
+    {
+      "action_owner": "TB MDT",
+      "confidence_tier": "High confidence",
+      "due_date": "next MDT",
+      "epi_link": "same cluster",
+      "lineage_resistance": "yes/yes",
+      "pair": "case-a->case-b",
+      "pair_html": "case-a→case-b",
+      "pairwise": "3",
+      "posterior": 0.91,
+      "qc": "pass/pass",
+      "source": "case-a",
+      "source_display": "case-a",
+      "synthesis_concordance": "Lineage: concordant; DR: concordant",
+      "synthesis_confidence": "Strong support",
+      "synthesis_flags": "temporal support",
+      "synthesis_priority": "9",
+      "target": "case-b",
+      "target_display": "case-b",
+      "validation_flag": "SNP-linked"
+    }
+  ],
+  "genomically_discordant": [],
+  "model_only_pairs": [],
+  "provenance": {
+    "summary_provenance": "mock",
+    "synthesis_format_version": "2026.06"
+  },
+  "qc_resolution_pairs": [
+    {
+      "action_owner": "Laboratory",
+      "confidence_tier": "Exploratory",
+      "due_date": "48h",
+      "epi_link": "not confirmed",
+      "lineage_resistance": "no/no",
+      "pair": "case-a->case-c",
+      "pair_html": "case-a→case-c",
+      "pairwise": "15",
+      "posterior": 0.83,
+      "qc": "pass/fail",
+      "source": "case-a",
+      "source_display": "case-a",
+      "synthesis_concordance": "Lineage: discordant; DR: discordant",
+      "synthesis_confidence": "Contradictory",
+      "synthesis_flags": "lineage mismatch, resistance discordance",
+      "synthesis_priority": "4",
+      "target": "case-c",
+      "target_display": "case-c",
+      "validation_flag": "QC-unresolved"
+    }
+  ],
+  "qc_status_counts": {
+    "contamination": 1,
+    "fail": 1,
+    "not_reported": 0,
+    "pass": 2
+  },
+  "thresholds": {
+    "high_posterior_label": "0.70",
+    "high_posterior_threshold": 0.7,
+    "high_snp_contradiction_threshold": 20,
+    "low_snp_threshold": 12
+  },
+  "totals": {
+    "clustered_cases": 3,
+    "open_clusters": 1,
+    "total_cases": 3
+  },
+  "weekly_trends": [
+    {
+      "eligible_cases": 3,
+      "qc_pass_pct": 100.0,
+      "sequenced_cases": 2,
+      "sequenced_pct": 66.67,
+      "week_start": "2026-06-01"
+    }
+  ]
+}

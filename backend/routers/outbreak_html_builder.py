@@ -14,7 +14,6 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from backend.quality_gates import build_workflow_status
-from backend.routers.case_overview import surveillance_kpis
 from backend.routers.cases import (
     _confidence_tier,
     _drug_gene_status_label,
@@ -38,6 +37,7 @@ from backend.routers.cases import (
     _short_case_id,
     _write_csv_rows,
 )
+from backend.routers.outbreak_report_data import build_outbreak_report_data
 from backend.synthesis.transmission_synthesis import SYNTHESIS_FORMAT_VERSION
 
 logger = logging.getLogger(__name__)
@@ -62,84 +62,25 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
     generated_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
     today = _dt.date.today()
 
-    # -- Basic DB counts --------------------------------------------------------
-    total_cases = db.execute(text("SELECT COUNT(*) FROM cases")).scalar() or 0
-    clustered_cases = db.execute(text("SELECT COUNT(DISTINCT sample_id) FROM case_clusters")).scalar() or 0
-    open_clusters = db.execute(
-        text("SELECT COUNT(*) FROM clusters WHERE investigation_status = 'open'")
-    ).scalar() or 0
-
-    # -- Load export JSON artifacts ---------------------------------------------
-    summary_data = _load_export_json("outbreaker_summary.json")
-    transmission_data = _load_export_json("transmission_network.json")
-    decycled_consensus_data = _load_export_json("outbreaker_decycled_consensus.json")
-    synthesis_data = _load_export_json("synthesis_output.json")
-    lineage_dr_data = _load_export_json("lineage_dr_validation.json")
-    resistance_validation_data = _load_export_json("resistance_validation.json")
-    secondary_validation_data = _load_export_json("secondary_engine_validation.json")
-    method_comparison_data = _load_export_json("cluster_method_comparison.json")
-    sequence_summary_data = _load_export_json("sequence_clustering_summary.json")
-    fasta_analysis_data = _load_export_json("fasta_analysis_summary.json")
-
-    synthesis_pairs = synthesis_data.get("pairs") if isinstance(synthesis_data, dict) else []
-    if not isinstance(synthesis_pairs, list):
-        synthesis_pairs = []
-    synthesis_parameters = synthesis_data.get("parameters") if isinstance(synthesis_data, dict) else {}
-    if not isinstance(synthesis_parameters, dict):
-        synthesis_parameters = {}
-    low_snp_threshold = int(synthesis_parameters.get("low_snp_threshold") or 12)
-    high_snp_contradiction_threshold = int(synthesis_parameters.get("high_snp_contradiction_threshold") or 20)
-    high_posterior_threshold = float(synthesis_parameters.get("high_posterior_threshold") or 0.70)
-    high_posterior_label = f"{high_posterior_threshold:.2f}"
-    summary_provenance = str(summary_data.get("data_provenance") or "unknown") if isinstance(summary_data, dict) else "unknown"
-    synthesis_format_version = synthesis_data.get("format_version") if isinstance(synthesis_data, dict) else None
-    synthesis_pair_by_directed: dict[tuple[str, str], dict] = {}
-    synthesis_pair_by_unordered: dict[tuple[str, str], dict] = {}
-    for pair in synthesis_pairs:
-        if not isinstance(pair, dict):
-            continue
-        src = str(pair.get("source") or "")
-        tgt = str(pair.get("target") or "")
-        if not src or not tgt:
-            continue
-        synthesis_pair_by_directed[(src, tgt)] = pair
-        synthesis_pair_by_unordered[tuple(sorted([src, tgt]))] = pair
-
-    synthesis_clusters = synthesis_data.get("clusters") if isinstance(synthesis_data, dict) else []
-    if not isinstance(synthesis_clusters, list):
-        synthesis_clusters = []
-    synthesis_cluster_by_id = {
-        str(cluster.get("cluster_id")): cluster
-        for cluster in synthesis_clusters
-        if isinstance(cluster, dict) and cluster.get("cluster_id")
-    }
-
-    def _synthesis_pair_for(source: str, target: str) -> dict:
-        return (
-            synthesis_pair_by_directed.get((source, target))
-            or synthesis_pair_by_unordered.get(tuple(sorted([source, target])))
-            or {}
-        )
-
-    def _lineage_distribution_text(cluster_id: str) -> str:
-        cluster = synthesis_cluster_by_id.get(str(cluster_id or ""))
-        distribution = cluster.get("lineage_distribution") if isinstance(cluster, dict) else {}
-        if not isinstance(distribution, dict) or not distribution:
-            return "n/a"
-        items = sorted(distribution.items(), key=lambda item: (-int(item[1] or 0), str(item[0])))
-        return ", ".join(f"{key}: {value}" for key, value in items[:4])
-
-    def _transmission_generation_text(cluster_id: str) -> str:
-        cluster = synthesis_cluster_by_id.get(str(cluster_id or ""))
-        summary = cluster.get("summary") if isinstance(cluster, dict) else {}
-        tx = summary.get("transmission_generations") if isinstance(summary, dict) else {}
-        if not isinstance(tx, dict):
-            return "n/a"
-        max_generation = tx.get("max_generation")
-        sustained = bool(tx.get("sustained_transmission_flag"))
-        if max_generation is None:
-            return "n/a"
-        return f"{'Yes' if sustained else 'No'} (max {max_generation})"
+    report_data = build_outbreak_report_data(db)
+    total_cases = report_data.total_cases
+    open_clusters = report_data.open_clusters
+    summary_data = report_data.summary_data
+    transmission_data = report_data.transmission_data
+    decycled_consensus_data = report_data.decycled_consensus_data
+    synthesis_data = report_data.synthesis_data
+    lineage_dr_data = report_data.lineage_dr_data
+    resistance_validation_data = report_data.resistance_validation_data
+    method_comparison_data = report_data.method_comparison_data
+    sequence_summary_data = report_data.sequence_summary_data
+    fasta_analysis_data = report_data.fasta_analysis_data
+    synthesis_pairs = report_data.synthesis_pairs
+    low_snp_threshold = report_data.low_snp_threshold
+    high_snp_contradiction_threshold = report_data.high_snp_contradiction_threshold
+    high_posterior_label = report_data.high_posterior_label
+    summary_provenance = report_data.summary_provenance
+    synthesis_format_version = report_data.synthesis_format_version
+    qc_table_exists = report_data.qc_table_exists
 
     mock_outbreaker_html = (
         '<div class="callout callout-alert" style="margin-top:.6rem"><strong>Mock outbreaker2 fallback in use.</strong> '
@@ -317,210 +258,25 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
 
     confidence_gate_table_html = _build_confidence_gate_table()
 
-    try:
-        kpi_data = surveillance_kpis(weeks=12, db=db)
-    except Exception as exc:
-        kpi_data = {"warning": str(exc)}
-
-    # -- Weekly trends ----------------------------------------------------------
-    qc_table_exists = db.execute(
-        text("SELECT to_regclass('public.sample_qc_metrics') IS NOT NULL")
-    ).scalar()
-    weekly_trends = []
-    try:
-        if qc_table_exists:
-            weekly_trends = db.execute(text("""
-                WITH ww AS (SELECT (DATE_TRUNC('week',CURRENT_DATE)-(s*INTERVAL '7 days'))::date AS ws
-                            FROM generate_series(11,0,-1) s),
-                wdata AS (SELECT ww.ws,COUNT(c.pseudonymised_case_id)::int AS eligible,
-                    COUNT(cs.sample_id)::int AS sequenced,
-                    COUNT(sqm.sample_id)::int AS qc_rep,
-                    COUNT(*) FILTER(WHERE LOWER(COALESCE(sqm.qc_status,'')) IN ('pass','passed'))::int AS qc_pass
-                    FROM ww LEFT JOIN cases c ON c.specimen_date>=ww.ws AND c.specimen_date<ww.ws+INTERVAL '7 days'
-                    LEFT JOIN consensus_sequences cs ON cs.sample_id=c.pseudonymised_case_id
-                    LEFT JOIN sample_qc_metrics sqm ON sqm.sample_id=c.pseudonymised_case_id
-                    GROUP BY ww.ws)
-                SELECT ws AS week_start,eligible,sequenced,
-                    CASE WHEN eligible=0 THEN NULL ELSE ROUND((sequenced::numeric/eligible::numeric)*100,1) END AS seq_pct,
-                    CASE WHEN qc_rep=0 THEN NULL ELSE ROUND((qc_pass::numeric/qc_rep::numeric)*100,1) END AS qc_pct
-                FROM wdata ORDER BY ws
-            """)).mappings().all()
-        else:
-            weekly_trends = db.execute(text("""
-                WITH ww AS (SELECT (DATE_TRUNC('week',CURRENT_DATE)-(s*INTERVAL '7 days'))::date AS ws
-                            FROM generate_series(11,0,-1) s)
-                SELECT ww.ws AS week_start,COUNT(c.pseudonymised_case_id)::int AS eligible,
-                    COUNT(cs.sample_id)::int AS sequenced,
-                    CASE WHEN COUNT(c.pseudonymised_case_id)=0 THEN NULL
-                         ELSE ROUND((COUNT(cs.sample_id)::numeric/COUNT(c.pseudonymised_case_id)::numeric)*100,1)
-                    END AS seq_pct, NULL::numeric AS qc_pct
-                FROM ww LEFT JOIN cases c ON c.specimen_date>=ww.ws AND c.specimen_date<ww.ws+INTERVAL '7 days'
-                LEFT JOIN consensus_sequences cs ON cs.sample_id=c.pseudonymised_case_id
-                GROUP BY ww.ws ORDER BY ww.ws
-            """)).mappings().all()
-    except Exception:
-        weekly_trends = []
-
-    # -- Case-level detail query ------------------------------------------------
-    case_rows = []
-    try:
-        case_rows = db.execute(text("""
-            SELECT c.pseudonymised_case_id::text AS case_id, c.specimen_date, c.geographic_region,
-                c.case_status, cc.cluster_id::text AS cluster_id, cl.snp_distance, cl.investigation_status,
-                ti.lineage, ti.predicted_drug_resistance, ti.resistance_mutations, ti.interpretation_summary,
-                cs.sequence, sqm.qc_status, sqm.coverage_breadth, sqm.mean_depth,
-                sqm.contamination_flag, sqm.ambiguous_base_percent
-            FROM cases c
-            LEFT JOIN case_clusters cc ON cc.sample_id=c.pseudonymised_case_id
-            LEFT JOIN clusters cl ON cl.cluster_id=cc.cluster_id
-            LEFT JOIN tb_interpretation ti ON ti.sample_id=c.pseudonymised_case_id
-            LEFT JOIN consensus_sequences cs ON cs.sample_id=c.pseudonymised_case_id
-            LEFT JOIN sample_qc_metrics sqm ON sqm.sample_id=c.pseudonymised_case_id
-            ORDER BY c.specimen_date DESC NULLS LAST, c.pseudonymised_case_id
-        """)).mappings().all()
-    except Exception:
-        case_rows = []
-
-    case_by_id = {str(r.get("case_id")): r for r in case_rows if r.get("case_id")}
-    sequence_by_case = {
-        str(r.get("case_id")): str(r.get("sequence") or "").strip().upper()
-        for r in case_rows if r.get("case_id") and r.get("sequence")
-    }
-    pairwise_snp_matrix = _pairwise_matrix(sequence_by_case)
-
-    # -- QC status counts -------------------------------------------------------
-    qc_status_counts = {"pass": 0, "fail": 0, "not_reported": 0, "contamination": 0}
-    for r in case_rows:
-        st = str(r.get("qc_status") or "not_reported").lower()
-        if bool(r.get("contamination_flag")):
-            qc_status_counts["contamination"] += 1
-        if st in ("pass", "passed"):
-            qc_status_counts["pass"] += 1
-        elif st in ("", "not_reported", "na", "n/a", "unknown"):
-            qc_status_counts["not_reported"] += 1
-        else:
-            qc_status_counts["fail"] += 1
-    excluded_from_outbreaker = sum(
-        1 for r in case_rows
-        if str(r.get("qc_status") or "").lower() not in ("pass", "passed") or bool(r.get("contamination_flag"))
-    )
-
-    # -- Transmission edge data -------------------------------------------------
-    transmission_edges = (transmission_data or {}).get("edges") or (transmission_data or {}).get("transmission_edges") or []
-    enriched_network_edges = []
-    for edge in transmission_edges:
-        if not isinstance(edge, dict):
-            continue
-        stability = edge.get("chain_stability") if isinstance(edge.get("chain_stability"), dict) else {}
-        enriched = dict(edge)
-        enriched["source_display"] = _short_case_id(str(edge.get("source") or ""))
-        enriched["target_display"] = _short_case_id(str(edge.get("target") or ""))
-        enriched["credibility_class"] = edge.get("credibility_class") or edge.get("confidence")
-        enriched["posterior_entropy"] = edge.get("posterior_entropy")
-        enriched["chain_agreement"] = stability.get("top_ancestor_agreement")
-        enriched["probability_range_by_chain"] = (
-            f"{stability.get('probability_min')} - {stability.get('probability_max')}"
-            if stability.get("probability_min") is not None and stability.get("probability_max") is not None
-            else "n/a"
-        )
-        enriched_network_edges.append(enriched)
-    enriched_high_confidence_edges = [
-        edge for edge in enriched_network_edges
-        if float(edge.get("probability") or 0.0) >= high_posterior_threshold
-    ]
-    best_incoming: dict = {}
-    best_outgoing: dict = {}
-    outbreaker_pair_prob: dict = {}
-    for edge in transmission_edges:
-        src = str(edge.get("source") or "")
-        tgt = str(edge.get("target") or "")
-        if not src or not tgt:
-            continue
-        prob = float(edge.get("probability") or 0.0)
-        if tgt not in best_incoming or prob > best_incoming[tgt]["probability"]:
-            best_incoming[tgt] = {"source": src, "probability": prob}
-        if src not in best_outgoing or prob > best_outgoing[src]["probability"]:
-            best_outgoing[src] = {"target": tgt, "probability": prob}
-        pk = tuple(sorted([src, tgt]))
-        if pk not in outbreaker_pair_prob or prob > outbreaker_pair_prob[pk]:
-            outbreaker_pair_prob[pk] = prob
-
-    high_confidence_edges = [e for e in transmission_edges if float(e.get("probability") or 0.0) >= high_posterior_threshold]
-    high_confidence_all_count = len(high_confidence_edges)
-    high_confidence_snapshot_count = int((transmission_data or {}).get("high_confidence_edges", 0) or 0)
-
-    sequence_cluster_members: dict = {}
-    for r in case_rows:
-        cid = str(r.get("cluster_id") or "")
-        cid_case = str(r.get("case_id") or "")
-        if cid and cid_case:
-            sequence_cluster_members.setdefault(cid, []).append(cid_case)
-
-    nearest_neighbor_snp: dict = {}
-    nearest_neighbor_partner: dict = {}
-    for case_id, seq in sequence_by_case.items():
-        relevant = []
-        for other_id in sequence_by_case:
-            if other_id == case_id:
-                continue
-            dist = pairwise_snp_matrix.get(_pair_key(case_id, other_id))
-            if dist is not None:
-                relevant.append((dist, other_id))
-        if relevant:
-            bd, bp = sorted(relevant)[0]
-            nearest_neighbor_snp[case_id] = int(bd)
-            nearest_neighbor_partner[case_id] = bp
-
-    pairwise_links_le_12 = sum(1 for d in pairwise_snp_matrix.values() if d <= 12)
-    sequence_pair_set = {pair for pair, d in pairwise_snp_matrix.items() if d <= 12}
-
-    # -- Cluster action priority (from DB) -------------------------------------
-    cluster_action_rows = []
-    try:
-        cluster_action_rows = db.execute(text("""
-            WITH cs AS (SELECT cc.cluster_id,COUNT(*)::int AS case_count,
-                MAX(c.specimen_date) AS most_recent_specimen,
-                COUNT(DISTINCT c.geographic_region)::int AS region_count,
-                COALESCE(cl.investigation_status,'unknown') AS investigation_status,
-                EXTRACT(DAY FROM (CURRENT_DATE::timestamp-MAX(c.specimen_date)::timestamp))::int AS recency_days
-                FROM case_clusters cc JOIN cases c ON c.pseudonymised_case_id=cc.sample_id
-                LEFT JOIN clusters cl ON cl.cluster_id=cc.cluster_id
-                GROUP BY cc.cluster_id,cl.investigation_status)
-            SELECT cluster_id,case_count,region_count,most_recent_specimen,recency_days,investigation_status,
-                ((case_count*2)+(region_count*3)+CASE WHEN recency_days<=14 THEN 3 WHEN recency_days<=30 THEN 2
-                 WHEN recency_days<=60 THEN 1 ELSE 0 END+CASE WHEN investigation_status='open' THEN 3 ELSE 0 END)::int AS priority_score
-            FROM cs ORDER BY priority_score DESC,case_count DESC,most_recent_specimen DESC LIMIT 10
-        """)).mappings().all()
-    except Exception:
-        cluster_action_rows = []
-
-    # -- Cluster epidemiology ---------------------------------------------------
-    cluster_epi_rows = []
-    try:
-        cluster_epi_rows = db.execute(text("""
-            WITH base AS (SELECT cc.cluster_id::text AS cluster_id,c.pseudonymised_case_id::text AS case_id,
-                c.specimen_date,c.geographic_region,COALESCE(cl.investigation_status,'unknown') AS investigation_status,
-                cl.snp_distance,LOWER(CAST(ti.predicted_drug_resistance AS text)) AS dr_text
-                FROM case_clusters cc JOIN cases c ON c.pseudonymised_case_id=cc.sample_id
-                LEFT JOIN clusters cl ON cl.cluster_id=cc.cluster_id
-                LEFT JOIN tb_interpretation ti ON ti.sample_id=cc.sample_id),
-            idx AS (SELECT DISTINCT ON(cluster_id) cluster_id,case_id AS suspected_index_case
-                    FROM base ORDER BY cluster_id,specimen_date ASC NULLS LAST,case_id)
-            SELECT b.cluster_id,COUNT(*)::int AS cases,
-                MIN(b.specimen_date) AS first_specimen,MAX(b.specimen_date) AS latest_specimen,
-                ROUND(AVG(COALESCE(b.snp_distance,0))::numeric,1) AS median_snp_proxy,
-                MAX(COALESCE(b.snp_distance,0))::int AS max_snp_proxy,
-                COUNT(*) FILTER(WHERE b.dr_text LIKE '%rifamp%' AND (b.dr_text LIKE '%resistant%' OR b.dr_text LIKE '%"r"%'))::int AS rr_cases,
-                COUNT(*) FILTER(WHERE b.dr_text LIKE '%rifamp%' AND b.dr_text LIKE '%isoniazid%' AND (b.dr_text LIKE '%resistant%' OR b.dr_text LIKE '%"r"%'))::int AS mdr_cases,
-                COUNT(*) FILTER(WHERE b.specimen_date>=CURRENT_DATE-INTERVAL '30 days')::int AS recent_30d,
-                COUNT(*) FILTER(WHERE b.specimen_date>=CURRENT_DATE-INTERVAL '60 days')::int AS recent_60d,
-                COUNT(*) FILTER(WHERE b.specimen_date>=CURRENT_DATE-INTERVAL '90 days')::int AS recent_90d,
-                MAX(b.investigation_status) AS investigation_status, i.suspected_index_case
-            FROM base b LEFT JOIN idx i ON i.cluster_id=b.cluster_id
-            GROUP BY b.cluster_id,i.suspected_index_case ORDER BY cases DESC,latest_specimen DESC LIMIT 20
-        """)).mappings().all()
-    except Exception:
-        cluster_epi_rows = []
+    kpi_data = report_data.kpi_data or {}
+    weekly_trends = report_data.weekly_trends
+    case_rows = report_data.case_rows
+    case_by_id = report_data.case_by_id
+    sequence_by_case = report_data.sequence_by_case
+    pairwise_snp_matrix = report_data.pairwise_snp_matrix
+    qc_status_counts = report_data.qc_status_counts
+    excluded_from_outbreaker = report_data.excluded_from_outbreaker
+    transmission_edges = report_data.transmission_edges
+    enriched_high_confidence_edges = report_data.enriched_high_confidence_edges
+    best_incoming = report_data.best_incoming
+    best_outgoing = report_data.best_outgoing
+    high_confidence_edges = report_data.high_confidence_edges
+    high_confidence_all_count = report_data.high_confidence_all_count
+    high_confidence_snapshot_count = report_data.high_confidence_snapshot_count
+    nearest_neighbor_snp = report_data.nearest_neighbor_snp
+    pairwise_links_le_12 = len(report_data.sequence_pair_set)
+    cluster_action_rows = report_data.cluster_action_rows
+    cluster_epi_rows = report_data.cluster_epi_rows
 
     # -- Mutation validation rows -----------------------------------------------
     mutation_rows_raw = []
@@ -854,89 +610,13 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
         graphics_html = []
 
     # -- Pair categorisation ----------------------------------------------------
-    genomic_pairs = []
-    model_only_pairs = []
-    qc_resolution_pairs = []
-    genomically_discordant = []
-    for edge in sorted(high_confidence_edges, key=lambda x: float(x.get("probability") or 0.0), reverse=True)[:40]:
-        src = str(edge.get("source") or "")
-        tgt = str(edge.get("target") or "")
-        prob = float(edge.get("probability") or 0.0)
-        src_case = case_by_id.get(src) or {}
-        tgt_case = case_by_id.get(tgt) or {}
-        src_cluster = str(src_case.get("cluster_id") or "")
-        tgt_cluster = str(tgt_case.get("cluster_id") or "")
-        same_cluster = bool(src_cluster and src_cluster == tgt_cluster)
-        pairwise_distance = pairwise_snp_matrix.get(_pair_key(src, tgt))
-        src_qc = str(src_case.get("qc_status") or "not_reported")
-        tgt_qc = str(tgt_case.get("qc_status") or "not_reported")
-        qc_problem = (src_qc.lower() not in ("pass", "passed") or tgt_qc.lower() not in ("pass", "passed")
-                      or bool(src_case.get("contamination_flag")) or bool(tgt_case.get("contamination_flag")))
-        validation_flag = (
-            "SNP-linked" if pairwise_distance is not None and pairwise_distance <= 12 and same_cluster and not qc_problem
-            else ("QC-unresolved" if qc_problem
-                  else ("D1: SNP>12" if pairwise_distance is not None and pairwise_distance > 12 else "Model-only"))
-        )
-        synthesis_pair = _synthesis_pair_for(src, tgt)
-        synthesis_confidence = str(
-            synthesis_pair.get("confidence")
-            or synthesis_pair.get("confidence_code")
-            or "Not synthesised"
-        )
-        synthesis_priority = synthesis_pair.get("priority_score")
-        try:
-            synthesis_priority_text = str(int(round(float(synthesis_priority))))
-        except Exception:
-            synthesis_priority_text = "n/a"
-        synthesis_flags = synthesis_pair.get("flags") if isinstance(synthesis_pair.get("flags"), list) else []
-        synthesis_flag_text = ", ".join(str(flag).replace("_", " ") for flag in synthesis_flags[:3]) or "none"
-        concordance_bits = []
-        if synthesis_pair.get("lineage_concordance"):
-            concordance_bits.append(f"Lineage: {synthesis_pair.get('lineage_concordance')}")
-        if synthesis_pair.get("resistance_profile_concordance"):
-            concordance_bits.append(f"DR: {synthesis_pair.get('resistance_profile_concordance')}")
-        record = {
-            "pair": f"{_short_case_id(src)}\u2192{_short_case_id(tgt)}",
-            "posterior": prob,
-            "pairwise": str(pairwise_distance) if pairwise_distance is not None else "n/a",
-            "qc": f"{src_qc}/{tgt_qc}",
-            "validation_flag": validation_flag,
-            "synthesis_confidence": synthesis_confidence,
-            "synthesis_priority": synthesis_priority_text,
-            "synthesis_concordance": "; ".join(concordance_bits) or "n/a",
-            "synthesis_flags": synthesis_flag_text,
-        }
-        if qc_problem:
-            qc_resolution_pairs.append(record)
-        elif pairwise_distance is not None and pairwise_distance <= 12 and same_cluster:
-            genomic_pairs.append(record)
-        elif pairwise_distance is not None and pairwise_distance > 12:
-            genomically_discordant.append(record)
-        else:
-            model_only_pairs.append(record)
+    genomic_pairs = list(report_data.genomic_pairs)
+    model_only_pairs = list(report_data.model_only_pairs)
+    qc_resolution_pairs = list(report_data.qc_resolution_pairs)
+    genomically_discordant = list(report_data.genomically_discordant)
 
     # -- Discordant pairs -------------------------------------------------------
-    discordant_pairs = []
-    for pair in sequence_pair_set.union(set(outbreaker_pair_prob.keys())):
-        in_seq = pair in sequence_pair_set
-        in_out = pair in outbreaker_pair_prob
-        if in_seq == in_out:
-            continue
-        left, right = pair
-        post = float(outbreaker_pair_prob.get(pair) or 0.0)
-        pairwise_distance = pairwise_snp_matrix.get(pair)
-        disc_code = "D1" if in_out and not in_seq and pairwise_distance is not None and int(pairwise_distance) > 12 else ("D2" if in_out and not in_seq else "D3")
-        interp = ("Temporal support without pairwise SNP support" if in_out and not in_seq
-                  else "Pairwise SNP support without outbreaker linkage")
-        discordant_pairs.append({
-            "pair": f"{_short_case_id(str(left))}-{_short_case_id(str(right))}",
-            "pairwise": pairwise_distance,
-            "posterior": post,
-            "interpretation": interp,
-            "disc_code": disc_code,
-            "snp_result": "linked" if in_seq else "not_linked",
-            "out_result": "linked" if in_out else "not_linked",
-        })
+    discordant_pairs = list(report_data.discordant_pairs)
 
     # -- Generate appendix CSVs from live data (no separate PDF run required) --
     _case_action_csv = [[
@@ -1049,8 +729,9 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
             "SNP-linked": "badge-green",
             "Model-only": "badge-amber",
             "QC-unresolved": "badge-red",
-            "D1: SNP>12": "badge-orange",
         }.get(text, "badge-grey")
+        if str(text).startswith("D1: SNP>"):
+            cls = "badge-orange"
         return f'<span class="badge {cls}">{_safe_html(text)}</span>'
 
     def _synthesis_badge(text: str) -> str:
@@ -1058,12 +739,15 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
         cls = {
             "Strong support": "badge-green",
             "strong_support": "badge-green",
+            "High confidence": "badge-green",
             "Moderate support": "badge-amber",
             "moderate_support": "badge-amber",
+            "Moderate confidence": "badge-amber",
             "Genomic-only signal": "badge-amber",
             "genomic_only_signal": "badge-amber",
             "Model-only signal": "badge-orange",
             "model_only_signal": "badge-orange",
+            "Exploratory": "badge-grey",
             "Contradictory": "badge-red",
             "contradictory": "badge-red",
             "Insufficient evidence": "badge-grey",
@@ -1112,7 +796,7 @@ def _build_outbreak_report_html(db: Session, full: bool = False) -> str:  # noqa
         rows = ""
         for item in records:
             _post = f"{item['posterior']:.3f}"
-            rows += (f"<tr><td class='mono'>{_safe_html(item['pair'])}</td>"
+            rows += (f"<tr><td class='mono'>{_safe_html(item.get('pair_html', item['pair']))}</td>"
                      f"<td>{_safe_html(_post)}</td>"
                      f"<td>{_safe_html(item['pairwise'])}</td>"
                      f"<td>{_safe_html(item['qc'])}</td>"
@@ -1517,11 +1201,11 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
                 final = "<span class='badge badge-green'>Genomically supported - escalate with epi</span>"
             elif flag == "QC-unresolved":
                 final = "<span class='badge badge-red'>Hold - repeat sequencing required</span>"
-            elif flag == "D1: SNP>12":
+            elif str(flag).startswith("D1: SNP>"):
                 final = "<span class='badge badge-orange'>Do not escalate - SNP discordant</span>"
             else:
                 final = "<span class='badge badge-amber'>Model hypothesis - epi corroboration required</span>"
-            rows += (f"<tr><td class='mono'>{_safe_html(item['pair'])}</td>"
+            rows += (f"<tr><td class='mono'>{_safe_html(item.get('pair_html', item['pair']))}</td>"
                      f"<td>{_safe_html(f'{post:.3f}')}</td>"
                      f"<td>{_safe_html(snp)}</td>"
                      f"<td>{_safe_html(qc)}</td>"
@@ -2202,8 +1886,8 @@ pre{white-space:pre-wrap;background:#0f172a;color:#e2e8f0;border-radius:8px;padd
         cepi_rows = ""
         for r in cluster_epi_rows:
             cid = _short_case_id(str(r.get("cluster_id") or ""))
-            lineage_dist = _lineage_distribution_text(str(r.get("cluster_id") or ""))
-            tx_generations = _transmission_generation_text(str(r.get("cluster_id") or ""))
+            lineage_dist = str(r.get("lineage_distribution") or "n/a")
+            tx_generations = str(r.get("transmission_generations") or "n/a")
             rr_mdr = f"{int(r.get('rr_cases') or 0)}/{int(r.get('mdr_cases') or 0)}"
             recent = f"{int(r.get('recent_30d') or 0)}/{int(r.get('recent_60d') or 0)}/{int(r.get('recent_90d') or 0)}"
             cepi_rows += (f"<tr><td class='mono'>{_safe_html(cid)}</td><td>{_safe_html(str(r.get('cases',0)))}</td>"
@@ -3013,6 +2697,3 @@ document.addEventListener('DOMContentLoaded', function(){{
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(html)
     return html
-
-
-
